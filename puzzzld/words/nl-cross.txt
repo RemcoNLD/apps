@@ -1,0 +1,801 @@
+# Puzzzld word list, Dutch. WORD|clue|level (1 easy, 2 medium, 3 hard)|themes
+KAT|Huisdier dat spint|1|dieren
+KOE|Graast in de wei en geeft melk|1|dieren
+KIP|Legt eieren op het erf|1|dieren
+VOS|Rode sluipjager met een pluimstaart|1|dieren
+WOLF|Huilt naar de maan|1|dieren
+UIL|Nachtvogel die wijs wordt genoemd|1|dieren
+MEEUW|Krijsende vogel aan de kust|1|dieren
+REIGER|Grijze vogel die roerloos in de sloot staat|1|dieren
+OOIEVAAR|Brengt volgens het verhaal de baby's|1|dieren
+KIKKER|Kwaakt in de vijver|1|dieren
+SCHILDPAD|Dier met zijn huis op zijn rug|1|dieren
+KROKODIL|Reptiel met een enorme bek|1|dieren
+ZEBRA|Gestreept paard van de savanne|1|dieren
+KAMEEL|Woestijndier met twee bulten|1|dieren
+DROMEDARIS|Woestijndier met één bult|2|dieren
+NEUSHOORN|Zwaar dier met een hoorn op zijn snuit|2|dieren
+NIJLPAARD|Dik dier dat graag in het water ligt|1|dieren
+EEKHOORN|Verzamelt nootjes in de boom|1|dieren
+MOL|Graaft gangen onder het gazon|1|dieren
+DAS|Gestreepte bosbewoner met een burcht|2|dieren
+BEVER|Bouwt dammen van takken|2|dieren
+OTTER|Speelse zwemmer met een dikke vacht|2|dieren
+HERT|Bosdier met een gewei|1|dieren
+REE|Klein hert met grote ogen|2|dieren
+ZEEHOND|Ligt op zandbanken in de Waddenzee|1|dieren
+DOLFIJN|Slim zoogdier dat uit het water springt|1|dieren
+OCTOPUS|Zeedier met acht armen|1|dieren
+KREEFT|Schaaldier met grote scharen|2|dieren
+GARNAAL|Klein schaaldier, gepeld op brood|2|dieren
+MOSSEL|Schelpdier uit Zeeland|2|dieren
+FOREL|Gespikkelde zoetwatervis|2|dieren
+SNOEK|Roofvis met een lange bek|2|dieren
+HARING|Vis die je bij de staart in je mond laat zakken|1|dieren
+PALING|Gerookte vis die op een slang lijkt|2|dieren
+LIBEL|Insect met vier glazige vleugels|2|dieren
+WESP|Geel-zwart insect dat op je limonade afkomt|1|dieren
+BIJ|Maakt honing|1|dieren
+HOMMEL|Dikke harige bij|2|dieren
+KEVER|Insect met harde dekschilden|2|dieren
+RUPS|Wordt later een vlinder|1|dieren
+SPRINKHAAN|Springt hoog in het gras|1|dieren
+MUG|Zoemt 's nachts bij je oor|1|dieren
+VLEERMUIS|Hangt overdag ondersteboven|1|dieren
+PAUW|Vogel met een pronkende staart|2|dieren
+PAPEGAAI|Kleurrijke vogel die woorden nazegt|1|dieren
+ADELAAR|Roofvogel op veel wapenschilden|2|dieren
+MUS|Kleine bruine vogel in de dakgoot|1|dieren
+MEREL|Zwarte zangvogel met een gele snavel|2|dieren
+SPECHT|Timmert met zijn snavel op boomstammen|2|dieren
+KRAAI|Zwarte vogel die krast|1|dieren
+EKSTER|Zwart-witte vogel die van glimmende dingen houdt|2|dieren
+FAZANT|Hoenderachtige vogel met een lange staart|3|dieren
+FLAMINGO|Roze vogel op één poot|1|dieren
+STRUISVOGEL|Grootste vogel, kan niet vliegen|1|dieren
+KANGOEROE|Springt rond met een jong in de buidel|1|dieren
+KOALA|Eet eucalyptus in Australië|2|dieren
+LUIAARD|Traagste dier van het regenwoud|2|dieren
+GORILLA|Grootste mensaap|2|dieren
+ALPACA|Wollig dier uit de Andes|2|dieren
+LAMA|Kan spugen, woont in de Andes|2|dieren
+HAMSTER|Knaagdier met wangzakken|1|dieren
+CAVIA|Knaagdiertje dat piept|2|dieren
+PONY|Klein paard|1|dieren
+EZEL|Balkend lastdier|1|dieren
+STIER|Mannetjesrund|2|dieren
+VEULEN|Jong paard|2|dieren
+KALF|Jong van de koe|1|dieren
+BIG|Jong varken|1|dieren
+LAM|Jong schaap|1|dieren
+KUIKEN|Jong van de kip|1|dieren
+HAAN|Kraait bij zonsopgang|1|dieren
+GANS|Grote watervogel die sist|2|dieren
+SALAMANDER|Amfibie met een staart|3|dieren
+HAGEDIS|Reptiel dat zijn staart kan laten vallen|2|dieren
+ADDER|Enige giftige slang in Nederland|3|dieren
+SLANG|Kruipt zonder poten|1|dieren
+NERTS|Marterachtige met een kostbare pels|3|dieren
+HERMELIJN|Wezel met een witte wintervacht|3|dieren
+WEZEL|Klein slank roofdiertje|3|dieren
+LYNX|Wilde kat met pluimpjes op de oren|3|dieren
+JAGUAR|Gevlekte grote kat uit Zuid-Amerika|2|dieren
+LUIPAARD|Gevlekte kat die in bomen rust|2|dieren
+JACHTLUIPAARD|Snelste landdier|2|dieren
+HYENA|Lachende aaseter|2|dieren
+BUFFEL|Wild rund|2|dieren
+WALRUS|Zeezoogdier met lange slagtanden|2|dieren
+IJSBEER|Witte beer op het poolijs|1|dieren
+PANDA|Zwart-witte beer die bamboe eet|1|dieren
+STEKELVARKEN|Knaagdier met lange stekels|3|dieren
+BOOM|Heeft een stam, takken en bladeren|1|natuur
+BLAD|Valt in de herfst|1|natuur
+TAK|Arm van een boom|1|natuur
+STAM|Dik houten middenstuk van een boom|1|natuur
+SCHORS|Bast van een boom|2|natuur
+EIKEL|Vrucht van de eik|2|natuur
+KASTANJE|Glanzende bruine vrucht in een stekelige bolster|1|natuur
+DENNENAPPEL|Kegel van een naaldboom|1|natuur
+SPAR|Naaldboom die met kerst in huis staat|1|natuur
+DEN|Naaldboom met lange naalden|2|natuur
+WILG|Boom langs de sloot, vaak geknot|2|natuur
+BEUK|Loofboom met een gladde grijze stam|2|natuur
+LINDE|Boom met geurige bloesem voor thee|3|natuur
+ESDOORN|Boom met handvormig blad, symbool van Canada|2|natuur
+PALM|Tropische boom met waaierbladeren|1|natuur
+CACTUS|Stekelige woestijnplant|1|natuur
+VAREN|Plant zonder bloemen met gevederde bladeren|2|natuur
+MOS|Zacht groen kussen op stenen|1|natuur
+PADDENSTOEL|Zwam met een hoed|1|natuur
+KLAVER|Plant met drie, of met geluk vier, blaadjes|1|natuur
+MADELIEF|Klein wit bloemetje in het gras|2|natuur
+PAARDENBLOEM|Gele bloem die een pluizenbol wordt|1|natuur
+BRANDNETEL|Plant die prikt als je hem aanraakt|1|natuur
+DISTEL|Stekelige plant met een paarse bloem|2|natuur
+LELIE|Statige bloem, symbool van de Franse koningen|2|natuur
+NARCIS|Gele voorjaarsbol|1|natuur
+KROKUS|Een van de eerste bolbloemen in het voorjaar|2|natuur
+HYACINT|Geurige bolbloem met bloemen in trossen|2|natuur
+ORCHIDEE|Exotische bloem in de vensterbank|2|natuur
+LAVENDEL|Paarse geurige plant uit de Provence|2|natuur
+HEIDE|Paars bloeiende struik op de Veluwe|2|natuur
+RIET|Hoog gras langs het water|2|natuur
+GRAS|Groen tapijt in de tuin|1|natuur
+BLOESEM|Bloemen aan de fruitboom in het voorjaar|2|natuur
+KNOP|Bloem die nog dicht zit|2|natuur
+STEKEL|Scherp puntje aan een plant|2|natuur
+ZAAD|Daar groeit een nieuwe plant uit|1|natuur
+VULKAAN|Berg die lava spuwt|1|natuur
+WATERVAL|Water dat van een rots naar beneden stort|1|natuur
+GROT|Holte in een berg|1|natuur
+WOESTIJN|Droog gebied vol zand|1|natuur
+OERWOUD|Dicht tropisch bos|2|natuur
+MOERAS|Drassig land|2|natuur
+GLETSJER|Rivier van ijs in de bergen|2|natuur
+KLIF|Steile rotswand aan zee|2|natuur
+HEUVEL|Kleine berg|1|natuur
+VALLEI|Laagte tussen bergen|2|natuur
+BRON|Plek waar water uit de grond komt|2|natuur
+DELTA|Riviermonding met veel vertakkingen|3|natuur
+ZANDBANK|Ondiepte waar zeehonden liggen|2|natuur
+PIZZA|Italiaanse platte bodem met kaas en tomaat|1|eten
+PASTA|Italiaans meelproduct, zoals spaghetti|1|eten
+RIJST|Korrels die je kookt, basis van de Aziatische keuken|1|eten
+FRIET|Gefrituurde staafjes aardappel|1|eten
+KROKET|Gefrituurde staaf ragout uit de muur|1|eten
+BITTERBAL|Ronde gefrituurde borrelhap|1|eten
+POFFERTJES|Kleine bolle pannenkoekjes met poedersuiker|1|eten
+PANNENKOEK|Dunne ronde koek uit de koekenpan|1|eten
+WAFEL|Gebak met een ruitjespatroon|1|eten
+SPEKKOEK|Indisch gebak met veel laagjes|2|eten
+HUTSPOT|Stamppot met wortel en ui|2|eten
+ZUURKOOL|Gegiste kool voor de stamppot|2|eten
+SNERT|Dikke erwtensoep|2|eten
+ROOKWORST|Worst die bij de stamppot hoort|1|eten
+GEHAKTBAL|Bal van gemalen vlees|1|eten
+FRIKANDEL|Gefrituurde vleesstaaf, vaak speciaal|2|eten
+KIBBELING|Gefrituurde stukjes vis van de markt|2|eten
+OLIJF|Kleine vrucht uit het Middellandse Zeegebied|2|eten
+AVOCADO|Groene vrucht voor guacamole|2|eten
+CITROEN|Zure gele vrucht|1|eten
+SINAASAPPEL|Oranje vrucht voor jus|1|eten
+DRUIF|Groeit in trossen aan de wijnstok|1|eten
+AARDBEI|Rood vruchtje met pitjes aan de buitenkant|1|eten
+KERS|Rood vruchtje met een pit, vaak in tweetallen|1|eten
+PEER|Vrucht die van onderen breder is|1|eten
+PERZIK|Vrucht met een fluweelzachte schil|2|eten
+ANANAS|Tropische vrucht met een kuif|1|eten
+MANGO|Tropische vrucht met een grote platte pit|2|eten
+KIWI|Harige bruine vrucht, groen van binnen|1|eten
+FRAMBOOS|Rood vruchtje van een stekelige struik|2|eten
+BOSBES|Blauw bessetje uit het bos|2|eten
+PRUIM|Paarse steenvrucht|2|eten
+KNOFLOOK|Sterk ruikende teentjes|1|eten
+PAPRIKA|Rode, gele of groene groente|1|eten
+SPINAZIE|Bladgroente waar Popeye sterk van wordt|1|eten
+BLOEMKOOL|Witte koolsoort|1|eten
+SPRUITJES|Kleine kooltjes die niet iedereen lust|1|eten
+BROCCOLI|Groen boompje op je bord|1|eten
+CHAMPIGNON|Witte eetbare paddenstoel|2|eten
+ASPERGE|Wit goud uit Limburg|2|eten
+BIET|Rode knol die alles kleurt|2|eten
+RADIJS|Klein rood knolletje met een scherpe smaak|2|eten
+POMPOEN|Oranje vrucht voor Halloween|1|eten
+MAIS|Gele kolven, ook voor popcorn|1|eten
+BOON|Peulvrucht|1|eten
+LINZEN|Kleine peulvruchten voor soep|2|eten
+YOGHURT|Zuivel die je met een lepel eet|1|eten
+KWARK|Dikke zuivel|2|eten
+ROOM|Vette laag op de melk|2|eten
+SPEK|Vet varkensvlees in reepjes|1|eten
+HAM|Vleeswaren op brood|1|eten
+WORST|Vlees in een velletje|1|eten
+BIEFSTUK|Gebakken plak rundvlees|1|eten
+CHOCOLA|Lekkernij van cacao|1|eten
+KOEK|Ontbijtkoek of een koekje|1|eten
+ZUURTJE|Hard snoepje|2|eten
+LOLLY|Snoep aan een stokje|1|eten
+IJSJE|Koude traktatie op een hoorntje|1|eten
+SLAGROOM|Opgeklopte room|1|eten
+SIROOP|Dikke zoete vloeistof|2|eten
+JAM|Vruchtenbeleg|1|eten
+MAYONAISE|Gele saus bij de friet|1|eten
+MOSTERD|Pittige gele saus bij de worst|1|eten
+KETCHUP|Rode tomatensaus|1|eten
+AZIJN|Zure vloeistof voor in de sla|2|eten
+OLIE|Om in te bakken|1|eten
+MEEL|Gemalen graan|2|eten
+GIST|Laat het deeg rijzen|2|eten
+DEEG|Wordt in de oven brood|1|eten
+CROISSANT|Frans halvemaanvormig broodje|2|eten
+BAGUETTE|Lang Frans stokbrood|2|eten
+LIMONADE|Zoet drankje dat je met water aanlengt|1|eten
+SAP|Vloeistof uit geperst fruit|1|eten
+WIJN|Drank van druiven|1|eten
+BIER|Drank van gerst en hop|1|eten
+JENEVER|Hollandse borrel|2|eten
+KARNEMELK|Zure melk|2|eten
+TENNIS|Sport met racket en gele bal|1|sport
+HOCKEY|Sport met stick en bal op het veld|1|sport
+KORFBAL|Nederlandse sport met gemengde teams|2|sport
+HANDBAL|Balsport waarbij je met je handen scoort|2|sport
+ZWEMMEN|Sport in het water|1|sport
+ROEIEN|Varen met riemen|2|sport
+ZEILEN|Varen op de wind|1|sport
+SURFEN|Golven berijden op een plank|1|sport
+WIELRENNEN|Sport van de Tour de France|2|sport
+MARATHON|Hardloopwedstrijd over ruim 42 kilometer|2|sport
+BOKSEN|Vechtsport met handschoenen|1|sport
+JUDO|Japanse vechtsport met worpen|2|sport
+KARATE|Vechtsport met trappen en slagen|2|sport
+GOLF|Sport met club en klein balletje|1|sport
+DARTS|Pijltjes gooien op een bord|1|sport
+BILJART|Spel met keu en ballen op een laken|2|sport
+BOWLEN|Kegels omgooien met een zware bal|1|sport
+TURNEN|Sport op balk, brug en mat|2|sport
+SCHERMEN|Vechtsport met degen|2|sport
+POLO|Balsport te paard|3|sport
+RUGBY|Sport met een ovale bal|2|sport
+HONKBAL|Slagsport met knuppel|2|sport
+CRICKET|Engelse slagsport met wickets|3|sport
+KEEPER|Staat tussen de palen|1|sport
+SCHEIDSRECHTER|Fluit bij overtredingen|1|sport
+PENALTY|Strafschop|1|sport
+DOELPUNT|Bal in het net|1|sport
+STADION|Arena voor wedstrijden|1|sport
+MEDAILLE|Prijs voor de eerste drie|1|sport
+TROFEE|Beker voor de winnaar|2|sport
+ESTAFETTE|Wedloop waarbij je een stokje doorgeeft|2|sport
+ELFSTEDENTOCHT|Friese schaatstocht langs elf steden|2|sport
+SLEE|Glijdt over de sneeuw|1|sport
+SNOWBOARD|Plank voor de skipiste|2|sport
+KANO|Smalle boot met peddel|2|sport
+DUIKEN|Onder water zwemmen met een fles|1|sport
+KLIMMEN|Omhoog langs een rotswand|1|sport
+YOGA|Ontspannende oefeningen op een mat|1|sport
+FITNESS|Trainen in de sportschool|1|sport
+KEUKEN|Ruimte waar gekookt wordt|1|huis
+ZOLDER|Ruimte onder het dak|1|huis
+KELDER|Ruimte onder het huis|1|huis
+TRAP|Brengt je naar boven|1|huis
+BALKON|Buitenruimte aan een flat|1|huis
+GORDIJN|Doek voor het raam|1|huis
+VLOER|Daar loop je op|1|huis
+PLAFOND|Daar hangt de lamp aan|1|huis
+MUUR|Wand van stenen|1|huis
+DAK|Bovenkant van het huis|1|huis
+SCHOORSTEEN|Daar komt Sinterklaas door|1|huis
+HAARD|Plek voor het vuur|2|huis
+BED|Daar slaap je in|1|huis
+DEKEN|Houdt je warm in bed|1|huis
+MATRAS|Ligt in het bed|1|huis
+KAST|Meubel om spullen in op te bergen|1|huis
+BANK|Zitmeubel voor meerdere personen|1|huis
+FAUTEUIL|Gemakkelijke leunstoel|2|huis
+KOELKAST|Houdt eten koel|1|huis
+OVEN|Daar bak je taart in|1|huis
+MAGNETRON|Verwarmt eten met straling|1|huis
+VAATWASSER|Machine die de vaat doet|1|huis
+WASMACHINE|Machine voor de was|1|huis
+STOFZUIGER|Zuigt het stof op|1|huis
+BEZEM|Om mee te vegen|1|huis
+EMMER|Bak met hengsel voor water|1|huis
+DWEIL|Natte doek voor de vloer|2|huis
+KRAAN|Daar komt water uit|1|huis
+DOUCHE|Wassen onder een straal water|1|huis
+BADKAMER|Ruimte om je te wassen|1|huis
+TOILET|Wc|1|huis
+WASTAFEL|Daar was je je handen|1|huis
+HANDDOEK|Om je af te drogen|1|huis
+ZEEP|Maakt schuim bij het wassen|1|huis
+TANDENBORSTEL|Gebruik je twee keer per dag|1|huis
+VAAS|Pot voor bloemen|1|huis
+SCHILDERIJ|Kunstwerk aan de muur|1|huis
+TAPIJT|Vloerkleed|2|huis
+DEURBEL|Daar druk je op als je op bezoek komt|1|huis
+BRIEVENBUS|Daar valt de post in|1|huis
+GARAGE|Daar staat de auto|1|huis
+HEK|Afscheiding rond de tuin|1|huis
+SCHUTTING|Houten afscheiding tussen tuinen|2|huis
+VIJVER|Water in de tuin|1|huis
+GIETER|Kan om planten water te geven|1|huis
+GRASMAAIER|Houdt het gazon kort|1|huis
+KAPSTOK|Daar hang je je jas aan|1|huis
+DEURMAT|Daar veeg je je voeten op|2|huis
+DOKTER|Ander woord voor arts|1|beroepen
+VERPLEEGKUNDIGE|Zorgt voor patiënten in het ziekenhuis|1|beroepen
+TANDARTS|Controleert je gebit|1|beroepen
+DIERENARTS|Dokter voor huisdieren|1|beroepen
+POLITIE|Handhaaft de orde|1|beroepen
+BRANDWEER|Blust branden|1|beroepen
+PILOOT|Bestuurt een vliegtuig|1|beroepen
+KAPITEIN|Baas op een schip|1|beroepen
+KOK|Werkt in de keuken van een restaurant|1|beroepen
+OBER|Brengt je bestelling naar de tafel|1|beroepen
+SCHILDER|Werkt met kwast en verf|1|beroepen
+TIMMERMAN|Werkt met hout en hamer|1|beroepen
+LOODGIETER|Repareert leidingen|1|beroepen
+ELEKTRICIEN|Legt stroomkabels aan|2|beroepen
+METSELAAR|Bouwt muren van stenen|2|beroepen
+POSTBODE|Bezorgt brieven|1|beroepen
+JUF|Lerares op de basisschool|1|beroepen
+MEESTER|Leraar op de basisschool|1|beroepen
+RECHTER|Doet uitspraak in de rechtbank|2|beroepen
+ADVOCAAT|Verdedigt je voor de rechter|2|beroepen
+NOTARIS|Legt de koop van een huis officieel vast|3|beroepen
+JOURNALIST|Schrijft nieuwsberichten|2|beroepen
+FOTOGRAAF|Maakt foto's van beroep|1|beroepen
+ACTEUR|Speelt een rol|1|beroepen
+ZANGER|Treedt op met zijn stem|1|beroepen
+DIRIGENT|Leidt het orkest|2|beroepen
+BURGEMEESTER|Hoofd van de gemeente|1|beroepen
+MINISTER|Lid van de regering|2|beroepen
+SOLDAAT|Lid van het leger|1|beroepen
+MATROOS|Zeeman op een schip|2|beroepen
+SMID|Werkt met ijzer en aambeeld|2|beroepen
+KOSTER|Beheert het kerkgebouw|3|beroepen
+DOMINEE|Protestantse voorganger|2|beroepen
+PASTOOR|Katholieke priester van de parochie|2|beroepen
+GIDS|Leidt je rond in een museum|1|beroepen
+BIBLIOTHECARIS|Werkt tussen de boeken|2|beroepen
+APOTHEKER|Levert je medicijnen af|1|beroepen
+TUINMAN|Onderhoudt de tuin|1|beroepen
+HOVENIER|Tuinaanlegger|3|beroepen
+ARCHITECT|Ontwerpt gebouwen|2|beroepen
+INGENIEUR|Technisch afgestudeerde|2|beroepen
+CHAUFFEUR|Rijdt beroepsmatig|2|beroepen
+SECRETARESSE|Regelt de agenda van de baas|2|beroepen
+SCHOONMAKER|Maakt kantoren schoon|1|beroepen
+GLAZENWASSER|Lapt de ramen|1|beroepen
+SCHOENMAKER|Repareert schoenen en blijft bij zijn leest|2|beroepen
+KLEERMAKER|Maakt kleding op maat|2|beroepen
+VERKOPER|Werkt in een winkel|1|beroepen
+BANKIER|Werkt bij de bank|2|beroepen
+OOG|Daar zie je mee|1|lichaam
+OOR|Daar hoor je mee|1|lichaam
+TAND|Daar bijt je mee|1|lichaam
+TONG|Daar proef je mee|1|lichaam
+LIP|Rand van de mond|1|lichaam
+WANG|Zijkant van je gezicht|1|lichaam
+KIN|Onderkant van je gezicht|1|lichaam
+NEK|Achterkant van de hals|1|lichaam
+SCHOUDER|Gewricht boven je arm|1|lichaam
+ARM|Heeft een hand aan het eind|1|lichaam
+ELLEBOOG|Knik in je arm|1|lichaam
+VINGER|Vijf aan elke hand|1|lichaam
+DUIM|Dikste vinger|1|lichaam
+NAGEL|Hard plaatje op je vinger|1|lichaam
+BUIK|Daar zit je eten in|1|lichaam
+RUG|Achterkant van je romp|1|lichaam
+BEEN|Daar loop je op|1|lichaam
+ENKEL|Gewricht boven de voet|1|lichaam
+HIEL|Achterkant van je voet|1|lichaam
+TEEN|Tien aan je voeten|1|lichaam
+LONG|Ademhalingsorgaan|2|lichaam
+LEVER|Groot orgaan dat het bloed zuivert|2|lichaam
+NIER|Orgaan dat urine maakt|2|lichaam
+MAAG|Verteert je eten|1|lichaam
+DARM|Lange buis in je buik|2|lichaam
+HERSENEN|Denkorgaan|1|lichaam
+SKELET|Alle botten samen|1|lichaam
+SPIER|Laat je bewegen|1|lichaam
+HUID|Grootste orgaan, aan de buitenkant|2|lichaam
+BLOED|Rood levenssap|1|lichaam
+ADER|Bloedvat|2|lichaam
+WENKBRAUW|Haar boven je oog|1|lichaam
+WIMPER|Haartje aan je ooglid|1|lichaam
+NAVEL|Knopje op je buik|1|lichaam
+POLS|Daar voel je je hartslag|1|lichaam
+KNOKKEL|Gewricht in je vinger|2|lichaam
+SCHEDEL|Botten van je hoofd|2|lichaam
+RIB|Bot in je borstkas|2|lichaam
+HEUP|Gewricht tussen romp en been|1|lichaam
+KUIT|Achterkant van je onderbeen|2|lichaam
+BUS|Openbaar vervoer op de weg|1|verkeer
+TAXI|Rijdt je tegen betaling naar je adres|1|verkeer
+METRO|Ondergrondse trein|1|verkeer
+VLIEGTUIG|Vervoer door de lucht|1|verkeer
+HELIKOPTER|Vliegt met een draaiende rotor|1|verkeer
+PONT|Brengt je over het water|2|verkeer
+VRACHTWAGEN|Groot voertuig voor goederen|1|verkeer
+BROMMER|Gemotoriseerde tweewieler|1|verkeer
+SCOOTER|Snorfiets met een plankje voor je voeten|1|verkeer
+STEP|Je duwt jezelf vooruit|1|verkeer
+MOTOR|Zware tweewieler|1|verkeer
+AMBULANCE|Rijdt met sirene naar het ziekenhuis|1|verkeer
+ROTONDE|Rond kruispunt|1|verkeer
+STOPLICHT|Rood, oranje, groen|1|verkeer
+ZEBRAPAD|Oversteekplaats met strepen|1|verkeer
+SNELWEG|Weg zonder kruispunten|1|verkeer
+FILE|Rij stilstaande auto's|1|verkeer
+TANKSTATION|Daar gooi je de tank vol|1|verkeer
+BENZINE|Brandstof voor de auto|1|verkeer
+STUUR|Draai je aan om af te slaan|1|verkeer
+REM|Laat je stoppen|1|verkeer
+BAND|Rubber om het wiel|1|verkeer
+WIEL|Rond onderdeel dat draait|1|verkeer
+GORDEL|Klik hem vast voor vertrek|1|verkeer
+KENTEKEN|Nummerplaat|2|verkeer
+RIJBEWIJS|Papiertje om te mogen rijden|1|verkeer
+VLIEGVELD|Daar landen vliegtuigen|1|verkeer
+SPOOR|Rails voor de trein|1|verkeer
+CONDUCTEUR|Controleert kaartjes in de trein|2|verkeer
+KAARTJE|Bewijs dat je betaald hebt|1|verkeer
+KRUISPUNT|Plek waar wegen elkaar kruisen|1|verkeer
+VEERBOOT|Groot schip voor auto's en passagiers|2|verkeer
+ZEPPELIN|Luchtschip|3|verkeer
+TRACTOR|Werkpaard van de boer|1|verkeer
+CAMPER|Huis op wielen|1|verkeer
+OLDTIMER|Oude auto van de liefhebber|2|verkeer
+TANDEM|Fiets voor twee|2|verkeer
+BAKFIETS|Fiets met een bak voorop|1|verkeer
+KANAAL|Gegraven waterweg|2|verkeer
+SLUIS|Brengt schepen naar een ander waterpeil|2|verkeer
+TROMPET|Koperen blaasinstrument|1|muziek
+SAXOFOON|Blaasinstrument van Adolphe Sax|2|muziek
+FLUIT|Houten of metalen blaasinstrument|1|muziek
+HARP|Instrument met veel snaren in een frame|1|muziek
+CELLO|Groot strijkinstrument tussen de knieën|2|muziek
+TUBA|Grootste koperen blaasinstrument|2|muziek
+ACCORDEON|Trekharmonica|2|muziek
+DRUMS|Slagwerk in een band|1|muziek
+XYLOFOON|Instrument met houten staafjes|2|muziek
+TRIANGEL|Driehoekig slaginstrument|2|muziek
+HOBO|Houten blaasinstrument met dubbel riet|3|muziek
+FAGOT|Lage blazer met dubbel riet|3|muziek
+KLARINET|Zwart houten blaasinstrument|2|muziek
+UKELELE|Klein gitaartje uit Hawaii|2|muziek
+BANJO|Tokkelinstrument uit de countrymuziek|2|muziek
+ORKEST|Grote groep muzikanten|1|muziek
+KOOR|Groep zangers|1|muziek
+NOOT|Muziekteken op de notenbalk|1|muziek
+MELODIE|Wijsje|1|muziek
+RITME|Maat en tempo van muziek|2|muziek
+CONCERT|Muziekuitvoering|1|muziek
+OPERA|Gezongen toneelstuk|2|muziek
+SOLO|Stuk voor één muzikant|2|muziek
+DUET|Zang voor twee|2|muziek
+REFREIN|Steeds terugkerend deel van een lied|2|muziek
+TOONLADDER|Do re mi fa sol la si do|2|muziek
+METRONOOM|Tikt de maat|3|muziek
+MICROFOON|Versterkt je stem|1|muziek
+PLATENSPELER|Draait vinyl|2|muziek
+KARAOKE|Meezingen met de tekst op een scherm|1|muziek
+JAZZ|Muziek met veel improvisatie|2|muziek
+WALS|Dans in driekwartsmaat|2|muziek
+TANGO|Argentijnse dans|2|muziek
+BALLET|Dans op spitzen|1|muziek
+ZON|Schijnt overdag|1|weer
+WIND|Bewegende lucht|1|weer
+MIST|Dichte nevel|1|weer
+HAGEL|IJsballetjes uit de lucht|1|weer
+IJZEL|Gladde laag ijs op de weg|2|weer
+DOOI|Het vriest niet meer|2|weer
+VORST|Temperatuur onder nul|1|weer
+HITTEGOLF|Een reeks hete dagen|1|weer
+ONWEER|Donder en bliksem|1|weer
+WINDHOOS|Kleine wervelstorm|3|weer
+ORKAAN|Zware tropische storm|2|weer
+TORNADO|Draaiende wervelwind|2|weer
+MOTREGEN|Fijne regen|2|weer
+BUI|Korte regen|1|weer
+DAUW|Druppels op het gras in de ochtend|2|weer
+RIJP|Witte bevroren dauw|3|weer
+THERMOMETER|Meet de temperatuur|1|weer
+BAROMETER|Meet de luchtdruk|2|weer
+WEERMAN|Voorspelt het weer op tv|1|weer
+ZONNEBRAND|Smeer je op tegen verbranding|1|weer
+JAS|Trek je aan als het koud is|1|kleding
+BROEK|Kledingstuk met twee pijpen|1|kleding
+ROK|Kledingstuk voor om je heupen|1|kleding
+JURK|Kledingstuk uit één stuk|1|kleding
+TRUI|Warm gebreid kledingstuk|1|kleding
+SOK|Gaat in je schoen|1|kleding
+SCHOEN|Draag je aan je voet|1|kleding
+LAARS|Hoge schoen|1|kleding
+SANDAAL|Open zomerschoen|1|kleding
+SLIPPER|Losse schoen voor in huis of aan het strand|1|kleding
+MUTS|Houdt je hoofd warm|1|kleding
+SJAAL|Draag je om je nek|1|kleding
+WANT|Handschoen zonder vingers|1|kleding
+HANDSCHOEN|Warm voor je handen|1|kleding
+PET|Hoofddeksel met een klep|1|kleding
+HOED|Hoofddeksel met een rand|1|kleding
+OVERHEMD|Kledingstuk met knopen en kraag|1|kleding
+STROPDAS|Lange das bij het pak|1|kleding
+RIEM|Houdt je broek omhoog|1|kleding
+PYJAMA|Draag je in bed|1|kleding
+BADPAK|Zwemkleding uit één stuk|1|kleding
+BIKINI|Tweedelige zwemkleding|1|kleding
+REGENJAS|Houdt je droog|1|kleding
+VEST|Trui met knopen|1|kleding
+BLOES|Dameshemd|2|kleding
+SPIJKERBROEK|Blauwe broek van denim|1|kleding
+KNOOP|Sluiting door een knoopsgat|1|kleding
+RITS|Sluiting met tandjes|1|kleding
+MOUW|Daar steek je je arm in|1|kleding
+KRAAG|Rand om je hals|1|kleding
+ZAK|Daar stop je je handen in|1|kleding
+CAPUCHON|Kap aan je jas|2|kleding
+SCHORT|Beschermt je kleren in de keuken|1|kleding
+UNIFORM|Kleding van de politie|1|kleding
+KOSTUUM|Pak|2|kleding
+KLAS|Groep leerlingen|1|school
+LOKAAL|Ruimte waar de les is|1|school
+KRIJT|Schrijf je mee op het schoolbord|1|school
+LINIAAL|Om rechte lijnen te trekken|1|school
+PASSER|Om cirkels te trekken|1|school
+SCHAAR|Om mee te knippen|1|school
+LIJM|Om mee te plakken|1|school
+ETUI|Doosje voor pennen|2|school
+TAS|Daar draag je je boeken in|1|school
+RAPPORT|Cijferlijst|1|school
+CIJFER|Beoordeling van een toets|1|school
+TOETS|Overhoring|1|school
+EXAMEN|Laatste toets van de school|1|school
+DIPLOMA|Bewijs dat je geslaagd bent|1|school
+HUISWERK|Opdracht voor thuis|1|school
+PAUZE|Tijd om te spelen|1|school
+SPEELPLAATS|Plein bij de school|1|school
+GYMZAAL|Daar heb je gymles|1|school
+REKENEN|Sommen maken|1|school
+TAAL|Les in lezen en schrijven|1|school
+AARDRIJKSKUNDE|Vak over landen en kaarten|1|school
+GESCHIEDENIS|Vak over vroeger|1|school
+BIOLOGIE|Vak over planten en dieren|1|school
+WISKUNDE|Vak met formules|1|school
+STUDENT|Volgt les aan de universiteit|1|school
+UNIVERSITEIT|Hoogste vorm van onderwijs|1|school
+COLLEGE|Les aan de universiteit|2|school
+WOORDENBOEK|Daar zoek je woorden in op|1|school
+ATLAS|Boek met landkaarten|1|school
+GLOBE|Wereldbol op je bureau|1|school
+BUREAU|Werktafel|1|school
+AGENDA|Daar schrijf je je afspraken in|1|school
+HAMER|Slaat spijkers in|1|gereedschap
+SPIJKER|Sla je met een hamer in|1|gereedschap
+SCHROEF|Draai je met een schroevendraaier|1|gereedschap
+ZAAG|Snijdt door hout|1|gereedschap
+BOOR|Maakt gaten|1|gereedschap
+TANG|Gereedschap om te knijpen|1|gereedschap
+BEITEL|Om hout of steen uit te hakken|2|gereedschap
+VIJL|Om ruwe randen glad te maken|2|gereedschap
+SCHUURPAPIER|Maakt hout glad|1|gereedschap
+WATERPAS|Controleert of iets recht is|1|gereedschap
+DUIMSTOK|Opvouwbare meetlat|2|gereedschap
+KWAST|Om mee te verven|1|gereedschap
+VERF|Geeft kleur aan de muur|1|gereedschap
+LADDER|Om hoog te komen|1|gereedschap
+SCHOP|Om mee te graven|1|gereedschap
+HARK|Om bladeren bij elkaar te halen|1|gereedschap
+KRUIWAGEN|Kar met één wiel|1|gereedschap
+BIJL|Om hout te hakken|1|gereedschap
+MOER|Draai je op een bout|2|gereedschap
+BOUT|Schroef met moer|2|gereedschap
+PLAMUUR|Vulmiddel voor gaten in de muur|3|gereedschap
+KIT|Om naden dicht te smeren|2|gereedschap
+TAPE|Plakband|1|gereedschap
+TOUW|Om mee vast te binden|1|gereedschap
+KETTING|Schakels aan elkaar|1|gereedschap
+SNOEISCHAAR|Om takken te knippen|2|gereedschap
+KRIK|Om een auto op te tillen|2|gereedschap
+SPATEL|Om mee te smeren of te schrapen|2|gereedschap
+TROFFEL|Gereedschap van de metselaar|3|gereedschap
+SINTERKLAAS|Goedheiligman uit Spanje|1|feest
+PIET|Helper van Sinterklaas|1|feest
+MIJTER|Hoge hoofdtooi van Sinterklaas|2|feest
+STAF|Lange stok van Sinterklaas|2|feest
+STOOMBOOT|Daarmee komt Sinterklaas aan|1|feest
+GEDICHT|Rijmpje bij een surprise|1|feest
+SURPRISE|Zelfgemaakte cadeauverpakking op pakjesavond|1|feest
+CHOCOLADELETTER|Initiaal om op te eten|1|feest
+TAAITAAI|Zoet koekfiguur van Sinterklaas|2|feest
+MARSEPEIN|Zoetigheid van amandelen|1|feest
+KERSTBOOM|Versierde spar|1|feest
+PIEK|Bovenop de kerstboom|2|feest
+KERSTMAN|Rode man met baard op 25 december|1|feest
+RENDIER|Trekt de slee van de Kerstman|1|feest
+SLINGER|Versiering langs het plafond|1|feest
+VUURWERK|Knalt op oudejaarsavond|1|feest
+CHAMPAGNE|Bubbels om twaalf uur|1|feest
+PAASHAAS|Verstopt eieren met Pasen|1|feest
+CARNAVAL|Verkleedfeest in het zuiden|1|feest
+KONINGSDAG|Oranje feest op 27 april|1|feest
+VRIJMARKT|Kleedjes met spullen op Koningsdag|2|feest
+TRAKTATIE|Deel je uit op je verjaardag|1|feest
+FEESTMUTS|Puntig hoedje op een feestje|1|feest
+BRUILOFT|Huwelijksfeest|1|feest
+BRUID|Trouwt vaak in het wit|1|feest
+CONFETTI|Papiersnippers op een feest|1|feest
+ADVENT|Vier weken voor kerst|2|feest
+HALLOWEEN|Griezelfeest eind oktober|1|feest
+LAMPION|Lichtje op Sint-Maarten|2|feest
+AMSTERDAM|Hoofdstad van Nederland|1|nederland
+ROTTERDAM|Havenstad aan de Maas|1|nederland
+GRONINGEN|Stad in het noorden met de Martinitoren|1|nederland
+MAASTRICHT|Hoofdstad van Limburg|1|nederland
+ZEELAND|Provincie met de Deltawerken|1|nederland
+FRIESLAND|Provincie van de Elfstedentocht|1|nederland
+DRENTHE|Provincie met hunebedden|2|nederland
+LIMBURG|Heuvelachtige zuidelijke provincie|1|nederland
+VELUWE|Bosrijk gebied in Gelderland|2|nederland
+WADDENZEE|Wad tussen de eilanden en de kust|1|nederland
+IJSSELMEER|Was eerst de Zuiderzee|1|nederland
+AFSLUITDIJK|Dijk tussen Noord-Holland en Friesland|1|nederland
+HUNEBED|Prehistorisch graf van grote stenen|2|nederland
+KEUKENHOF|Bloemenpark bij Lisse|2|nederland
+DELTAWERKEN|Beschermen Zeeland tegen de zee|1|nederland
+AMELAND|Waddeneiland tussen Terschelling en Schiermonnikoog|2|nederland
+TERSCHELLING|Waddeneiland met de Brandaris|2|nederland
+SCHEVENINGEN|Badplaats bij Den Haag|2|nederland
+DOMTOREN|Hoogste kerktoren van Nederland, in Utrecht|2|nederland
+RIJKSMUSEUM|Museum met De Nachtwacht|1|nederland
+NACHTWACHT|Bekend schilderij van Rembrandt|1|nederland
+REMBRANDT|Schilder van De Nachtwacht|1|nederland
+VERMEER|Schilder van Het meisje met de parel|2|nederland
+GOUDA|Kaasstad|1|nederland
+DELFT|Stad van het blauwe aardewerk|1|nederland
+HAARLEM|Hoofdstad van Noord-Holland|2|nederland
+ZWOLLE|Hoofdstad van Overijssel|2|nederland
+ARNHEM|Hoofdstad van Gelderland|2|nederland
+LELYSTAD|Hoofdstad van Flevoland|2|nederland
+ASSEN|Hoofdstad van Drenthe|2|nederland
+LEEUWARDEN|Hoofdstad van Friesland|2|nederland
+MIDDELBURG|Hoofdstad van Zeeland|3|nederland
+EINDHOVEN|Lichtstad van Philips|2|nederland
+NIJMEGEN|Oudste stad van Nederland|2|nederland
+WAAL|Grote rivier langs Nijmegen|2|nederland
+IJSSEL|Rivier langs Deventer en Zwolle|2|nederland
+SCHELDE|Rivier die door Zeeland naar Antwerpen loopt|2|nederland
+WILHELMUS|Nationaal volkslied|1|nederland
+DRIEKLEUR|Rood-wit-blauwe vlag|2|nederland
+GULDEN|Munt van voor de euro|1|nederland
+SECONDE|Zestigste deel van een minuut|1|tijd
+MINUUT|Zestig seconden|1|tijd
+UUR|Zestig minuten|1|tijd
+DAG|Vierentwintig uur|1|tijd
+WEEK|Zeven dagen|1|tijd
+MAAND|Ongeveer vier weken|1|tijd
+JAAR|Twaalf maanden|1|tijd
+EEUW|Honderd jaar|1|tijd
+OCHTEND|Begin van de dag|1|tijd
+MIDDAG|Na twaalf uur|1|tijd
+AVOND|Na het eten|1|tijd
+NACHT|Tijd om te slapen|1|tijd
+GISTEREN|De dag voor vandaag|1|tijd
+MORGEN|De dag na vandaag|1|tijd
+DINSDAG|Tweede dag van de werkweek|1|tijd
+WOENSDAG|Midden van de werkweek|1|tijd
+DONDERDAG|Genoemd naar de god Donar|2|tijd
+ZATERDAG|Eerste dag van het weekend|1|tijd
+ZONDAG|Rustdag|1|tijd
+FEBRUARI|Kortste maand|1|tijd
+MAART|Lentemaand|1|tijd
+APRIL|Maand van de grappen op de eerste|1|tijd
+MEI|Bloeimaand|1|tijd
+JUNI|Zomermaand met de langste dag|1|tijd
+JULI|Hooimaand|2|tijd
+AUGUSTUS|Oogstmaand|2|tijd
+SEPTEMBER|Maand waarin de herfst begint|1|tijd
+NOVEMBER|Slachtmaand|2|tijd
+DECEMBER|Feestmaand|1|tijd
+ZANDLOPER|Meet de tijd met zand|1|tijd
+KALENDER|Overzicht van de dagen|1|tijd
+WEKKER|Maakt je wakker|1|tijd
+HORLOGE|Klok om je pols|1|tijd
+SCHRIKKELJAAR|Jaar met 29 februari|1|tijd
+DECENNIUM|Tien jaar|2|tijd
+MILLENNIUM|Duizend jaar|2|tijd
+ZEE|Groot zout water|1|zee
+OCEAAN|Wereldzee|1|zee
+VLOED|Hoogwater|1|zee
+GETIJ|Eb en vloed|2|zee
+SCHELP|Huisje op het strand|1|zee
+ZEEWIER|Plant in de zee|2|zee
+KORAAL|Rif van kleine diertjes|2|zee
+VUURTOREN|Wijst schepen de weg|1|zee
+BOEI|Drijvend teken op het water|2|zee
+ZEILBOOT|Vaart op de wind|1|zee
+KAJUIT|Ruimte op een schip|2|zee
+MAST|Paal voor het zeil|1|zee
+ROER|Om een boot te sturen|2|zee
+DEK|Vloer van een schip|1|zee
+ZANDKASTEEL|Bouw je op het strand|1|zee
+KREEK|Smal water in de natuur|3|zee
+WAD|Drooggevallen zeebodem|2|zee
+ZEEMEERMIN|Half vrouw, half vis|1|zee
+PIER|Steiger die de zee in loopt|2|zee
+GOLFBREKER|Dam tegen de golven|2|zee
+NEPTUNUS|Zeegod met een drietand|2|zee
+DUIKBOOT|Schip dat onder water vaart|1|zee
+REDDINGSBOOT|Rukt uit bij nood op zee|1|zee
+VLOT|Drijvende planken|1|zee
+COMPUTER|Rekenmachine met een scherm|1|techniek
+LAPTOP|Draagbare computer|1|techniek
+TELEFOON|Daar bel je mee|1|techniek
+TOETSENBORD|Daar typ je op|1|techniek
+SCHERM|Beeldvenster|1|techniek
+PRINTER|Drukt af op papier|1|techniek
+CAMERA|Maakt foto's|1|techniek
+ROBOT|Machine die werk overneemt|1|techniek
+BATTERIJ|Geeft stroom|1|techniek
+STEKKER|Steek je in het stopcontact|1|techniek
+STOPCONTACT|Daar komt stroom uit|1|techniek
+KABEL|Draad voor stroom of signaal|1|techniek
+INTERNET|Wereldwijd netwerk|1|techniek
+WEBSITE|Pagina op internet|1|techniek
+WACHTWOORD|Geheime code om in te loggen|1|techniek
+APP|Programma op je telefoon|1|techniek
+RADIO|Luisteren naar uitzendingen|1|techniek
+TELEVISIE|Kijkkast|1|techniek
+SATELLIET|Draait om de aarde|1|techniek
+RAKET|Gaat de ruimte in|1|techniek
+MAGNEET|Trekt ijzer aan|1|techniek
+ANTENNE|Vangt signalen op|2|techniek
+ZONNEPANEEL|Wekt stroom op uit zonlicht|1|techniek
+WINDMOLEN|Wekt stroom op met wieken|1|techniek
+TELESCOOP|Daar kijk je naar de sterren mee|1|techniek
+MICROSCOOP|Vergroot hele kleine dingen|1|techniek
+LASER|Gebundelde lichtstraal|2|techniek
+ALGORITME|Stappenplan voor een computer|3|techniek
+SOFTWARE|Programmatuur|2|techniek
+PLANEET|Draait om een ster|1|ruimte
+MARS|Rode planeet|1|ruimte
+VENUS|Helderste planeet aan de hemel|2|ruimte
+JUPITER|Grootste planeet|1|ruimte
+SATURNUS|Planeet met ringen|1|ruimte
+KOMEET|Hemellichaam met een staart|2|ruimte
+METEORIET|Steen uit de ruimte die op aarde valt|2|ruimte
+ASTRONAUT|Ruimtevaarder|1|ruimte
+MELKWEG|Ons sterrenstelsel|1|ruimte
+HEELAL|Alles wat bestaat|1|ruimte
+ECLIPS|Verduistering van zon of maan|3|ruimte
+STERRENBEELD|Groep sterren met een naam|1|ruimte
+BLIJ|Vrolijk|1|gevoel
+BOOS|Kwaad|1|gevoel
+BANG|Angstig|1|gevoel
+VERDRIET|Groot leed|1|gevoel
+LIEFDE|Warm gevoel voor iemand|1|gevoel
+JALOEZIE|Afgunst|2|gevoel
+TROTS|Voldaan over jezelf|1|gevoel
+VERLEGEN|Een beetje bang voor contact|1|gevoel
+HEIMWEE|Verlangen naar huis|2|gevoel
+NIEUWSGIERIG|Wil alles weten|1|gevoel
+GEDULD|Kunnen wachten|1|gevoel
+MOED|Durf|1|gevoel
+SCHAAMTE|Gevoel na iets gênants|2|gevoel
+VERVELING|Niets te doen hebben|1|gevoel
+GELUK|Het tegenovergestelde van pech|1|gevoel
+HOOP|Verwachting dat het goed komt|1|gevoel
+WOEDE|Hevige boosheid|2|gevoel
+ANGST|Vrees|1|gevoel
+SPIJT|Wens dat je iets anders had gedaan|1|gevoel
+DANKBAAR|Vol dank|2|gevoel
+PIRAMIDE|Graf van een farao|1|geschiedenis
+FARAO|Koning van het oude Egypte|1|geschiedenis
+MUMMIE|Ingezwachteld lichaam|1|geschiedenis
+ROMEIN|Inwoner van het oude Rome|1|geschiedenis
+GLADIATOR|Vechter in de arena|1|geschiedenis
+VIKING|Noorse zeerover|1|geschiedenis
+HARNAS|IJzeren pak van de ridder|2|geschiedenis
+ZWAARD|Wapen van de ridder|1|geschiedenis
+SCHILD|Bescherming in de strijd|1|geschiedenis
+KONINGIN|Vrouwelijk staatshoofd|1|geschiedenis
+KEIZER|Hoogste vorst|2|geschiedenis
+DINOSAURUS|Uitgestorven reuzenreptiel|1|geschiedenis
+FOSSIEL|Versteende resten|2|geschiedenis
+VESTING|Stad met wallen en grachten|2|geschiedenis
+SLOTGRACHT|Water rond een kasteel|2|geschiedenis
+MIDDELEEUWEN|Tijd van ridders en kastelen|1|geschiedenis
+MUSEUM|Daar zie je kunst en oudheden|1|kunst
+BEELD|Gebeeldhouwd kunstwerk|1|kunst
+PENSEEL|Kwastje van de kunstschilder|2|kunst
+PALET|Plank met verf voor de schilder|2|kunst
+SCHETS|Snelle tekening|1|kunst
+TONEEL|Speelt zich af op het podium|1|kunst
+PODIUM|Verhoging voor optredens|1|kunst
+THEATER|Gebouw voor voorstellingen|1|kunst
+BIOSCOOP|Daar kijk je films|1|kunst
+ROMAN|Lang verhaal in boekvorm|1|kunst
+SPROOKJE|Begint met: er was eens|1|kunst
+STRIP|Verhaal in plaatjes|1|kunst

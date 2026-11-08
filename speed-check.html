@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Speed check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #E6ECF1; --panel: #FFFFFF; --ink: #15202A; --muted: #586977; --line: #C7D2DB;
+  --them: #A85F00; --them-bg: #FFF0D6; --me: #0B7368; --me-bg: #DAF2EE;
+  --warn: #A33A2B; --ok: #2F7D32; --map: #F2F5F8;
+  --sans: "Barlow", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --cond: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1820; --panel: #15232E; --ink: #E6EDF2; --muted: #8C9FAE; --line: #26394A;
+    --them: #FFB547; --them-bg: #2C2414; --me: #6CD2C4; --me-bg: #12302D;
+    --warn: #FF8A73; --ok: #8BD48E; --map: #102029; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1820; --panel: #15232E; --ink: #E6EDF2; --muted: #8C9FAE; --line: #26394A;
+  --them: #FFB547; --them-bg: #2C2414; --me: #6CD2C4; --me-bg: #12302D;
+  --warn: #FF8A73; --ok: #8BD48E; --map: #102029; color-scheme: dark;
+}
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: 16px; line-height: 1.4;
+  -webkit-tap-highlight-color: transparent;
+}
+.wrap { max-width: 520px; margin: 0 auto; padding: 10px 14px 24px; }
+
+nav { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 10px; }
+nav a { text-align: center; padding: 9px 0; border-radius: 10px; color: var(--muted); text-decoration: none; font-weight: 600; }
+nav a[aria-current="page"] { background: var(--ink); color: var(--bg); }
+nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.view[hidden] { display: none; }
+
+.status { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--muted); padding: 4px 2px 12px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); }
+.dot.weak { background: var(--them); }
+.dot.bad { background: var(--warn); }
+.status .speed { margin-left: auto; font-family: var(--cond); font-size: 18px; color: var(--ink); }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.colhead { font-family: var(--cond); font-weight: 600; font-size: 20px; padding-left: 4px; }
+.colhead.them { color: var(--them); }
+.colhead.me { color: var(--me); }
+
+.tap {
+  appearance: none; border: 2px solid currentColor; border-radius: 18px;
+  min-height: clamp(110px, 19vh, 170px); padding: 10px 14px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
+  font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
+  transition: transform .08s ease;
+}
+.tap:active { transform: scale(.97); }
+.tap.them { color: var(--them); background: var(--them-bg); }
+.tap.me { color: var(--me); background: var(--me-bg); }
+.tap .pt { font-family: var(--cond); font-weight: 700; font-size: 56px; line-height: .9; }
+.tap .val { font-family: var(--cond); font-size: 20px; font-weight: 500; color: var(--ink); min-height: 1.3em; }
+.tap.done { background: currentColor; }
+.tap.done .pt, .tap.done .val { color: var(--panel); }
+.tap:disabled { cursor: default; }
+.tap:focus-visible, .btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+.result { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; min-height: 120px; }
+.result .next { font-size: 18px; margin: 0; }
+.big { display: flex; align-items: baseline; gap: 8px; }
+.big .num { font-family: var(--cond); font-weight: 700; font-size: clamp(72px, 22vw, 112px); line-height: .9; }
+.big .unit { font-family: var(--cond); font-size: 26px; color: var(--muted); }
+.margin { font-family: var(--cond); font-size: 24px; margin-top: 4px; }
+.note { margin: 10px 0 0; font-size: 15px; }
+.note.good { color: var(--ok); }
+.note.rough { color: var(--them); }
+.note.low { color: var(--warn); }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 12px 0 0; font-size: 14px; color: var(--muted); }
+.facts dd { margin: 0; color: var(--ink); }
+.err { color: var(--warn); margin: 0; }
+
+.actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; margin-top: 12px; }
+.btn { appearance: none; font: inherit; font-weight: 600; font-size: 17px; padding: 14px; border-radius: 14px; cursor: pointer; touch-action: manipulation; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.small { font-size: 15px; padding: 9px 14px; }
+.btn.danger { color: var(--warn); }
+.btn:disabled { opacity: .4; cursor: default; }
+.hint { color: var(--muted); font-size: 14px; margin: 16px 2px 0; }
+
+/* history */
+.histhead { display: flex; justify-content: space-between; align-items: center; margin: 4px 2px 10px; }
+.histhead h1 { font-family: var(--cond); font-size: 28px; margin: 0; font-weight: 600; }
+.empty { color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+.entry { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; margin-bottom: 10px; overflow: hidden; }
+.entry > summary { list-style: none; display: flex; align-items: baseline; gap: 10px; padding: 12px 16px; cursor: pointer; }
+.entry > summary::-webkit-details-marker { display: none; }
+.entry .sp { font-family: var(--cond); font-size: 30px; font-weight: 700; }
+.entry .pm { font-family: var(--cond); font-size: 19px; color: var(--muted); }
+.entry .when { margin-left: auto; color: var(--muted); font-size: 14px; text-align: right; }
+.grade { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 2px; transform: translateY(-3px); }
+.grade.good { background: var(--ok); } .grade.rough { background: var(--them); } .grade.low { background: var(--warn); }
+.body { padding: 0 16px 14px; }
+.mapbox { background: var(--map); border-radius: 12px; overflow: hidden; }
+.mapbox svg { display: block; width: 100%; height: auto; }
+.mapcap { color: var(--muted); font-size: 13px; margin: 6px 2px 0; }
+.calc { margin: 12px 0 0; font-size: 14.5px; }
+.calc h3 { font-family: var(--cond); font-size: 18px; font-weight: 600; margin: 14px 0 4px; }
+.calc table { width: 100%; border-collapse: collapse; }
+.calc td { padding: 3px 0; vertical-align: top; }
+.calc td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.calc .them { color: var(--them); } .calc .me { color: var(--me); }
+.calc .eq { font-variant-numeric: tabular-nums; margin: 2px 0; }
+.calc .muted { color: var(--muted); }
+.entry .del { margin-top: 12px; }
+@media (prefers-reduced-motion: reduce) { .tap { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav aria-label="Pages">
+    <a href="#measure" id="navMeasure">Measure</a>
+    <a href="#history" id="navHistory">History</a>
+  </nav>
+
+  <div class="view" id="view-measure">
+    <div class="status" role="status" aria-live="polite">
+      <span class="dot" id="gpsDot"></span>
+      <span id="gpsText">Waiting for GPS…</span>
+      <span class="speed" id="mySpeed"></span>
+    </div>
+
+    <div class="grid">
+      <div class="colhead them">Other car</div>
+      <div class="colhead me">You</div>
+      <button class="tap them" id="themA" aria-label="Other car passes point A"><span class="pt">A</span><span class="val"></span></button>
+      <button class="tap me" id="meA" aria-label="You pass point A"><span class="pt">A</span><span class="val"></span></button>
+      <button class="tap them" id="themB" aria-label="Other car passes point B"><span class="pt">B</span><span class="val"></span></button>
+      <button class="tap me" id="meB" aria-label="You pass point B"><span class="pt">B</span><span class="val"></span></button>
+    </div>
+
+    <section class="result" id="result" aria-live="polite"></section>
+
+    <div class="actions">
+      <button class="btn" id="undo" disabled>Undo</button>
+      <button class="btn primary" id="reset">New measurement</button>
+    </div>
+
+    <p class="hint">Pick any two landmarks, such as lampposts or bridges. Further apart gives a more accurate result. Let a passenger do the tapping.</p>
+  </div>
+
+  <div class="view" id="view-history" hidden>
+    <div class="histhead">
+      <h1>History</h1>
+      <button class="btn small danger" id="clearAll">Clear all</button>
+    </div>
+    <div id="hist"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const TAP_ERR = 0.25;
+  const RESOLVE_WAIT = 3000;
+  const GIVE_UP = 15000;
+  const KEYS = ["themA", "meA", "themB", "meB"];
+  const STORE = "speedcheck-history";
+
+  const fixes = [];
+  let events = { themA: null, meA: null, themB: null, meB: null };
+  let order = [];
+  let savedId = null;
+  let history = loadHistory();
+  let gpsError = null;
+
+  const $ = (id) => document.getElementById(id);
+  const pad = (n, w = 2) => String(n).padStart(w, "0");
+  const clock = (t) => { const d = new Date(t); return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds()) + "." + Math.floor(d.getMilliseconds() / 100); };
+  const num = (x, dp = 0) => x.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
+
+  // ---------- views ----------
+  function route() {
+    const v = location.hash === "#history" ? "history" : "measure";
+    $("view-measure").hidden = v !== "measure";
+    $("view-history").hidden = v !== "history";
+    $("navMeasure").toggleAttribute("aria-current", v === "measure");
+    $("navHistory").toggleAttribute("aria-current", v === "history");
+    if (v === "measure") { $("navMeasure").setAttribute("aria-current", "page"); }
+    else { $("navHistory").setAttribute("aria-current", "page"); renderHistory(); }
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", route);
+
+  // ---------- GPS ----------
+  if ("geolocation" in navigator) {
+    navigator.geolocation.watchPosition(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+  } else { gpsError = "This browser has no location support."; }
+
+  function onFix(p) {
+    gpsError = null;
+    const c = p.coords;
+    fixes.push({ t: p.timestamp || Date.now(), lat: c.latitude, lon: c.longitude, acc: c.accuracy || 50,
+                 speed: (typeof c.speed === "number" && !isNaN(c.speed)) ? c.speed : null });
+    if (fixes.length > 4000) fixes.splice(0, fixes.length - 4000);
+    renderStatus();
+    resolvePending();
+  }
+  function onGpsError(e) {
+    gpsError = e.code === 1 ? "Location is blocked. Allow location access, or open this page on its own." : "No GPS signal yet.";
+    renderStatus();
+  }
+  function renderStatus() {
+    const dot = $("gpsDot"), txt = $("gpsText"), sp = $("mySpeed");
+    const last = fixes[fixes.length - 1];
+    if (gpsError && !last) { dot.className = "dot bad"; txt.textContent = gpsError; sp.textContent = ""; return; }
+    if (!last) { dot.className = "dot"; txt.textContent = "Waiting for GPS…"; sp.textContent = ""; return; }
+    const a = Math.round(last.acc);
+    dot.className = "dot " + (a <= 10 ? "ok" : a <= 30 ? "weak" : "bad");
+    txt.textContent = "GPS accurate to ±" + a + " m";
+    sp.textContent = last.speed != null ? "You: " + Math.round(last.speed * 3.6) + " km/h" : "";
+  }
+
+  // ---------- geometry ----------
+  function hav(a, b) {
+    const R = 6371000, r = Math.PI / 180;
+    const dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+    const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(s));
+  }
+  function interpolate(t) {
+    let before = null, after = null;
+    for (const f of fixes) { if (f.t <= t) before = f; else { after = f; break; } }
+    if (before && after) {
+      const k = (t - before.t) / (after.t - before.t);
+      const sp = (before.speed != null && after.speed != null) ? (before.speed + after.speed) / 2 : (before.speed ?? after.speed);
+      return { lat: before.lat + k * (after.lat - before.lat), lon: before.lon + k * (after.lon - before.lon), acc: Math.max(before.acc, after.acc), speed: sp, extra: 0 };
+    }
+    return null;
+  }
+  function nearest(t) {
+    if (!fixes.length) return null;
+    let best = fixes[0];
+    for (const f of fixes) if (Math.abs(f.t - t) < Math.abs(best.t - t)) best = f;
+    const age = Math.abs(best.t - t) / 1000;
+    const v = best.speed != null ? best.speed : 25;
+    return { lat: best.lat, lon: best.lon, acc: best.acc, speed: best.speed, extra: age * v };
+  }
+  function resolvePending() {
+    const now = Date.now();
+    let changed = false;
+    for (const k of ["meA", "meB"]) {
+      const e = events[k];
+      if (!e || !e.pending) continue;
+      const pos = interpolate(e.t);
+      if (pos) { e.pos = pos; e.pending = false; changed = true; continue; }
+      if (now - e.t > RESOLVE_WAIT && fixes.length) { e.pos = nearest(e.t); e.pending = false; changed = true; continue; }
+      if (now - e.t > GIVE_UP) { e.pos = null; e.pending = false; changed = true; }
+    }
+    if (changed) render();
+  }
+  setInterval(resolvePending, 250);
+
+  // ---------- taps ----------
+  KEYS.forEach((k) => {
+    $(k).addEventListener("click", () => {
+      if (events[k]) return;
+      const t = Date.now();
+      events[k] = k.startsWith("me") ? { t, pending: true, pos: null } : { t };
+      order.push(k);
+      if (navigator.vibrate) navigator.vibrate(35);
+      requestWake();
+      resolvePending();
+      render();
+    });
+  });
+  $("undo").addEventListener("click", () => {
+    const k = order.pop();
+    if (!k) return;
+    events[k] = null;
+    if (savedId) { history = history.filter((h) => h.id !== savedId); savedId = null; saveHistory(); }
+    render();
+  });
+  $("reset").addEventListener("click", () => {
+    events = { themA: null, meA: null, themB: null, meB: null };
+    order = []; savedId = null;
+    render();
+  });
+
+  // ---------- calculation ----------
+  function compute() {
+    const { themA, themB, meA, meB } = events;
+    const T = (themB.t - themA.t) / 1000;
+    if (T <= 0) return { error: "The other car’s B tap came before its A tap. Undo and tap again." };
+    if (!meA.pos || !meB.pos) return { error: "No GPS position for one of your taps, so the distance can’t be measured. Allow location access and try again." };
+
+    const a = meA.pos, b = meB.pos;
+    const t0 = Math.min(meA.t, meB.t), t1 = Math.max(meA.t, meB.t);
+    const straight = hav(a, b);
+    const pts = [a];
+    for (const f of fixes) if (f.t > t0 && f.t < t1 && f.acc <= 100) pts.push(f);
+    pts.push(b);
+    let track = 0;
+    for (let i = 1; i < pts.length; i++) track += hav(pts[i - 1], pts[i]);
+    const d = Math.max(track, straight);
+    const myT = (t1 - t0) / 1000;
+    const myV = myT > 0 ? d / myT : 25;
+    const vA = a.speed != null ? a.speed : myV, vB = b.speed != null ? b.speed : myV;
+
+    const sigT = Math.SQRT2 * TAP_ERR;
+    const gpsPart = Math.hypot(a.acc, b.acc, a.extra || 0, b.extra || 0);
+    const tapPart = Math.hypot(vA * TAP_ERR, vB * TAP_ERR);
+    const sigD = Math.hypot(gpsPart, tapPart);
+    const dSafe = Math.max(d, 1);
+    const rel = Math.hypot(sigD / dSafe, sigT / T);
+    const kmh = (d / T) * 3.6;
+    return {
+      kmh, margin: kmh * rel, rel, d, T, myT, myKmh: myT > 0 ? (d / myT) * 3.6 : null,
+      needed: Math.ceil((dSafe * rel / 0.05) / 50) * 50,
+      gpsDominant: (gpsPart / dSafe) > (sigT / T),
+      viaTrack: pts.length > 2, gpsPart, tapPart, sigD, sigT,
+      accA: a.acc, accB: b.acc, pts: pts.map((p) => [p.lat, p.lon])
+    };
+  }
+  function gradeOf(rel) { return rel < 0.05 ? "good" : rel < 0.15 ? "rough" : "low"; }
+
+  // ---------- render measure ----------
+  function fmtRel(t, base) { return "+" + ((t - base) / 1000).toFixed(1) + " s"; }
+
+  function render() {
+    const times = KEYS.filter((k) => events[k]).map((k) => events[k].t);
+    const base = times.length ? Math.min(...times) : 0;
+    KEYS.forEach((k) => {
+      const el = $(k), e = events[k];
+      el.classList.toggle("done", !!e);
+      el.disabled = !!e;
+      el.querySelector(".val").textContent = !e ? "" : (e.pending ? "Locating…" : fmtRel(e.t, base));
+    });
+    $("undo").disabled = order.length === 0;
+
+    const r = $("result");
+    const missing = KEYS.filter((k) => !events[k]);
+    if (missing.length) {
+      const msg = {
+        themA: "Tap A on the left when the other car passes your first landmark.",
+        meA: "Tap A on the right when you pass that same landmark.",
+        themB: "Tap B on the left when the other car passes your second landmark.",
+        meB: "Tap B on the right when you pass that same landmark."
+      };
+      r.innerHTML = '<p class="next"></p>';
+      r.firstChild.textContent = msg[missing[0]];
+      return;
+    }
+    if (events.meA.pending || events.meB.pending) { r.innerHTML = '<p class="next">Getting your GPS position…</p>'; return; }
+    const res = compute();
+    if (res.error) { r.innerHTML = '<p class="err"></p>'; r.firstChild.textContent = res.error; return; }
+
+    const kmh = Math.round(res.kmh), m = Math.max(1, Math.round(res.margin));
+    const cls = gradeOf(res.rel);
+    r.innerHTML =
+      '<div class="big"><span class="num"></span><span class="unit">km/h</span></div>' +
+      '<div class="margin"></div><p class="note"></p>' +
+      '<dl class="facts"><dt>Distance</dt><dd class="fd"></dd><dt>Their time</dt><dd class="ft"></dd><dt>Margin</dt><dd class="fp"></dd></dl>';
+    r.querySelector(".num").textContent = kmh;
+    r.querySelector(".margin").textContent = "± " + m + " km/h  (" + Math.max(0, kmh - m) + " to " + (kmh + m) + ")";
+    const n = r.querySelector(".note"); n.className = "note " + cls; n.textContent = accuracyNote(res);
+    r.querySelector(".fd").textContent = num(Math.round(res.d)) + " m" + (res.viaTrack ? " along your GPS track" : " straight line");
+    r.querySelector(".ft").textContent = res.T.toFixed(1) + " s";
+    r.querySelector(".fp").textContent = pctText(res.rel);
+
+    if (!savedId) {
+      savedId = String(Date.now());
+      history.unshift({
+        id: savedId, at: Date.now(), v: 2, kmh, m, rel: res.rel, d: Math.round(res.d), T: res.T, myT: res.myT, myKmh: res.myKmh,
+        viaTrack: res.viaTrack, gpsPart: res.gpsPart, tapPart: res.tapPart, sigD: res.sigD, sigT: res.sigT,
+        accA: res.accA, accB: res.accB, needed: res.needed, gpsDominant: res.gpsDominant,
+        taps: { themA: events.themA.t, meA: events.meA.t, themB: events.themB.t, meB: events.meB.t },
+        track: thin(res.pts, 150)
+      });
+      history = history.slice(0, 50);
+      saveHistory();
+    }
+  }
+  function pctText(rel) { const p = rel * 100; return "±" + (p < 10 ? p.toFixed(1) : Math.round(p)) + "%"; }
+  function accuracyNote(res) {
+    if (res.rel < 0.05) return "Good accuracy.";
+    const cause = res.gpsDominant ? "GPS accuracy is the main limit here." : "Tap timing is the main limit here, because the stretch was short.";
+    const tip = "About " + num(res.needed) + " m between landmarks would bring this to ±5%.";
+    return res.rel < 0.15 ? "Rough estimate. " + cause + " " + tip : "Low accuracy, treat this as an indication only. " + cause + " " + tip;
+  }
+  function thin(pts, max) {
+    if (pts.length <= max) return pts.map(([a, b]) => [+a.toFixed(6), +b.toFixed(6)]);
+    const out = [], step = (pts.length - 1) / (max - 1);
+    for (let i = 0; i < max; i++) { const [a, b] = pts[Math.round(i * step)]; out.push([+a.toFixed(6), +b.toFixed(6)]); }
+    return out;
+  }
+
+  // ---------- map ----------
+  function mapSvg(track) {
+    const W = 320, H = 180, P = 22;
+    const lat0 = track.reduce((s, p) => s + p[0], 0) / track.length;
+    const kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 110540;
+    const xy = track.map(([la, lo]) => [lo * kx, -la * ky]);
+    const xs = xy.map((p) => p[0]), ys = xy.map((p) => p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const span = Math.max(maxX - minX, maxY - minY, 20);
+    const s = Math.min((W - 2 * P) / Math.max(maxX - minX, 1e-6), (H - 2 * P) / Math.max(maxY - minY, 1e-6), (W - 2 * P) / 20);
+    const ox = (W - (maxX - minX) * s) / 2, oy = (H - (maxY - minY) * s) / 2;
+    const pr = (p) => [ox + (p[0] - minX) * s, oy + (p[1] - minY) * s];
+    const pp = xy.map(pr);
+    const line = pp.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+    // scale bar: a round length near a quarter of the width
+    const target = (W / 4) / s, nice = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000];
+    let len = nice[0]; for (const n of nice) if (n <= target) len = n;
+    const bar = len * s, lbl = len >= 1000 ? (len / 1000) + " km" : len + " m";
+    const [ax, ay] = pp[0], [bx, by] = pp[pp.length - 1];
+    const lab = (x, y, t, col) => {
+      const dx = x > W - 40 ? -14 : 12, dy = y < 24 ? 16 : -8;
+      return '<text x="' + (x + dx).toFixed(1) + '" y="' + (y + dy).toFixed(1) + '" fill="' + col + '" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="16" text-anchor="middle">' + t + '</text>';
+    };
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Driven stretch from A to B">' +
+      '<polyline points="' + line + '" fill="none" stroke="var(--me)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="' + ax.toFixed(1) + '" cy="' + ay.toFixed(1) + '" r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="2.5"/>' +
+      '<circle cx="' + bx.toFixed(1) + '" cy="' + by.toFixed(1) + '" r="6" fill="var(--ink)"/>' +
+      lab(ax, ay, "A", "var(--ink)") + lab(bx, by, "B", "var(--ink)") +
+      '<g transform="translate(12,' + (H - 12) + ')"><line x1="0" y1="0" x2="' + bar.toFixed(1) + '" y2="0" stroke="var(--muted)" stroke-width="2"/>' +
+      '<line x1="0" y1="-4" x2="0" y2="0" stroke="var(--muted)" stroke-width="2"/><line x1="' + bar.toFixed(1) + '" y1="-4" x2="' + bar.toFixed(1) + '" y2="0" stroke="var(--muted)" stroke-width="2"/>' +
+      '<text x="' + (bar + 6).toFixed(1) + '" y="4" fill="var(--muted)" font-family="Barlow, sans-serif" font-size="12">' + lbl + '</text></g>' +
+      '<g transform="translate(' + (W - 16) + ',16)"><path d="M0,-9 L5,5 L0,2 L-5,5 Z" fill="var(--muted)"/><text x="0" y="17" fill="var(--muted)" font-family="Barlow, sans-serif" font-size="11" text-anchor="middle">N</text></g>' +
+      '</svg>';
+  }
+
+  // ---------- history ----------
+  function loadHistory() { try { return JSON.parse(localStorage.getItem(STORE) || "[]"); } catch (e) { return []; } }
+  function saveHistory() {
+    try { localStorage.setItem(STORE, JSON.stringify(history)); } catch (e) {}
+    if (!$("view-history").hidden) renderHistory();
+  }
+
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function row(tbody, label, value, cls) {
+    const tr = document.createElement("tr");
+    const a = el("td", cls, label), b = el("td", null, value);
+    tr.append(a, b); tbody.appendChild(tr);
+  }
+
+  function renderHistory() {
+    const box = $("hist"); box.innerHTML = "";
+    $("clearAll").disabled = !history.length;
+    if (!history.length) { box.appendChild(el("p", "empty", "No measurements yet. Each completed measurement is saved here.")); return; }
+
+    history.forEach((h, i) => {
+      const det = el("details", "entry");
+      if (i === 0) det.open = true;
+      const sum = document.createElement("summary");
+      const rel = h.rel != null ? h.rel : (h.m / Math.max(h.kmh, 1));
+      const g = el("span", "grade " + gradeOf(rel)); g.setAttribute("aria-label", gradeOf(rel) + " accuracy");
+      const dt = new Date(h.at);
+      const when = el("span", "when");
+      when.append(el("div", null, dt.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })),
+                  el("div", null, dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })));
+      sum.append(g, el("span", "sp", h.kmh + " km/h"), el("span", "pm", "±" + h.m), when);
+      det.appendChild(sum);
+
+      const body = el("div", "body");
+      if (h.track && h.track.length >= 2) {
+        const mb = el("div", "mapbox"); mb.innerHTML = mapSvg(h.track); body.appendChild(mb);
+        body.appendChild(el("p", "mapcap", "Your GPS track from A to B" + (h.viaTrack ? "" : " (straight line, no fixes in between)") + "."));
+      }
+
+      const calc = el("div", "calc");
+      if (h.taps) {
+        calc.appendChild(el("h3", null, "Taps"));
+        const t = document.createElement("table"), tb = document.createElement("tbody");
+        const seq = [["themA", "Other car at A", "them"], ["meA", "You at A", "me"], ["themB", "Other car at B", "them"], ["meB", "You at B", "me"]]
+          .sort((x, y) => h.taps[x[0]] - h.taps[y[0]]);
+        for (const [k, label, cls] of seq) row(tb, label, clock(h.taps[k]), cls);
+        t.appendChild(tb); calc.appendChild(t);
+
+        calc.appendChild(el("h3", null, "Calculation"));
+        calc.appendChild(el("div", "eq", "Distance: " + num(h.d) + " m " + (h.viaTrack ? "along your GPS track" : "in a straight line")));
+        calc.appendChild(el("div", "eq", "Their time: " + clock(h.taps.themB) + " − " + clock(h.taps.themA) + " = " + h.T.toFixed(1) + " s"));
+        const ms = h.d / h.T;
+        calc.appendChild(el("div", "eq", "Speed: " + num(h.d) + " m ÷ " + h.T.toFixed(1) + " s = " + ms.toFixed(1) + " m/s × 3.6 = " + h.kmh + " km/h"));
+        if (h.myKmh != null) calc.appendChild(el("div", "eq muted", "Your own average over the stretch: " + Math.round(h.myKmh) + " km/h in " + h.myT.toFixed(1) + " s"));
+
+        calc.appendChild(el("h3", null, "Margin of error"));
+        const t2 = document.createElement("table"), tb2 = document.createElement("tbody");
+        row(tb2, "GPS accuracy at A / B", "±" + Math.round(h.accA) + " m / ±" + Math.round(h.accB) + " m");
+        row(tb2, "Distance error from GPS", "±" + Math.round(h.gpsPart) + " m");
+        row(tb2, "Distance error from your taps", "±" + Math.round(h.tapPart) + " m");
+        row(tb2, "Total distance error", "±" + Math.round(h.sigD) + " m (" + pctText(h.sigD / Math.max(h.d, 1)) + ")");
+        row(tb2, "Timing error, other car", "±" + h.sigT.toFixed(2) + " s (" + pctText(h.sigT / h.T) + ")");
+        row(tb2, "Combined", pctText(rel) + " = ±" + h.m + " km/h");
+        t2.appendChild(tb2); calc.appendChild(t2);
+        calc.appendChild(el("p", "note " + gradeOf(rel), accuracyNote(h)));
+      } else {
+        calc.appendChild(el("p", "muted", "Distance " + num(h.d) + " m. Recorded before detailed history was added, so taps and map aren’t available."));
+      }
+      body.appendChild(calc);
+
+      const del = el("button", "btn small danger del", "Delete measurement");
+      del.addEventListener("click", () => { history = history.filter((x) => x.id !== h.id); if (savedId === h.id) savedId = null; saveHistory(); renderHistory(); });
+      body.appendChild(del);
+      det.appendChild(body);
+      box.appendChild(det);
+    });
+  }
+  $("clearAll").addEventListener("click", () => {
+    if (!confirm("Delete all measurements?")) return;
+    history = []; savedId = null; saveHistory(); renderHistory();
+  });
+
+  // ---------- keep screen awake ----------
+  let wake = null;
+  async function requestWake() {
+    try { if ("wakeLock" in navigator && !wake) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => { wake = null; }); } } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") requestWake(); });
+
+  renderStatus();
+  render();
+  route();
+})();
+</script>
+</body>
+</html>

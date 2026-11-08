@@ -8,34 +8,137 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
 <style>
-:root { --bg:#E6ECF1; --panel:#FFFFFF; --ink:#15202A; --muted:#586977; --line:#C7D2DB;
+:root { --bg:#E6ECF1; --panel:#FFFFFF; --ink:#15202A; --muted:#586977; --line:#C7D2DB; --lift:rgba(21,32,42,.18);
   --sans:"Barlow","Segoe UI",Roboto,Helvetica,Arial,sans-serif; --cond:"Barlow Condensed","Arial Narrow",sans-serif;
   color-scheme:light; box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
-@media (prefers-color-scheme: dark) { :root { --bg:#0E1820; --panel:#15232E; --ink:#E6EDF2; --muted:#8C9FAE; --line:#26394A; color-scheme:dark; } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#0E1820; --panel:#15232E; --ink:#E6EDF2; --muted:#8C9FAE; --line:#26394A; --lift:rgba(0,0,0,.5); color-scheme:dark; } }
+:root[data-theme="dark"] { --bg:#0E1820; --panel:#15232E; --ink:#E6EDF2; --muted:#8C9FAE; --line:#26394A; --lift:rgba(0,0,0,.5); color-scheme:dark; }
 *,*::before,*::after { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); }
 .wrap { max-width:520px; margin:0 auto; padding:24px 16px; }
 h1 { font-family:var(--cond); font-weight:700; font-size:40px; margin:8px 0 18px; }
+#list { display:flex; flex-direction:column; gap:10px; }
 a.app { display:flex; align-items:center; gap:14px; background:var(--panel); border:1px solid var(--line); border-radius:16px;
-  padding:16px; color:var(--ink); text-decoration:none; margin-bottom:10px; }
+  padding:16px; color:var(--ink); text-decoration:none; position:relative;
+  -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+  transition:transform .18s ease, box-shadow .18s ease; }
 a.app:focus-visible { outline:3px solid var(--ink); outline-offset:2px; }
+a.app.dragging { transition:box-shadow .18s ease; z-index:2; box-shadow:0 12px 28px var(--lift); }
+#list.sorting a.app:not(.dragging) { pointer-events:none; }
 .icon { font-size:32px; line-height:1; }
 .name { font-family:var(--cond); font-weight:600; font-size:24px; }
 .desc { color:var(--muted); font-size:15px; }
+.hint { color:var(--muted); font-size:14px; margin:16px 2px 0; }
+@media (prefers-reduced-motion: reduce) { a.app { transition:none; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Apps</h1>
-  <a class="app" href="speed-check.html">
-    <span class="icon" aria-hidden="true">🚗</span>
-    <span><div class="name">Speed check</div><div class="desc">Measure another car’s speed between two landmarks.</div></span>
-  </a>
-  <a class="app" href="https://claude.ai/artifact/H1hE7pUrSpoSwh4ozErvaG">
-    <span class="icon" aria-hidden="true">💊</span>
-    <span><div class="name">G-Standaard Explorer</div><div class="desc">Look up GPK, PRK, HPK and ZI number. Opens in Claude.</div></span>
-  </a>
+  <div id="list">
+    <a class="app" data-id="speed-check" href="speed-check.html">
+      <span class="icon" aria-hidden="true">🚗</span>
+      <span><div class="name">Speed check</div><div class="desc">Measure another car’s speed between two landmarks.</div></span>
+    </a>
+    <a class="app" data-id="puzzzld" href="https://claude.ai/artifact/Tr4Sv2hGB2b8wiHRiMh5tQ">
+      <span class="icon" aria-hidden="true">🧩</span>
+      <span><div class="name">Puzzzld</div><div class="desc">Kruiswoord, cryptogram and woordzoeker. Opens in Claude.</div></span>
+    </a>
+    <a class="app" data-id="gstandaard" href="https://claude.ai/artifact/H1hE7pUrSpoSwh4ozErvaG">
+      <span class="icon" aria-hidden="true">💊</span>
+      <span><div class="name">G-Standaard Explorer</div><div class="desc">Look up GPK, PRK, HPK and ZI number. Opens in Claude.</div></span>
+    </a>
+  </div>
+  <p class="hint">Press and hold a tile to move it.</p>
 </div>
+<script>
+(function () {
+  const KEY = "apps-order", HOLD = 450, SLOP = 8;
+  const list = document.getElementById("list");
+
+  // restore saved order
+  try {
+    const order = JSON.parse(localStorage.getItem(KEY) || "[]");
+    order.forEach((id) => { const el = list.querySelector('[data-id="' + id + '"]'); if (el) list.appendChild(el); });
+  } catch (e) {}
+  function saveOrder() {
+    try { localStorage.setItem(KEY, JSON.stringify([...list.children].map((c) => c.dataset.id))); } catch (e) {}
+  }
+
+  let timer = null, start = null, drag = null, suppressClick = false;
+
+  list.addEventListener("pointerdown", (e) => {
+    const card = e.target.closest("a.app");
+    if (!card || (e.pointerType === "mouse" && e.button !== 0)) return;
+    start = { x: e.clientX, y: e.clientY, card, id: e.pointerId };
+    timer = setTimeout(() => beginDrag(e.pointerId), HOLD);
+  });
+
+  function beginDrag(pid) {
+    timer = null;
+    const cards = [...list.children];
+    const rects = cards.map((c) => c.getBoundingClientRect());
+    const from = cards.indexOf(start.card);
+    drag = { cards, rects, from, to: from, step: rects.length > 1 ? rects[1].top - rects[0].top : rects[0].height + 10, pid };
+    start.card.classList.add("dragging");
+    list.classList.add("sorting");
+    try { start.card.setPointerCapture(pid); } catch (e) {}
+    if (navigator.vibrate) navigator.vibrate(30);
+  }
+
+  list.addEventListener("pointermove", (e) => {
+    if (!start || e.pointerId !== start.id) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (!drag) {
+      if (Math.hypot(dx, dy) > SLOP) cancelHold(); // it's a scroll, not a hold
+      return;
+    }
+    const { cards, rects, from, step } = drag;
+    const top = rects[0].top, bottom = rects[rects.length - 1].top;
+    const clampedDy = Math.max(top - rects[from].top, Math.min(bottom - rects[from].top, dy));
+    start.card.style.transform = "translateY(" + clampedDy + "px) scale(1.02)";
+    const to = Math.max(0, Math.min(cards.length - 1, Math.round(from + clampedDy / step)));
+    drag.to = to;
+    cards.forEach((c, i) => {
+      if (c === start.card) return;
+      let shift = 0;
+      if (from < to && i > from && i <= to) shift = -step;
+      if (from > to && i < from && i >= to) shift = step;
+      c.style.transform = shift ? "translateY(" + shift + "px)" : "";
+    });
+  });
+
+  function cancelHold() { clearTimeout(timer); timer = null; if (!drag) start = null; }
+
+  function endDrag() {
+    clearTimeout(timer); timer = null;
+    if (drag) {
+      const { cards, from, to } = drag;
+      cards.forEach((c) => { c.style.transition = "none"; c.style.transform = ""; });
+      start.card.classList.remove("dragging");
+      list.classList.remove("sorting");
+      if (to !== from) {
+        const ref = to > from ? cards[to].nextSibling : cards[to];
+        list.insertBefore(start.card, ref);
+        saveOrder();
+      }
+      requestAnimationFrame(() => cards.forEach((c) => (c.style.transition = "")));
+      suppressClick = true;
+      setTimeout(() => (suppressClick = false), 50);
+      drag = null;
+    }
+    start = null;
+  }
+  list.addEventListener("pointerup", endDrag);
+  list.addEventListener("pointercancel", endDrag);
+
+  // block scrolling while a tile is being dragged (touch)
+  document.addEventListener("touchmove", (e) => { if (drag) e.preventDefault(); }, { passive: false });
+  list.addEventListener("click", (e) => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
+  list.addEventListener("contextmenu", (e) => { if (e.target.closest("a.app")) e.preventDefault(); });
+  list.addEventListener("dragstart", (e) => e.preventDefault());
+})();
+</script>
 </body>
 </html>

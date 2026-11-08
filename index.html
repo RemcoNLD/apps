@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#E6ECF1; --panel:#FFFFFF; --ink:#15202A; --muted:#586977; --line:#C7D2DB;
+  --sans:"Barlow","Segoe UI",Roboto,Helvetica,Arial,sans-serif; --cond:"Barlow Condensed","Arial Narrow",sans-serif;
+  color-scheme:light; box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); }
+@media (prefers-color-scheme: dark) { :root { --bg:#0E1820; --panel:#15232E; --ink:#E6EDF2; --muted:#8C9FAE; --line:#26394A; color-scheme:dark; } }
+*,*::before,*::after { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); }
+.wrap { max-width:520px; margin:0 auto; padding:24px 16px; }
+h1 { font-family:var(--cond); font-weight:700; font-size:40px; margin:8px 0 18px; }
+a.app { display:flex; align-items:center; gap:14px; background:var(--panel); border:1px solid var(--line); border-radius:16px;
+  padding:16px; color:var(--ink); text-decoration:none; margin-bottom:10px; }
+a.app:focus-visible { outline:3px solid var(--ink); outline-offset:2px; }
+.icon { font-size:32px; line-height:1; }
+.name { font-family:var(--cond); font-weight:600; font-size:24px; }
+.desc { color:var(--muted); font-size:15px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Apps</h1>
+  <a class="app" href="speed-check.html">
+    <span class="icon" aria-hidden="true">🚗</span>
+    <span><div class="name">Speed check</div><div class="desc">Measure another car’s speed between two landmarks.</div></span>
+  </a>
+</div>
+</body>
+</html>

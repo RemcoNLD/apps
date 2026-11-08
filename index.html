@@ -30,12 +30,20 @@ a.app.dragging { transition:box-shadow .18s ease; z-index:2; box-shadow:0 12px 2
 .name { font-family:var(--cond); font-weight:600; font-size:24px; }
 .desc { color:var(--muted); font-size:15px; }
 .hint { color:var(--muted); font-size:14px; margin:16px 2px 0; }
+.top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+#refresh { font:500 15px var(--sans); color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:999px;
+  padding:8px 14px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+#refresh:active { transform:scale(.96); }
+#refresh:focus-visible { outline:3px solid var(--ink); outline-offset:2px; }
 @media (prefers-reduced-motion: reduce) { a.app { transition:none; } }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Apps</h1>
+  <div class="top">
+    <h1>Apps</h1>
+    <button id="refresh" type="button">↻ Refresh</button>
+  </div>
   <div id="list">
     <a class="app" data-id="speed-check" href="speed-check.html">
       <span class="icon" aria-hidden="true">🚗</span>
@@ -143,6 +151,12 @@ a.app.dragging { transition:box-shadow .18s ease; z-index:2; box-shadow:0 12px 2
   list.addEventListener("contextmenu", (e) => { if (e.target.closest("a.app")) e.preventDefault(); });
   list.addEventListener("dragstart", (e) => e.preventDefault());
 })();
+</script>
+<script>
+// Reload from the network, bypassing the cached copy (home-screen apps have no pull-to-refresh)
+document.getElementById("refresh").addEventListener("click", () => {
+  location.replace(location.pathname + "?v=" + Date.now());
+});
 </script>
 </body>
 </html>

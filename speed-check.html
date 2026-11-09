@@ -38,7 +38,15 @@ body {
   font-family: var(--sans); font-size: 16px; line-height: 1.4;
   -webkit-tap-highlight-color: transparent;
 }
-.wrap { max-width: 520px; margin: 0 auto; padding: 10px 14px 24px; }
+.wrap { max-width: 520px; margin: 0 auto; padding: 10px 14px 10px; }
+/* Measure view fills exactly one screen: tiles share whatever height is left */
+#view-measure:not([hidden]) {
+  display: flex; flex-direction: column;
+  height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 84px);
+  height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 84px);
+  min-height: 520px;
+}
+#view-measure .grid { flex: 1 1 auto; min-height: 0; grid-template-rows: auto 1fr 1fr; }
 
 nav { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 10px; }
 nav a { text-align: center; padding: 9px 0; border-radius: 10px; color: var(--muted); text-decoration: none; font-weight: 600; }
@@ -46,7 +54,7 @@ nav a[aria-current="page"] { background: var(--ink); color: var(--bg); }
 nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .view[hidden] { display: none; }
 
-.status { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--muted); padding: 4px 2px 12px; }
+.status { flex: none; display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--muted); padding: 2px 2px 8px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
 .dot.ok { background: var(--ok); }
 .dot.weak { background: var(--them); }
@@ -60,7 +68,7 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
 .tap {
   appearance: none; border: 2px solid currentColor; border-radius: 18px;
-  min-height: clamp(110px, 19vh, 170px); padding: 10px 14px;
+  min-height: 84px; padding: 10px 14px;
   display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
   font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
   transition: transform .08s ease;
@@ -68,29 +76,29 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .tap:active { transform: scale(.97); }
 .tap.them { color: var(--them); background: var(--them-bg); }
 .tap.me { color: var(--me); background: var(--me-bg); }
-.tap .pt { font-family: var(--cond); font-weight: 700; font-size: 56px; line-height: .9; }
+.tap .pt { font-family: var(--cond); font-weight: 700; font-size: clamp(40px, 7vh, 56px); line-height: .9; }
 .tap .val { font-family: var(--cond); font-size: 20px; font-weight: 500; color: var(--ink); min-height: 1.3em; }
 .tap.done { background: currentColor; }
 .tap.done .pt, .tap.done .val { color: var(--panel); }
 .tap:disabled { cursor: default; }
 .tap:focus-visible, .btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 
-.result { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; min-height: 120px; }
+.result { flex: none; margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 12px 16px; min-height: 64px; }
 .result .next { font-size: 18px; margin: 0; }
 .big { display: flex; align-items: baseline; gap: 8px; }
-.big .num { font-family: var(--cond); font-weight: 700; font-size: clamp(72px, 22vw, 112px); line-height: .9; }
+.big .num { font-family: var(--cond); font-weight: 700; font-size: clamp(48px, 8vh, 80px); line-height: .9; }
 .big .unit { font-family: var(--cond); font-size: 26px; color: var(--muted); }
-.margin { font-family: var(--cond); font-size: 24px; margin-top: 4px; }
-.note { margin: 10px 0 0; font-size: 15px; }
+.margin { font-family: var(--cond); font-size: 21px; margin-top: 2px; }
+.note { margin: 6px 0 0; font-size: 14.5px; }
 .note.good { color: var(--ok); }
 .note.rough { color: var(--them); }
 .note.low { color: var(--warn); }
-.facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 12px 0 0; font-size: 14px; color: var(--muted); }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
 .facts dd { margin: 0; color: var(--ink); }
 .err { color: var(--warn); margin: 0; }
 
-.actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; margin-top: 12px; }
-.btn { appearance: none; font: inherit; font-weight: 600; font-size: 17px; padding: 14px; border-radius: 14px; cursor: pointer; touch-action: manipulation; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.actions { flex: none; display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; margin-top: 10px; }
+.btn { appearance: none; font: inherit; font-weight: 600; font-size: 17px; padding: 12px; border-radius: 14px; cursor: pointer; touch-action: manipulation; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
 .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .btn.small { font-size: 15px; padding: 9px 14px; }
 .btn.danger { color: var(--warn); }
@@ -155,7 +163,6 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
       <button class="btn primary" id="reset">New measurement</button>
     </div>
 
-    <p class="hint">Pick any two landmarks, such as lampposts or bridges. Further apart gives a more accurate result. Let a passenger do the tapping.</p>
   </div>
 
   <div class="view" id="view-history" hidden>

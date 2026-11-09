@@ -39,14 +39,6 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 .wrap { max-width: 520px; margin: 0 auto; padding: 10px 14px 10px; }
-/* Measure view fills exactly one screen: tiles share whatever height is left */
-#view-measure:not([hidden]) {
-  display: flex; flex-direction: column;
-  height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 84px);
-  height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 84px);
-  min-height: 520px;
-}
-#view-measure .grid { flex: 1 1 auto; min-height: 0; grid-template-rows: auto 1fr 1fr; }
 
 nav { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 10px; }
 nav a { text-align: center; padding: 9px 0; border-radius: 10px; color: var(--muted); text-decoration: none; font-weight: 600; }
@@ -54,21 +46,33 @@ nav a[aria-current="page"] { background: var(--ink); color: var(--bg); }
 nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .view[hidden] { display: none; }
 
-.status { flex: none; display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--muted); padding: 2px 2px 8px; }
+/* Measure view fills exactly one screen: the tiles take whatever height is left */
+#view-measure:not([hidden]) {
+  display: flex; flex-direction: column;
+  height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 84px);
+  height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 84px);
+  min-height: 520px;
+}
+
+.status { flex: none; display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--muted); padding: 0 2px 8px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
 .dot.ok { background: var(--ok); }
 .dot.weak { background: var(--them); }
 .dot.bad { background: var(--warn); }
-.status .speed { margin-left: auto; font-family: var(--cond); font-size: 18px; color: var(--ink); }
+.modes { margin-left: auto; display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 2px; flex: none; }
+.modes button { appearance: none; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; padding: 5px 10px; border-radius: 8px; cursor: pointer; }
+.modes button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.modes button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.colhead { font-family: var(--cond); font-weight: 600; font-size: 20px; padding-left: 4px; }
+.pad { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
+.grid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr 1fr; gap: 10px; }
+.colhead { font-family: var(--cond); font-weight: 600; font-size: 20px; padding-left: 4px; line-height: 1.2; }
 .colhead.them { color: var(--them); }
 .colhead.me { color: var(--me); }
 
 .tap {
   appearance: none; border: 2px solid currentColor; border-radius: 18px;
-  min-height: 84px; padding: 10px 14px;
+  min-height: 72px; padding: 10px 14px; position: relative;
   display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
   font: inherit; text-align: left; cursor: pointer; touch-action: manipulation;
   transition: transform .08s ease;
@@ -76,33 +80,48 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 .tap:active { transform: scale(.97); }
 .tap.them { color: var(--them); background: var(--them-bg); }
 .tap.me { color: var(--me); background: var(--me-bg); }
-.tap .pt { font-family: var(--cond); font-weight: 700; font-size: clamp(40px, 7vh, 56px); line-height: .9; }
+.tap .pt { font-family: var(--cond); font-weight: 700; font-size: clamp(36px, 6.5vh, 56px); line-height: .9; }
 .tap .val { font-family: var(--cond); font-size: 20px; font-weight: 500; color: var(--ink); min-height: 1.3em; }
 .tap.done { background: currentColor; }
 .tap.done .pt, .tap.done .val { color: var(--panel); }
+.tap.next { border-style: dashed; border-width: 3px; }
+.tap.last { box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px var(--ink); }
+.tap .badge { position: absolute; top: 10px; right: 10px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 999px; background: var(--ink); color: var(--bg); }
 .tap:disabled { cursor: default; }
-.tap:focus-visible, .btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.tap:focus-visible, .btn:focus-visible, .tapall:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+/* one-tap mode: a single invisible button covers the whole pad */
+.tapall { position: absolute; inset: 0; appearance: none; border: 0; background: transparent; border-radius: 18px; cursor: pointer; touch-action: manipulation; }
+.pad.one .tap { pointer-events: none; }
+.pad:not(.one) .tapall { display: none; }
 
-.result { flex: none; margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 12px 16px; min-height: 64px; }
-.result .next { font-size: 18px; margin: 0; }
-.big { display: flex; align-items: baseline; gap: 8px; }
-.big .num { font-family: var(--cond); font-weight: 700; font-size: clamp(48px, 8vh, 80px); line-height: .9; }
-.big .unit { font-family: var(--cond); font-size: 26px; color: var(--muted); }
-.margin { font-family: var(--cond); font-size: 21px; margin-top: 2px; }
-.note { margin: 6px 0 0; font-size: 14.5px; }
+.panel { flex: none; margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+  padding: 12px 16px; height: 196px; overflow: hidden; display: flex; flex-direction: column; }
+.ptop { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.big { display: flex; align-items: baseline; gap: 6px; }
+.big .num { font-family: var(--cond); font-weight: 700; font-size: 64px; line-height: .9; font-variant-numeric: tabular-nums; }
+.big .unit { font-family: var(--cond); font-size: 24px; color: var(--muted); }
+.side { text-align: right; font-family: var(--cond); line-height: 1.15; }
+.side .a { font-size: 22px; }
+.side .b { font-size: 17px; color: var(--muted); }
+.note { margin: 6px 0 0; font-size: 14.5px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .note.good { color: var(--ok); }
 .note.rough { color: var(--them); }
-.note.low { color: var(--warn); }
-.facts { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
-.facts dd { margin: 0; color: var(--ink); }
-.err { color: var(--warn); margin: 0; }
+.note.low, .note.err { color: var(--warn); }
+.note.next { color: var(--ink); }
+.stats { margin-top: auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.stats div { display: flex; flex-direction: column; min-width: 0; }
+.stats span { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats b { font-family: var(--cond); font-weight: 600; font-size: 21px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .actions { flex: none; display: grid; grid-template-columns: 1fr 1.4fr; gap: 10px; margin-top: 10px; }
+.actions.single { grid-template-columns: 1fr; }
 .btn { appearance: none; font: inherit; font-weight: 600; font-size: 17px; padding: 12px; border-radius: 14px; cursor: pointer; touch-action: manipulation; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
 .btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .btn.small { font-size: 15px; padding: 9px 14px; }
 .btn.danger { color: var(--warn); }
 .btn:disabled { opacity: .4; cursor: default; }
+.btn[hidden] { display: none; }
 .hint { color: var(--muted); font-size: 14px; margin: 16px 2px 0; }
 
 /* history */
@@ -141,28 +160,33 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   </nav>
 
   <div class="view" id="view-measure">
-    <div class="status" role="status" aria-live="polite">
+    <div class="status">
       <span class="dot" id="gpsDot"></span>
-      <span id="gpsText">Waiting for GPS…</span>
-      <span class="speed" id="mySpeed"></span>
+      <span id="gpsText" role="status" aria-live="polite">Waiting for GPS…</span>
+      <div class="modes" role="group" aria-label="Tap mode">
+        <button id="modeOne" aria-pressed="true">Tap anywhere</button>
+        <button id="modeFour" aria-pressed="false">4 buttons</button>
+      </div>
     </div>
 
-    <div class="grid">
-      <div class="colhead them">Other car</div>
-      <div class="colhead me">You</div>
-      <button class="tap them" id="themA" aria-label="Other car passes point A"><span class="pt">A</span><span class="val"></span></button>
-      <button class="tap me" id="meA" aria-label="You pass point A"><span class="pt">A</span><span class="val"></span></button>
-      <button class="tap them" id="themB" aria-label="Other car passes point B"><span class="pt">B</span><span class="val"></span></button>
-      <button class="tap me" id="meB" aria-label="You pass point B"><span class="pt">B</span><span class="val"></span></button>
+    <div class="pad" id="pad">
+      <div class="grid">
+        <div class="colhead them">Other car</div>
+        <div class="colhead me">You</div>
+        <button class="tap them" id="themA" aria-label="Other car passes point A"><span class="pt">A</span><span class="val"></span></button>
+        <button class="tap me" id="meA" aria-label="You pass point A"><span class="pt">A</span><span class="val"></span></button>
+        <button class="tap them" id="themB" aria-label="Other car passes point B"><span class="pt">B</span><span class="val"></span></button>
+        <button class="tap me" id="meB" aria-label="You pass point B"><span class="pt">B</span><span class="val"></span></button>
+      </div>
+      <button class="tapall" id="tapAll" aria-label="Record next point"></button>
     </div>
 
-    <section class="result" id="result" aria-live="polite"></section>
+    <section class="panel" id="panel" aria-live="polite"></section>
 
-    <div class="actions">
+    <div class="actions" id="actions">
       <button class="btn" id="undo" disabled>Undo</button>
       <button class="btn primary" id="reset">New measurement</button>
     </div>
-
   </div>
 
   <div class="view" id="view-history" hidden>
@@ -171,6 +195,7 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
       <button class="btn small danger" id="clearAll">Clear all</button>
     </div>
     <div id="hist"></div>
+    <p class="hint">Measurements are stored in this browser on this device only.</p>
   </div>
 </div>
 
@@ -179,15 +204,19 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   const TAP_ERR = 0.25;
   const RESOLVE_WAIT = 3000;
   const GIVE_UP = 15000;
-  const KEYS = ["themA", "meA", "themB", "meB"];
-  const STORE = "speedcheck-history";
+  const KEYS = ["themA", "meA", "themB", "meB"];          // also the order in one-tap mode
+  const LABEL = { themA: "Other car at A", meA: "You at A", themB: "Other car at B", meB: "You at B" };
+  const STORE = "speedcheck-history", MODE_KEY = "speedcheck-mode";
 
   const fixes = [];
   let events = { themA: null, meA: null, themB: null, meB: null };
   let order = [];
+  let lastKey = null;
   let savedId = null;
+  let queuedStart = null;
   let history = loadHistory();
   let gpsError = null;
+  let mode = (() => { try { return localStorage.getItem(MODE_KEY) || "one"; } catch (e) { return "one"; } })();
 
   const $ = (id) => document.getElementById(id);
   const pad = (n, w = 2) => String(n).padStart(w, "0");
@@ -201,7 +230,7 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     $("view-history").hidden = v !== "history";
     $("navMeasure").toggleAttribute("aria-current", v === "measure");
     $("navHistory").toggleAttribute("aria-current", v === "history");
-    if (v === "measure") { $("navMeasure").setAttribute("aria-current", "page"); }
+    if (v === "measure") $("navMeasure").setAttribute("aria-current", "page");
     else { $("navHistory").setAttribute("aria-current", "page"); renderHistory(); }
     window.scrollTo(0, 0);
   }
@@ -210,7 +239,7 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   // ---------- GPS ----------
   if ("geolocation" in navigator) {
     navigator.geolocation.watchPosition(onFix, onGpsError, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
-  } else { gpsError = "This browser has no location support."; }
+  } else { gpsError = "No location support."; }
 
   function onFix(p) {
     gpsError = null;
@@ -222,18 +251,17 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     resolvePending();
   }
   function onGpsError(e) {
-    gpsError = e.code === 1 ? "Location is blocked. Allow location access, or open this page on its own." : "No GPS signal yet.";
+    gpsError = e.code === 1 ? "Location blocked" : "No GPS signal yet";
     renderStatus();
   }
   function renderStatus() {
-    const dot = $("gpsDot"), txt = $("gpsText"), sp = $("mySpeed");
+    const dot = $("gpsDot"), txt = $("gpsText");
     const last = fixes[fixes.length - 1];
-    if (gpsError && !last) { dot.className = "dot bad"; txt.textContent = gpsError; sp.textContent = ""; return; }
-    if (!last) { dot.className = "dot"; txt.textContent = "Waiting for GPS…"; sp.textContent = ""; return; }
+    if (gpsError && !last) { dot.className = "dot bad"; txt.textContent = gpsError; return; }
+    if (!last) { dot.className = "dot"; txt.textContent = "Waiting for GPS…"; return; }
     const a = Math.round(last.acc);
     dot.className = "dot " + (a <= 10 ? "ok" : a <= 30 ? "weak" : "bad");
-    txt.textContent = "GPS accurate to ±" + a + " m";
-    sp.textContent = last.speed != null ? "You: " + Math.round(last.speed * 3.6) + " km/h" : "";
+    txt.textContent = "GPS ±" + a + " m";
   }
 
   // ---------- geometry ----------
@@ -276,38 +304,74 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   }
   setInterval(resolvePending, 250);
 
-  // ---------- taps ----------
-  KEYS.forEach((k) => {
-    $(k).addEventListener("click", () => {
-      if (events[k]) return;
-      const t = Date.now();
-      events[k] = k.startsWith("me") ? { t, pending: true, pos: null } : { t };
-      order.push(k);
-      if (navigator.vibrate) navigator.vibrate(35);
-      requestWake();
-      resolvePending();
-      render();
+  // ---------- recording ----------
+  const isComplete = () => KEYS.every((k) => events[k]);
+  const isPending = () => KEYS.some((k) => events[k] && events[k].pending);
+
+  function record(k, t) {
+    if (events[k]) return;
+    events[k] = k.startsWith("me") ? { t, pending: true, pos: null } : { t };
+    order.push(k); lastKey = k;
+    if (navigator.vibrate) navigator.vibrate(35);
+    requestWake();
+    resolvePending();
+    render();
+  }
+  function clearEvents() {
+    events = { themA: null, meA: null, themB: null, meB: null };
+    order = []; lastKey = null; savedId = null; queuedStart = null;
+  }
+
+  // one-tap mode: anywhere on the pad records the next point; after a finished measurement it starts the next one
+  function oneTap(t) {
+    if (isComplete()) {
+      if (isPending()) { queuedStart = t; if (navigator.vibrate) navigator.vibrate(35); render(); return; }
+      clearEvents();
+      record("themA", t);
+      return;
+    }
+    record(KEYS.find((k) => !events[k]), t);
+  }
+
+  // fire on touch-down for the most accurate timestamp; keyboard activation comes through as a click
+  function onPress(el, fn) {
+    let fromPointer = false;
+    el.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      fromPointer = true; fn(Date.now());
     });
-  });
+    el.addEventListener("click", (e) => {
+      if (fromPointer) { fromPointer = false; return; }
+      fn(Date.now());
+    });
+  }
+  onPress($("tapAll"), oneTap);
+  KEYS.forEach((k) => onPress($(k), (t) => { if (mode === "four") record(k, t); }));
+
   $("undo").addEventListener("click", () => {
     const k = order.pop();
     if (!k) return;
     events[k] = null;
+    lastKey = order[order.length - 1] || null;
     if (savedId) { history = history.filter((h) => h.id !== savedId); savedId = null; saveHistory(); }
     render();
   });
-  $("reset").addEventListener("click", () => {
-    events = { themA: null, meA: null, themB: null, meB: null };
-    order = []; savedId = null;
+  $("reset").addEventListener("click", () => { clearEvents(); render(); });
+
+  function setMode(m) {
+    mode = m;
+    try { localStorage.setItem(MODE_KEY, m); } catch (e) {}
     render();
-  });
+  }
+  $("modeOne").addEventListener("click", () => setMode("one"));
+  $("modeFour").addEventListener("click", () => setMode("four"));
 
   // ---------- calculation ----------
   function compute() {
     const { themA, themB, meA, meB } = events;
     const T = (themB.t - themA.t) / 1000;
-    if (T <= 0) return { error: "The other car’s B tap came before its A tap. Undo and tap again." };
-    if (!meA.pos || !meB.pos) return { error: "No GPS position for one of your taps, so the distance can’t be measured. Allow location access and try again." };
+    if (T <= 0) return { error: "The other car’s B came before its A. Reset and try again." };
+    if (!meA.pos || !meB.pos) return { error: "No GPS position for one of your points, so the distance can’t be measured." };
 
     const a = meA.pos, b = meB.pos;
     const t0 = Math.min(meA.t, meB.t), t1 = Math.max(meA.t, meB.t);
@@ -338,76 +402,162 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
     };
   }
   function gradeOf(rel) { return rel < 0.05 ? "good" : rel < 0.15 ? "rough" : "low"; }
-
-  // ---------- render measure ----------
-  function fmtRel(t, base) { return "+" + ((t - base) / 1000).toFixed(1) + " s"; }
-
-  function render() {
-    const times = KEYS.filter((k) => events[k]).map((k) => events[k].t);
-    const base = times.length ? Math.min(...times) : 0;
-    KEYS.forEach((k) => {
-      const el = $(k), e = events[k];
-      el.classList.toggle("done", !!e);
-      el.disabled = !!e;
-      el.querySelector(".val").textContent = !e ? "" : (e.pending ? "Locating…" : fmtRel(e.t, base));
-    });
-    $("undo").disabled = order.length === 0;
-
-    const r = $("result");
-    const missing = KEYS.filter((k) => !events[k]);
-    if (missing.length) {
-      const msg = {
-        themA: "Tap A on the left when the other car passes your first landmark.",
-        meA: "Tap A on the right when you pass that same landmark.",
-        themB: "Tap B on the left when the other car passes your second landmark.",
-        meB: "Tap B on the right when you pass that same landmark."
-      };
-      r.innerHTML = '<p class="next"></p>';
-      r.firstChild.textContent = msg[missing[0]];
-      return;
-    }
-    if (events.meA.pending || events.meB.pending) { r.innerHTML = '<p class="next">Getting your GPS position…</p>'; return; }
-    const res = compute();
-    if (res.error) { r.innerHTML = '<p class="err"></p>'; r.firstChild.textContent = res.error; return; }
-
-    const kmh = Math.round(res.kmh), m = Math.max(1, Math.round(res.margin));
-    const cls = gradeOf(res.rel);
-    r.innerHTML =
-      '<div class="big"><span class="num"></span><span class="unit">km/h</span></div>' +
-      '<div class="margin"></div><p class="note"></p>' +
-      '<dl class="facts"><dt>Distance</dt><dd class="fd"></dd><dt>Their time</dt><dd class="ft"></dd><dt>Margin</dt><dd class="fp"></dd></dl>';
-    r.querySelector(".num").textContent = kmh;
-    r.querySelector(".margin").textContent = "± " + m + " km/h  (" + Math.max(0, kmh - m) + " to " + (kmh + m) + ")";
-    const n = r.querySelector(".note"); n.className = "note " + cls; n.textContent = accuracyNote(res);
-    r.querySelector(".fd").textContent = num(Math.round(res.d)) + " m" + (res.viaTrack ? " along your GPS track" : " straight line");
-    r.querySelector(".ft").textContent = res.T.toFixed(1) + " s";
-    r.querySelector(".fp").textContent = pctText(res.rel);
-
-    if (!savedId) {
-      savedId = String(Date.now());
-      history.unshift({
-        id: savedId, at: Date.now(), v: 2, kmh, m, rel: res.rel, d: Math.round(res.d), T: res.T, myT: res.myT, myKmh: res.myKmh,
-        viaTrack: res.viaTrack, gpsPart: res.gpsPart, tapPart: res.tapPart, sigD: res.sigD, sigT: res.sigT,
-        accA: res.accA, accB: res.accB, needed: res.needed, gpsDominant: res.gpsDominant,
-        taps: { themA: events.themA.t, meA: events.meA.t, themB: events.themB.t, meB: events.meB.t },
-        track: thin(res.pts, 150)
-      });
-      history = history.slice(0, 50);
-      saveHistory();
-    }
-  }
   function pctText(rel) { const p = rel * 100; return "±" + (p < 10 ? p.toFixed(1) : Math.round(p)) + "%"; }
   function accuracyNote(res) {
     if (res.rel < 0.05) return "Good accuracy.";
-    const cause = res.gpsDominant ? "GPS accuracy is the main limit here." : "Tap timing is the main limit here, because the stretch was short.";
-    const tip = "About " + num(res.needed) + " m between landmarks would bring this to ±5%.";
-    return res.rel < 0.15 ? "Rough estimate. " + cause + " " + tip : "Low accuracy, treat this as an indication only. " + cause + " " + tip;
+    const cause = res.gpsDominant ? "GPS accuracy is the main limit." : "Tap timing is the main limit, the stretch was short.";
+    const tip = "About " + num(res.needed) + " m would bring it to ±5%.";
+    return (res.rel < 0.15 ? "Rough estimate. " : "Low accuracy, indication only. ") + cause + " " + tip;
   }
   function thin(pts, max) {
     if (pts.length <= max) return pts.map(([a, b]) => [+a.toFixed(6), +b.toFixed(6)]);
     const out = [], step = (pts.length - 1) / (max - 1);
     for (let i = 0; i < max; i++) { const [a, b] = pts[Math.round(i * step)]; out.push([+a.toFixed(6), +b.toFixed(6)]); }
     return out;
+  }
+
+  // live distance you have driven since you passed A, along the GPS track
+  function liveMine() {
+    const a = events.meA;
+    if (!a) return null;
+    const end = events.meB ? events.meB.t : Date.now();
+    let prev = a.pos, d = 0;
+    for (const f of fixes) {
+      if (f.t <= a.t || f.t >= end || f.acc > 100) continue;
+      if (prev) d += hav(prev, f);
+      prev = f;
+    }
+    if (events.meB && events.meB.pos && prev) d += hav(prev, events.meB.pos);
+    const t = (end - a.t) / 1000;
+    return { d, t, kmh: t >= 1 ? (d / t) * 3.6 : null };
+  }
+
+  // ---------- render ----------
+  function fmtRel(t, base) { return "+" + ((t - base) / 1000).toFixed(1) + " s"; }
+
+  function prompt(next) {
+    const where = mode === "one" ? "Tap anywhere" : "Tap " + LABEL[next].replace("Other car", "the other car’s").replace("You at", "your");
+    if (mode === "one") return {
+      themA: where + " when the other car passes your first landmark.",
+      meA: where + " when you pass that landmark.",
+      themB: where + " when the other car passes your second landmark.",
+      meB: where + " when you pass that landmark."
+    }[next];
+    return {
+      themA: "Tap Other car A when it passes your first landmark.",
+      meA: "Tap You A when you pass that landmark.",
+      themB: "Tap Other car B when it passes your second landmark.",
+      meB: "Tap You B when you pass that landmark."
+    }[next];
+  }
+
+  function statsHtml(items) {
+    return '<div class="stats">' + items.map(([l, v]) => '<div><span>' + l + '</span><b>' + v + '</b></div>').join("") + '</div>';
+  }
+
+  function render() {
+    // mode switch + pad
+    $("modeOne").setAttribute("aria-pressed", String(mode === "one"));
+    $("modeFour").setAttribute("aria-pressed", String(mode === "four"));
+    $("pad").classList.toggle("one", mode === "one");
+
+    const times = KEYS.filter((k) => events[k]).map((k) => events[k].t);
+    const base = times.length ? Math.min(...times) : 0;
+    const complete = isComplete();
+    const next = KEYS.find((k) => !events[k]);
+    KEYS.forEach((k) => {
+      const el = $(k), e = events[k];
+      el.classList.toggle("done", !!e);
+      el.classList.toggle("last", k === lastKey);
+      el.classList.toggle("next", mode === "one" && !complete && k === next);
+      el.disabled = mode === "four" ? !!e : false;
+      el.tabIndex = mode === "one" ? -1 : 0;
+      el.querySelector(".val").textContent = !e ? (mode === "one" && k === next ? "Next" : "") : (e.pending ? "Locating…" : fmtRel(e.t, base));
+      let badge = el.querySelector(".badge");
+      if (k === lastKey) { if (!badge) { badge = document.createElement("span"); badge.className = "badge"; badge.textContent = "Last"; el.appendChild(badge); } }
+      else if (badge) badge.remove();
+    });
+    $("tapAll").setAttribute("aria-label", complete ? "Start the next measurement" : "Record: " + LABEL[next]);
+
+    // buttons: one-tap mode only needs a reset
+    const any = order.length > 0;
+    $("undo").hidden = mode === "one";
+    $("undo").disabled = !any;
+    $("reset").textContent = mode === "one" ? (complete ? "Clear" : "Cancel and reset") : "New measurement";
+    $("reset").disabled = !any;
+    $("actions").classList.toggle("single", mode === "one");
+
+    renderPanel();
+
+    // a tap that came in while the last point was still locating starts the next measurement now
+    if (queuedStart && complete && !isPending()) {
+      const t = queuedStart; clearEvents(); record("themA", t);
+    }
+  }
+
+  function renderPanel() {
+    const p = $("panel");
+    const complete = isComplete();
+    const next = KEYS.find((k) => !events[k]);
+    const mine = liveMine();
+
+    if (complete && !isPending()) {
+      const res = compute();
+      if (res.error) {
+        p.innerHTML = '<div class="ptop"><div class="big"><span class="num">–</span></div></div><p class="note err"></p>' +
+          statsHtml([["Distance", "–"], ["Their time", "–"], ["Margin", "–"]]);
+        p.querySelector(".note").textContent = res.error + (mode === "one" ? " Tap anywhere to start again." : "");
+        return;
+      }
+      const kmh = Math.round(res.kmh), m = Math.max(1, Math.round(res.margin));
+      p.innerHTML = '<div class="ptop"><div class="big"><span class="num"></span><span class="unit">km/h</span></div>' +
+        '<div class="side"><div class="a"></div><div class="b"></div></div></div><p class="note"></p>' +
+        statsHtml([["Distance", num(Math.round(res.d)) + " m"], ["Their time", res.T.toFixed(1) + " s"], ["Margin", pctText(res.rel)]]);
+      p.querySelector(".num").textContent = kmh;
+      p.querySelector(".a").textContent = "± " + m + " km/h";
+      p.querySelector(".b").textContent = Math.max(0, kmh - m) + " to " + (kmh + m);
+      const n = p.querySelector(".note");
+      n.className = "note " + gradeOf(res.rel);
+      n.textContent = accuracyNote(res) + (mode === "one" ? " Tap anywhere for the next one." : "");
+      save(res);
+      return;
+    }
+
+    // live view
+    let big = "–", unit = "", sideA = "", sideB = "";
+    if (events.themA) {
+      const T = ((events.themB ? events.themB.t : Date.now()) - events.themA.t) / 1000;
+      big = T.toFixed(1); unit = "s"; sideA = "Other car"; sideB = events.themB ? "A to B" : "since A";
+    } else { sideA = "Ready"; sideB = mode === "one" ? "tap anywhere to start" : "tap Other car A"; }
+    let msg = complete ? "Getting your GPS position…" : prompt(next);
+    if (queuedStart) msg = "Next measurement started, saving this one…";
+    const last = fixes[fixes.length - 1];
+    const stats = mine
+      ? [["Your distance", num(Math.round(mine.d)) + " m"], ["Your time", mine.t.toFixed(1) + " s"], ["Your average", mine.kmh != null ? Math.round(mine.kmh) + " km/h" : "–"]]
+      : [["Your distance", "–"], ["Your time", "–"], ["Your speed now", last && last.speed != null ? Math.round(last.speed * 3.6) + " km/h" : "–"]];
+    p.innerHTML = '<div class="ptop"><div class="big"><span class="num"></span><span class="unit"></span></div>' +
+      '<div class="side"><div class="a"></div><div class="b"></div></div></div><p class="note next"></p>' + statsHtml(stats);
+    p.querySelector(".num").textContent = big;
+    p.querySelector(".unit").textContent = unit;
+    p.querySelector(".a").textContent = sideA;
+    p.querySelector(".b").textContent = sideB;
+    p.querySelector(".note").textContent = msg;
+  }
+  // near-realtime refresh of the live view
+  setInterval(() => { if (!(isComplete() && !isPending()) && !$("view-measure").hidden) renderPanel(); }, 200);
+
+  function save(res) {
+    if (savedId) return;
+    savedId = String(Date.now());
+    history.unshift({
+      id: savedId, at: Date.now(), v: 2, kmh: Math.round(res.kmh), m: Math.max(1, Math.round(res.margin)), rel: res.rel, d: Math.round(res.d), T: res.T, myT: res.myT, myKmh: res.myKmh,
+      viaTrack: res.viaTrack, gpsPart: res.gpsPart, tapPart: res.tapPart, sigD: res.sigD, sigT: res.sigT,
+      accA: res.accA, accB: res.accB, needed: res.needed, gpsDominant: res.gpsDominant,
+      taps: { themA: events.themA.t, meA: events.meA.t, themB: events.themB.t, meB: events.meB.t },
+      track: thin(res.pts, 150)
+    });
+    history = history.slice(0, 50);
+    saveHistory();
   }
 
   // ---------- map ----------

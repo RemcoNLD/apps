@@ -105,9 +105,14 @@
     content: ""; position: absolute; left: 38px; top: 30px; bottom: 44px; width: 8px;
     background: var(--sign-blue); border-radius: 4px;
   }
-  .list { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-  .list > :first-child { margin-top: auto; } /* keeps rows at the bottom, and still scrolls when expanded */
-  .list.expanded { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .list {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .list::-webkit-scrollbar { display: none; }
+  .list > :first-child { margin-top: auto; } /* rows sit at the bottom, next to you */
+  /* Fade at the top when there are more chargers above */
+  .list.more-above { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 56px); mask-image: linear-gradient(to bottom, transparent 0, #000 56px); }
 
   .row {
     position: relative; display: grid; grid-template-columns: 48px 1fr auto; align-items: center;
@@ -151,18 +156,15 @@
     border: 5px solid var(--asphalt);
   }
   .dest .name { font-size: 1.35rem; }
-  /* Floating button on the route line, just under the destination. */
+  /* Appears when you've scrolled up: takes you back to the next chargers. */
   .fab {
-    position: absolute; z-index: 3; left: 16px; top: calc(var(--row-h) + 4px); width: 52px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
-    padding: 8px 0 7px; border: 0; border-radius: 26px;
-    background: var(--sign-blue); color: #fff; font-weight: 800; font-size: 1.05rem; line-height: 1;
+    position: absolute; z-index: 3; left: 18px; bottom: calc(var(--row-h) + 18px);
+    width: 48px; height: 48px; display: grid; place-items: center;
+    border: 0; border-radius: 50%; background: var(--sign-blue); color: #fff;
     box-shadow: 0 0 0 5px var(--asphalt), 0 6px 16px rgba(0, 0, 0, .35);
   }
   .fab svg { width: 26px; height: 26px; }
-  .fab .count { margin-top: 1px; }
   .fab:active { transform: scale(.95); }
-  .list.with-fab { padding-top: 76px; }
   .you .marker {
     width: 38px; height: 38px; background: var(--line);
     clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%); border: 0; border-radius: 0;
@@ -210,7 +212,7 @@
   </div>
   <div class="strip">
     <div class="row dest" id="destRow"></div>
-    <button type="button" class="fab" id="more" hidden></button>
+    <button type="button" class="fab" id="more" hidden aria-label="Back to the next chargers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <div class="list" id="list"></div>
     <div class="row you" id="youRow"></div>
   </div>
@@ -221,7 +223,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.3";
+const APP_VERSION = "2026-11-14.4";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -238,7 +240,7 @@ const state = {
   statusAt: null,
   user: { km: 0, min: 0, offKm: 0, acc: null, at: null },
   offCount: 0,
-  expanded: false,               // showing every station ahead, scrollable
+  stickToBottom: true,           // follow the nearest chargers unless you've scrolled up
   watchId: null, simTimer: null, statusTimer: null, wakeLock: null,
 };
 
@@ -455,16 +457,21 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !$("drive").hidden) { keepAwake(); refreshStatus(); }
 });
 
-$("more").addEventListener("click", () => {
-  state.expanded = !state.expanded;
+function updateScrollUi() {
   const list = $("list");
-  list.scrollTop = list.scrollHeight; // open at the nearest charger
-  render();
-  if (state.expanded) list.scrollTop = list.scrollHeight;
+  const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  state.stickToBottom = fromBottom < 24;
+  $("more").hidden = state.stickToBottom;
+  list.classList.toggle("more-above", list.scrollTop > 4);
+}
+$("list").addEventListener("scroll", updateScrollUi, { passive: true });
+$("more").addEventListener("click", () => {
+  const list = $("list");
+  list.scrollTo({ top: list.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 });
 
 $("newRoute").addEventListener("click", () => {
-  state.expanded = false;
+  state.stickToBottom = true;
   stopTracking();
   localStorage.removeItem(STORE_KEY);
   state.route = null; state.stations = [];
@@ -547,43 +554,16 @@ function render() {
   $("youRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
     <div><div class="name">You</div><div class="sub">${gps}</div></div><div></div>`;
 
-  // Collapsed: as many upcoming stations as fit, nearest at the bottom.
-  // Expanded: every station ahead, scrollable, still nearest at the bottom.
+  // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const ahead = upcoming();
-  const list = $("list"), more = $("more");
-  const rowH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h")) || 86;
+  const list = $("list");
   const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
-  let shown;
-
-  const chevron = (dir) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${dir === "up" ? "M5 15l7-7 7 7" : "M5 9l7 7 7-7"}" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  list.classList.remove("with-fab");
-  if (state.expanded) {
-    more.hidden = false;
-    list.classList.add("with-fab");
-    more.innerHTML = chevron("down");
-    more.setAttribute("aria-label", "Show only the next chargers");
-    shown = ahead;
-  } else {
-    more.hidden = true;
-    let room = Math.max(1, Math.floor(list.clientHeight / rowH));
-    if (ahead.length > room) {
-      more.hidden = false;
-      list.classList.add("with-fab"); // leave room for the button, then measure again
-      const padTop = parseFloat(getComputedStyle(list).paddingTop) || 0;
-      room = Math.max(1, Math.floor((list.clientHeight - padTop) / rowH));
-      const left = ahead.length - room;
-      more.innerHTML = `${chevron("up")}<span class="count">+${left}</span>`;
-      more.setAttribute("aria-label", `Show all chargers, ${left} more before your destination`);
-    }
-    shown = ahead.slice(0, room);
-  }
-
-  list.classList.toggle("expanded", state.expanded);
-  list.innerHTML = shown.length
-    ? shown.slice().reverse().map(stationRow).join("")
+  list.innerHTML = ahead.length
+    ? ahead.slice().reverse().map(stationRow).join("")
     : `<div class="empty">No more Ionity chargers within 5 km of your route.</div>`;
-  // Keep your scroll position while the list updates; on opening, start at the nearest charger.
-  list.scrollTop = state.expanded ? list.scrollHeight - list.clientHeight - fromBottom : 0;
+  // Stay at the bottom, or keep your place if you've scrolled up.
+  list.scrollTop = state.stickToBottom ? list.scrollHeight : list.scrollHeight - list.clientHeight - fromBottom;
+  updateScrollUi();
 
   if (state.statusAt) {
     const ago = Math.round((Date.now() - state.statusAt) / 60000);

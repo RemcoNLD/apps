@@ -94,6 +94,11 @@
     padding: 10px 16px; color: var(--muted); font-size: .95rem;
   }
   .bar button { background: none; border: 0; color: var(--muted); padding: 6px 0; font-weight: 600; }
+  .bar .toggle {
+    padding: 6px 12px; border-radius: 999px; border: 2px solid var(--muted); color: var(--muted); white-space: nowrap;
+  }
+  .bar .toggle[aria-pressed="true"] { background: var(--free); border-color: var(--free); color: #fff; }
+  #age { text-align: right; }
 
   /* The strip: one vertical road, destination at the top, you at the bottom. */
   .strip {
@@ -208,6 +213,7 @@
 <section id="drive" hidden>
   <div class="bar">
     <button id="newRoute">New route</button>
+    <button id="mySide" class="toggle" aria-pressed="false">My side only</button>
     <span id="age"></span>
   </div>
   <div class="strip">
@@ -223,13 +229,15 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.4";
+const APP_VERSION = "2026-11-14.5";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
 const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
 const OFF_ROUTE_KM = 1.0;
+const MY_SIDE_MAX_DETOUR = 5; // minutes; stations without a side badge stay visible up to this detour
+const MY_SIDE_KEY = "ionity-route-myside";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -240,7 +248,8 @@ const state = {
   statusAt: null,
   user: { km: 0, min: 0, offKm: 0, acc: null, at: null },
   offCount: 0,
-  stickToBottom: true,           // follow the nearest chargers unless you've scrolled up
+  stickToBottom: true,
+  mySideOnly: localStorage.getItem(MY_SIDE_KEY) === "1",           // follow the nearest chargers unless you've scrolled up
   watchId: null, simTimer: null, statusTimer: null, wakeLock: null,
 };
 
@@ -470,6 +479,18 @@ $("more").addEventListener("click", () => {
   list.scrollTo({ top: list.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 });
 
+function syncMySide() {
+  $("mySide").setAttribute("aria-pressed", String(state.mySideOnly));
+}
+$("mySide").addEventListener("click", () => {
+  state.mySideOnly = !state.mySideOnly;
+  try { localStorage.setItem(MY_SIDE_KEY, state.mySideOnly ? "1" : "0"); } catch (_) {}
+  syncMySide();
+  state.stickToBottom = true;
+  render();
+});
+syncMySide();
+
 $("newRoute").addEventListener("click", () => {
   state.stickToBottom = true;
   stopTracking();
@@ -498,6 +519,14 @@ $("recalc").addEventListener("click", async () => {
 
 function upcoming() {
   return state.stations.filter((s) => s.alongKm > state.user.km - PASSED_KM);
+}
+
+// "My side only": stations on the right, plus ones near a junction you can reach with a short detour.
+function onMySide(s) {
+  const side = sideOf(s);
+  if (side === "right") return true;
+  if (side === "left") return false;
+  return s.detourMin != null && s.detourMin <= MY_SIDE_MAX_DETOUR;
 }
 
 function fmtKm(km) { return km < 10 ? Math.max(0, km).toFixed(1) : Math.round(km); }
@@ -555,19 +584,23 @@ function render() {
     <div><div class="name">You</div><div class="sub">${gps}</div></div><div></div>`;
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
-  const ahead = upcoming();
+  const all = upcoming();
+  const ahead = state.mySideOnly ? all.filter(onMySide) : all;
+  const hiddenCount = all.length - ahead.length;
   const list = $("list");
   const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
   list.innerHTML = ahead.length
     ? ahead.slice().reverse().map(stationRow).join("")
-    : `<div class="empty">No more Ionity chargers within 5 km of your route.</div>`;
+    : hiddenCount
+      ? `<div class="empty">No more Ionity chargers on your side. ${hiddenCount} on the other side or further off are hidden.</div>`
+      : `<div class="empty">No more Ionity chargers within 5 km of your route.</div>`;
   // Stay at the bottom, or keep your place if you've scrolled up.
   list.scrollTop = state.stickToBottom ? list.scrollHeight : list.scrollHeight - list.clientHeight - fromBottom;
   updateScrollUi();
 
   if (state.statusAt) {
     const ago = Math.round((Date.now() - state.statusAt) / 60000);
-    $("age").textContent = ago < 1 ? "Status just updated" : `Status ${ago} min old`;
+    $("age").textContent = ago < 1 ? "Status now" : `Status ${ago} min old`;
   }
 }
 

@@ -103,7 +103,9 @@
     content: ""; position: absolute; left: 38px; top: 30px; bottom: 44px; width: 8px;
     background: var(--sign-blue); border-radius: 4px;
   }
-  .list { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+  .list { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .list > :first-child { margin-top: auto; } /* keeps rows at the bottom, and still scrolls when expanded */
+  .list.expanded { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 
   .row {
     position: relative; display: grid; grid-template-columns: 48px 1fr auto; align-items: center;
@@ -115,11 +117,18 @@
     border: 5px solid var(--asphalt); background: var(--offline); z-index: 1;
   }
   .name { font-size: 1.45rem; font-weight: 800; line-height: 1.1; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
+  .name .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .name .detour, .name .country { flex-shrink: 0; }
   .country { font-size: .85rem; font-weight: 600; color: var(--muted); }
   .detour {
     font-size: 1.05rem; font-weight: 800; padding: 1px 8px 0; border-radius: 6px;
     border: 2px solid var(--full); color: var(--full);
   }
+  .side {
+    margin-right: 8px; font-size: .9rem; font-weight: 800; padding: 1px 7px 0; border-radius: 6px; border: 2px solid;
+  }
+  .side.right { color: var(--free); border-color: var(--free); }
+  .side.left { color: var(--muted); border-color: var(--muted); }
   .sub { margin-top: 4px; font-size: 1.1rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sub strong { font-weight: 800; }
   .dist { text-align: right; line-height: 1.05; }
@@ -141,9 +150,12 @@
   }
   .dest .name { font-size: 1.35rem; }
   .more {
-    margin: 2px 0 6px 62px; padding: 8px 12px; border-radius: 8px;
-    background: var(--asphalt-raised); font-weight: 600; font-size: 1.05rem;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    width: calc(100% - 62px); margin: 2px 0 6px 62px; padding: 10px 12px; border: 0; border-radius: 8px;
+    background: var(--asphalt-raised); font-weight: 600; font-size: 1.05rem; text-align: left; line-height: 1.25;
   }
+  .more .action { color: var(--sign-blue); font-weight: 800; white-space: nowrap; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .more .action { color: #8db3f0; } }
   .you .marker {
     width: 38px; height: 38px; background: var(--line);
     clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%); border: 0; border-radius: 0;
@@ -190,7 +202,7 @@
   </div>
   <div class="strip">
     <div class="row dest" id="destRow"></div>
-    <div class="more" id="more" hidden></div>
+    <button type="button" class="more" id="more" hidden></button>
     <div class="list" id="list"></div>
     <div class="row you" id="youRow"></div>
   </div>
@@ -217,6 +229,7 @@ const state = {
   statusAt: null,
   user: { km: 0, min: 0, offKm: 0, acc: null, at: null },
   offCount: 0,
+  expanded: false,               // showing every station ahead, scrollable
   watchId: null, simTimer: null, statusTimer: null, wakeLock: null,
 };
 
@@ -339,6 +352,28 @@ function pointAtKm(k) {
   return coords[coords.length - 1];
 }
 
+// Which side of the road a station is on, seen in your driving direction.
+// Only for stations close to the route (service areas); further away it's a detour either way.
+const SIDE_WITHIN_KM = 0.5;
+function sideOf(s) {
+  if (s._side !== undefined) return s._side;
+  const { coords } = state.route;
+  const ref = s.lat, p = xy([s.lon, s.lat], ref);
+  let best = { d: Infinity, i: 0 };
+  for (let i = 0; i < coords.length - 1; i++) {
+    const r = seg(p, xy(coords[i], ref), xy(coords[i + 1], ref));
+    if (r.d < best.d) best = { d: r.d, i };
+  }
+  let side = null;
+  if (best.d <= SIDE_WITHIN_KM && best.d > 0.015) { // right on the line: can't tell
+    const a = xy(coords[best.i], ref), b = xy(coords[best.i + 1], ref);
+    const cross = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+    side = cross < 0 ? "right" : "left";
+  }
+  s._side = side;
+  return side;
+}
+
 // ------------------------------------------------------------- driving
 
 function startDriving() {
@@ -411,7 +446,16 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !$("drive").hidden) { keepAwake(); refreshStatus(); }
 });
 
+$("more").addEventListener("click", () => {
+  state.expanded = !state.expanded;
+  const list = $("list");
+  list.scrollTop = list.scrollHeight; // open at the nearest charger
+  render();
+  if (state.expanded) list.scrollTop = list.scrollHeight;
+});
+
 $("newRoute").addEventListener("click", () => {
+  state.expanded = false;
   stopTracking();
   localStorage.removeItem(STORE_KEY);
   state.route = null; state.stations = [];
@@ -455,7 +499,7 @@ function statusInfo(s) {
   if (!st) return { cls: "nodata", text: s.country === "NL" ? "Status not found" : "No live data" };
   if (st.available == null) return { cls: "nodata", text: "Status unknown" };
   if (st.state === "free") return { cls: "free", text: `<strong>${st.available}/${st.total} free</strong>` };
-  if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Likely out of order</strong>` };
+  if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Likely offline</strong>` };
   return { cls: "full", text: `<strong>Full, 0/${st.total}</strong>` };
 }
 
@@ -467,10 +511,13 @@ function stationRow(s) {
   const detour = s.detourMin != null && s.detourMin >= SHOW_DETOUR_FROM
     ? `<span class="detour" title="${s.detourMin} minutes extra">+${s.detourMin}</span>` : "";
   const country = s.country && s.country !== "NL" ? `<span class="country">${esc(s.country)}</span>` : "";
+  const sd = sideOf(s);
+  const side = sd === "right" ? `<span class="side right" title="On your side of the road">Right</span>`
+    : sd === "left" ? `<span class="side left" title="On the other side of the road">Left</span>` : "";
   return `<div class="row st ${info.cls}">
     <span class="marker" aria-hidden="true"></span>
-    <div><div class="name">${esc(shortName(s.name))} ${detour}${country}</div>
-      <div class="sub">${info.text}${kw && info.cls !== "offline" ? `&ensp;${kw} kW` : ""}</div></div>
+    <div><div class="name"><span class="label">${esc(shortName(s.name))}</span>${detour}${country}</div>
+      <div class="sub">${side}${info.text}${kw && info.cls !== "offline" ? `&ensp;${kw} kW` : ""}</div></div>
     <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}</div></div>
   </div>`;
 }
@@ -491,27 +538,37 @@ function render() {
   $("youRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
     <div><div class="name">You</div><div class="sub">${gps}</div></div><div></div>`;
 
-  // Fit as many upcoming stations as the screen allows, nearest at the bottom.
+  // Collapsed: as many upcoming stations as fit, nearest at the bottom.
+  // Expanded: every station ahead, scrollable, still nearest at the bottom.
   const ahead = upcoming();
   const list = $("list"), more = $("more");
   const rowH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h")) || 86;
-  more.hidden = true;
-  let room = Math.max(1, Math.floor(list.clientHeight / rowH));
-  if (ahead.length > room) {
-    const left = ahead.length - room;
-    more.textContent = `${left} more Ionity ${left === 1 ? "charger" : "chargers"} before your destination`;
-    more.hidden = false; // measure again now the line takes up space
-    room = Math.max(1, Math.floor(list.clientHeight / rowH));
-  }
-  const shown = ahead.slice(0, room);
-  const hidden = ahead.length - shown.length;
+  const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  let shown;
 
+  if (state.expanded) {
+    more.hidden = false;
+    more.innerHTML = `<span>All ${ahead.length} Ionity ${ahead.length === 1 ? "charger" : "chargers"} ahead</span><span class="action">Show fewer</span>`;
+    shown = ahead;
+  } else {
+    more.hidden = true;
+    let room = Math.max(1, Math.floor(list.clientHeight / rowH));
+    if (ahead.length > room) {
+      const label = (n) => `<span>${n} more Ionity ${n === 1 ? "charger" : "chargers"} before your destination</span><span class="action">Show all</span>`;
+      more.hidden = false;
+      more.innerHTML = label(ahead.length); // measure again now the line takes up space
+      room = Math.max(1, Math.floor(list.clientHeight / rowH));
+      more.innerHTML = label(ahead.length - room);
+    }
+    shown = ahead.slice(0, room);
+  }
+
+  list.classList.toggle("expanded", state.expanded);
   list.innerHTML = shown.length
     ? shown.slice().reverse().map(stationRow).join("")
     : `<div class="empty">No more Ionity chargers within 5 km of your route.</div>`;
-
-  more.hidden = hidden <= 0;
-  if (hidden > 0) more.textContent = `${hidden} more Ionity ${hidden === 1 ? "charger" : "chargers"} before your destination`;
+  // Keep your scroll position while the list updates; on opening, start at the nearest charger.
+  list.scrollTop = state.expanded ? list.scrollHeight - list.clientHeight - fromBottom : 0;
 
   if (state.statusAt) {
     const ago = Math.round((Date.now() - state.statusAt) / 60000);

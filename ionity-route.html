@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ionity route">
+<meta name="theme-color" content="#1d2429">
+<title>Ionity route</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  /* Overpass descends from Highway Gothic, the lettering on motorway signs. */
+  :root {
+    --asphalt: #1d2429;
+    --asphalt-raised: #263038;
+    --line: #f3f1ea;
+    --muted: #93a0a8;
+    --sign-blue: #2f63b8;
+    --free: #43b96d;
+    --full: #f0a43a;
+    --offline: #6c767d;
+    --danger: #e0574f;
+    --row-h: 86px;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --asphalt: #eef1f3;
+      --asphalt-raised: #ffffff;
+      --line: #1b2328;
+      --muted: #5c6970;
+      --sign-blue: #1f55ad;
+      --free: #23914b;
+      --full: #c47a12;
+      --offline: #7f888e;
+      color-scheme: light;
+    }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--asphalt);
+    color: var(--line);
+    font-family: "Overpass", "Helvetica Neue", Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+             env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--sign-blue); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  /* ---------- start screen ---------- */
+  #start { max-width: 560px; margin: 0 auto; padding: 28px 20px 40px; }
+  #start h1 { font-size: 2rem; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.01em; }
+  #start .lede { color: var(--muted); margin: 0 0 28px; line-height: 1.5; }
+  label.field { display: block; font-weight: 600; margin: 18px 0 6px; }
+  .input {
+    width: 100%; padding: 14px 16px; font-size: 1.15rem;
+    background: var(--asphalt-raised); border: 2px solid transparent; border-radius: 10px;
+  }
+  .input:focus { border-color: var(--sign-blue); outline: none; }
+  .hint { color: var(--muted); font-size: .9rem; margin-top: 6px; }
+  .results { list-style: none; margin: 6px 0 0; padding: 0; }
+  .results button {
+    width: 100%; text-align: left; padding: 12px 16px; border: 0; border-radius: 8px;
+    background: transparent; line-height: 1.35;
+  }
+  .results button:hover, .results button[aria-pressed="true"] { background: var(--asphalt-raised); }
+  .results button[aria-pressed="true"] { box-shadow: inset 4px 0 0 var(--sign-blue); }
+  .check { display: flex; gap: 10px; align-items: center; margin: 22px 0 0; color: var(--muted); }
+  .check input { width: 20px; height: 20px; accent-color: var(--sign-blue); }
+  .primary {
+    margin-top: 26px; width: 100%; padding: 16px; font-size: 1.2rem; font-weight: 800;
+    background: var(--sign-blue); color: #fff; border: 0; border-radius: 10px;
+  }
+  .primary:disabled { opacity: .45; cursor: default; }
+  .error { color: var(--danger); margin-top: 14px; line-height: 1.45; }
+
+  /* ---------- driving screen ---------- */
+  #drive { height: 100%; display: flex; flex-direction: column; }
+  .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 16px; color: var(--muted); font-size: .95rem;
+  }
+  .bar button { background: none; border: 0; color: var(--muted); padding: 6px 0; font-weight: 600; }
+
+  /* The strip: one vertical road, destination at the top, you at the bottom. */
+  .strip {
+    position: relative; flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+    padding: 0 16px 12px;
+  }
+  .strip::before {
+    content: ""; position: absolute; left: 38px; top: 30px; bottom: 44px; width: 8px;
+    background: var(--sign-blue); border-radius: 4px;
+  }
+  .list { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+
+  .row {
+    position: relative; display: grid; grid-template-columns: 48px 1fr auto; align-items: center;
+    column-gap: 14px; height: var(--row-h); padding: 8px 0;
+  }
+  .row > div { min-width: 0; }
+  .marker {
+    justify-self: center; width: 30px; height: 30px; border-radius: 50%;
+    border: 5px solid var(--asphalt); background: var(--offline); z-index: 1;
+  }
+  .name { font-size: 1.45rem; font-weight: 800; line-height: 1.1; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
+  .country { font-size: .85rem; font-weight: 600; color: var(--muted); }
+  .detour {
+    font-size: 1.05rem; font-weight: 800; padding: 1px 8px 0; border-radius: 6px;
+    border: 2px solid var(--full); color: var(--full);
+  }
+  .sub { margin-top: 4px; font-size: 1.1rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub strong { font-weight: 800; }
+  .dist { text-align: right; line-height: 1.05; }
+  .dist .km { font-size: 1.9rem; font-weight: 800; }
+  .dist .km small { font-size: 1rem; font-weight: 600; margin-left: 2px; }
+  .dist .min { font-size: 1.05rem; color: var(--muted); margin-top: 2px; }
+
+  .st.free .marker { background: var(--free); }
+  .st.free .sub strong { color: var(--free); }
+  .st.full .marker { background: var(--full); }
+  .st.full .sub strong { color: var(--full); }
+  .st.offline .marker { background: var(--offline); }
+  .st.offline .name, .st.offline .dist { opacity: .55; }
+  .st.nodata .marker { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
+
+  .dest .marker {
+    width: 36px; height: 36px; border-radius: 8px; background: var(--line);
+    border: 5px solid var(--asphalt);
+  }
+  .dest .name { font-size: 1.35rem; }
+  .more {
+    margin: 2px 0 6px 62px; padding: 8px 12px; border-radius: 8px;
+    background: var(--asphalt-raised); font-weight: 600; font-size: 1.05rem;
+  }
+  .you .marker {
+    width: 38px; height: 38px; background: var(--line);
+    clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%); border: 0; border-radius: 0;
+  }
+  .you .name { font-size: 1.2rem; }
+  .you .sub { font-size: 1rem; }
+
+  .banner {
+    margin: 0 16px 12px; padding: 14px 16px; border-radius: 10px;
+    background: var(--asphalt-raised); border-left: 6px solid var(--full);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600;
+  }
+  .banner button {
+    background: var(--sign-blue); color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 800;
+  }
+  .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<section id="start">
+  <h1>Ionity route</h1>
+  <p class="lede">Ionity chargers along your route, with how many are free and how much of a detour each one is.</p>
+
+  <label class="field" for="to">Destination</label>
+  <input id="to" class="input" type="search" placeholder="Town or address" autocomplete="off">
+  <ul id="toResults" class="results"></ul>
+
+  <label class="field" for="from">Start</label>
+  <input id="from" class="input" type="search" placeholder="Your current location" autocomplete="off">
+  <div class="hint">Leave empty to start from where you are now.</div>
+  <ul id="fromResults" class="results"></ul>
+
+  <label class="check"><input id="sim" type="checkbox"> Simulate the drive, for testing at home</label>
+
+  <button id="planBtn" class="primary" disabled>Plan route</button>
+  <p id="startError" class="error" hidden></p>
+</section>
+
+<section id="drive" hidden>
+  <div class="bar">
+    <button id="newRoute">New route</button>
+    <span id="age"></span>
+  </div>
+  <div class="strip">
+    <div class="row dest" id="destRow"></div>
+    <div class="more" id="more" hidden></div>
+    <div class="list" id="list"></div>
+    <div class="row you" id="youRow"></div>
+  </div>
+  <div class="banner" id="offRoute" hidden>
+    <span>You’ve left the planned route</span>
+    <button id="recalc">Recalculate</button>
+  </div>
+</section>
+
+<script>
+const WORKER = "https://ionity.remco-dv.workers.dev";
+const STORE_KEY = "ionity-route-v1";
+const STATUS_EVERY_MS = 60 * 1000;
+const PASSED_KM = 0.5;      // a station drops off once you're this far past it
+const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
+const OFF_ROUTE_KM = 1.0;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const state = {
+  to: null, from: null,           // {label, lat, lon}
+  route: null, stations: [],      // from the Worker
+  statusAt: null,
+  user: { km: 0, min: 0, offKm: 0, acc: null, at: null },
+  offCount: 0,
+  watchId: null, simTimer: null, statusTimer: null, wakeLock: null,
+};
+
+// ------------------------------------------------------------- API
+
+async function api(path, body) {
+  const res = await fetch(WORKER + path, body
+    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : {});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `The server answered ${res.status}`);
+  return data;
+}
+
+// ------------------------------------------------------------- start screen
+
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+function wireSearch(inputId, listId, key) {
+  const input = $(inputId), list = $(listId);
+  const search = debounce(async () => {
+    const q = input.value.trim();
+    state[key] = null; updatePlanBtn();
+    if (q.length < 3) { list.innerHTML = ""; return; }
+    try {
+      const { results } = await api(`/geocode?q=${encodeURIComponent(q)}`);
+      // Europe first: the geocoder also knows the other Venlo, in North Dakota.
+      const inEurope = (r) => r.lat > 34 && r.lat < 72 && r.lon > -25 && r.lon < 45;
+      results.sort((a, b) => inEurope(b) - inEurope(a));
+      list.innerHTML = results.map((r, i) =>
+        `<li><button type="button" data-i="${i}" aria-pressed="false">${esc(r.label)}</button></li>`).join("");
+      list.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+        list.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", "false"));
+        b.setAttribute("aria-pressed", "true");
+        state[key] = results[+b.dataset.i];
+        input.value = state[key].label.split(",")[0];
+        updatePlanBtn();
+      }));
+    } catch (e) { list.innerHTML = `<li class="error">${esc(e.message)}</li>`; }
+  }, 350);
+  input.addEventListener("input", search);
+}
+
+function updatePlanBtn() {
+  const fromOk = !$("from").value.trim() || state.from;
+  $("planBtn").disabled = !(state.to && fromOk);
+}
+
+function showStartError(msg) { const p = $("startError"); p.textContent = msg; p.hidden = !msg; }
+
+function currentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error("This browser can’t share your location. Fill in a start instead."));
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve([p.coords.longitude, p.coords.latitude]),
+      () => reject(new Error("Location access was refused. Allow it in your browser settings, or fill in a start.")),
+      { enableHighAccuracy: true, timeout: 15000 });
+  });
+}
+
+async function plan(fromLonLat) {
+  const data = await api("/plan", { from: fromLonLat, to: [state.to.lon, state.to.lat] });
+  state.route = data.route;
+  state.stations = data.stations;
+  state.statusAt = Date.now();
+  state.user = { km: 0, min: 0, offKm: 0, acc: null, at: null };
+  state.offCount = 0;
+  save();
+}
+
+$("planBtn").addEventListener("click", async () => {
+  const btn = $("planBtn");
+  btn.disabled = true; btn.textContent = "Planning…"; showStartError("");
+  try {
+    const from = state.from ? [state.from.lon, state.from.lat] : await currentPosition();
+    await plan(from);
+    startDriving();
+  } catch (e) {
+    showStartError(e.message);
+  } finally {
+    btn.textContent = "Plan route"; updatePlanBtn();
+  }
+});
+
+// ------------------------------------------------------------- geometry
+
+const R = 6371, rad = (d) => d * Math.PI / 180;
+function xy([lon, lat], refLat) { return [rad(lon) * R * Math.cos(rad(refLat)), rad(lat) * R]; }
+function seg(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+  let t = l2 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return { t, d: Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy)) };
+}
+
+// Where you are along the route. Prefers the part of the route ahead of your last position,
+// so a road that passes close to itself doesn't make you jump back.
+function project(lonlat) {
+  const { coords, km, min } = state.route;
+  const p = xy(lonlat, lonlat[1]);
+  let best = null, bestAhead = null;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const r = seg(p, xy(coords[i], lonlat[1]), xy(coords[i + 1], lonlat[1]));
+    const along = km[i] + r.t * (km[i + 1] - km[i]);
+    const cand = { d: r.d, km: along, min: min[i] + r.t * (min[i + 1] - min[i]) };
+    if (!best || cand.d < best.d) best = cand;
+    if (along >= state.user.km - 2 && (!bestAhead || cand.d < bestAhead.d)) bestAhead = cand;
+  }
+  return bestAhead && bestAhead.d < 1 ? bestAhead : best;
+}
+
+function pointAtKm(k) {
+  const { coords, km } = state.route;
+  for (let i = 0; i < km.length - 1; i++) {
+    if (km[i + 1] >= k) {
+      const t = (k - km[i]) / ((km[i + 1] - km[i]) || 1);
+      return [coords[i][0] + t * (coords[i + 1][0] - coords[i][0]), coords[i][1] + t * (coords[i + 1][1] - coords[i][1])];
+    }
+  }
+  return coords[coords.length - 1];
+}
+
+// ------------------------------------------------------------- driving
+
+function startDriving() {
+  $("start").hidden = true;
+  $("drive").hidden = false;
+  stopTracking();
+  if ($("sim").checked) startSimulation(); else startGps();
+  state.statusTimer = setInterval(refreshStatus, STATUS_EVERY_MS);
+  keepAwake();
+  render();
+}
+
+function stopTracking() {
+  if (state.watchId != null) navigator.geolocation.clearWatch(state.watchId);
+  clearInterval(state.simTimer); clearInterval(state.statusTimer);
+  state.watchId = state.simTimer = state.statusTimer = null;
+}
+
+function startGps() {
+  if (!navigator.geolocation) return;
+  state.watchId = navigator.geolocation.watchPosition(
+    (p) => onPosition([p.coords.longitude, p.coords.latitude], p.coords.accuracy),
+    () => { state.user.acc = null; render(); },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+
+// Drives the route at 100 km/h, sped up 30 times, so a test drive takes minutes.
+function startSimulation() {
+  let k = 0;
+  state.simTimer = setInterval(() => {
+    k = Math.min(k + (100 * 30) / 3600, state.route.distanceKm);
+    onPosition(pointAtKm(k), 10);
+    if (k >= state.route.distanceKm) clearInterval(state.simTimer);
+  }, 1000);
+}
+
+function onPosition(lonlat, accuracy) {
+  const pr = project(lonlat);
+  state.user = { km: pr.km, min: pr.min, offKm: pr.d, acc: accuracy, at: Date.now(), lonlat };
+  const reliable = accuracy == null || accuracy < 100;
+  state.offCount = reliable && pr.d > OFF_ROUTE_KM ? state.offCount + 1 : 0;
+  $("offRoute").hidden = state.offCount < 3;
+  render();
+}
+
+async function refreshStatus() {
+  const ahead = upcoming();
+  if (!ahead.length) return;
+  try {
+    const { status } = await api("/status", {
+      stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, country: s.country })),
+    });
+    for (const s of state.stations) if (s.id in status) s.status = status[s.id];
+    state.statusAt = Date.now();
+    save();
+    render();
+  } catch (e) {
+    $("age").textContent = "Couldn’t refresh charger status";
+  }
+}
+
+async function keepAwake() {
+  try {
+    if ("wakeLock" in navigator && document.visibilityState === "visible") {
+      state.wakeLock = await navigator.wakeLock.request("screen");
+    }
+  } catch (_) { /* not allowed right now; the screen may dim */ }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !$("drive").hidden) { keepAwake(); refreshStatus(); }
+});
+
+$("newRoute").addEventListener("click", () => {
+  stopTracking();
+  localStorage.removeItem(STORE_KEY);
+  state.route = null; state.stations = [];
+  $("drive").hidden = true; $("start").hidden = false;
+  $("offRoute").hidden = true;
+});
+
+$("recalc").addEventListener("click", async () => {
+  const btn = $("recalc");
+  btn.disabled = true; btn.textContent = "Recalculating…";
+  try {
+    const from = state.user.lonlat || await currentPosition();
+    await plan(from);
+    $("offRoute").hidden = true;
+    render();
+  } catch (e) {
+    $("age").textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "Recalculate";
+  }
+});
+
+// ------------------------------------------------------------- rendering
+
+function upcoming() {
+  return state.stations.filter((s) => s.alongKm > state.user.km - PASSED_KM);
+}
+
+function fmtKm(km) { return km < 10 ? Math.max(0, km).toFixed(1) : Math.round(km); }
+function fmtMin(m) {
+  m = Math.max(0, Math.round(m));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+}
+function clock(minFromNow) {
+  return new Date(Date.now() + minFromNow * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+function shortName(n) { return String(n || "Ionity").replace(/^ionity\s+/i, ""); }
+
+function statusInfo(s) {
+  const st = s.status;
+  if (!st) return { cls: "nodata", text: s.country === "NL" ? "Status not found" : "No live data" };
+  if (st.available == null) return { cls: "nodata", text: "Status unknown" };
+  if (st.state === "free") return { cls: "free", text: `<strong>${st.available}/${st.total} free</strong>` };
+  if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Likely out of order</strong>` };
+  return { cls: "full", text: `<strong>Full, 0/${st.total}</strong>` };
+}
+
+function stationRow(s) {
+  const info = statusInfo(s);
+  const km = s.alongKm - state.user.km;
+  const min = s.alongMin - state.user.min;
+  const kw = s.status?.maxKw || s.maxKw;
+  const detour = s.detourMin != null && s.detourMin >= SHOW_DETOUR_FROM
+    ? `<span class="detour" title="${s.detourMin} minutes extra">+${s.detourMin}</span>` : "";
+  const country = s.country && s.country !== "NL" ? `<span class="country">${esc(s.country)}</span>` : "";
+  return `<div class="row st ${info.cls}">
+    <span class="marker" aria-hidden="true"></span>
+    <div><div class="name">${esc(shortName(s.name))} ${detour}${country}</div>
+      <div class="sub">${info.text}${kw && info.cls !== "offline" ? `&ensp;${kw} kW` : ""}</div></div>
+    <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}</div></div>
+  </div>`;
+}
+
+function render() {
+  if (!state.route) return;
+  const r = state.route, u = state.user;
+  const leftKm = r.distanceKm - u.km;
+  const leftMin = r.min[r.min.length - 1] - u.min;
+
+  $("destRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
+    <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
+      <div class="sub">Arrive ${clock(leftMin)}</div></div>
+    <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`;
+
+  const gps = u.at == null ? "Waiting for your location…"
+    : u.acc != null && u.acc > 100 ? `Location rough (±${Math.round(u.acc)} m)` : "On route";
+  $("youRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
+    <div><div class="name">You</div><div class="sub">${gps}</div></div><div></div>`;
+
+  // Fit as many upcoming stations as the screen allows, nearest at the bottom.
+  const ahead = upcoming();
+  const list = $("list"), more = $("more");
+  const rowH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--row-h")) || 86;
+  more.hidden = true;
+  let room = Math.max(1, Math.floor(list.clientHeight / rowH));
+  if (ahead.length > room) {
+    const left = ahead.length - room;
+    more.textContent = `${left} more Ionity ${left === 1 ? "charger" : "chargers"} before your destination`;
+    more.hidden = false; // measure again now the line takes up space
+    room = Math.max(1, Math.floor(list.clientHeight / rowH));
+  }
+  const shown = ahead.slice(0, room);
+  const hidden = ahead.length - shown.length;
+
+  list.innerHTML = shown.length
+    ? shown.slice().reverse().map(stationRow).join("")
+    : `<div class="empty">No more Ionity chargers within 5 km of your route.</div>`;
+
+  more.hidden = hidden <= 0;
+  if (hidden > 0) more.textContent = `${hidden} more Ionity ${hidden === 1 ? "charger" : "chargers"} before your destination`;
+
+  if (state.statusAt) {
+    const ago = Math.round((Date.now() - state.statusAt) / 60000);
+    $("age").textContent = ago < 1 ? "Status just updated" : `Status ${ago} min old`;
+  }
+}
+
+window.addEventListener("resize", render);
+setInterval(() => { if (!$("drive").hidden) render(); }, 30000);
+
+// ------------------------------------------------------------- saving between visits
+
+function save() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      to: state.to, route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
+    }));
+  } catch (_) { /* storage full or blocked; the app still works */ }
+}
+
+function restore() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if (!saved?.route) return;
+    Object.assign(state, { to: saved.to, route: saved.route, stations: saved.stations, statusAt: saved.statusAt });
+    $("sim").checked = !!saved.sim;
+    startDriving();
+    refreshStatus();
+  } catch (_) { localStorage.removeItem(STORE_KEY); }
+}
+
+wireSearch("to", "toResults", "to");
+wireSearch("from", "fromResults", "from");
+restore();
+</script>
+</body>
+</html>

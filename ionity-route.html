@@ -161,6 +161,8 @@
     border: 5px solid var(--asphalt);
   }
   .dest .name { font-size: 1.35rem; }
+  .row.dest { height: auto; min-height: var(--row-h); }
+  .dest .sub { margin-top: 2px; }
   /* Appears when you've scrolled up: takes you back to the next chargers. */
   .fab {
     position: absolute; z-index: 3; left: 18px; bottom: calc(var(--row-h) + 18px);
@@ -185,6 +187,9 @@
   .banner button {
     background: var(--sign-blue); color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 800;
   }
+  .banner.ok { border-left-color: var(--free); }
+  .sub.roads { color: var(--line); font-weight: 600; font-size: 1rem; }
+  .road { font-size: .85rem; font-weight: 800; color: var(--muted); flex-shrink: 0; }
   .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
 </style>
 </head>
@@ -197,6 +202,11 @@
   <label class="field" for="to">Destination</label>
   <input id="to" class="input" type="search" placeholder="Town or address" autocomplete="off">
   <ul id="toResults" class="results"></ul>
+
+  <label class="field" for="via">Via (optional)</label>
+  <input id="via" class="input" type="search" placeholder="A town to drive through" autocomplete="off">
+  <div class="hint">Choose your own way, for example via Luxembourg instead of Brussels.</div>
+  <ul id="viaResults" class="results"></ul>
 
   <label class="field" for="from">Start</label>
   <input id="from" class="input" type="search" placeholder="Your current location" autocomplete="off">
@@ -222,14 +232,14 @@
     <div class="list" id="list"></div>
     <div class="row you" id="youRow"></div>
   </div>
-  <div class="banner" id="offRoute" hidden>
-    <span>You’ve left the planned route</span>
-    <button id="recalc">Recalculate</button>
+  <div class="banner" id="offRoute" hidden role="status" aria-live="polite">
+    <span id="offRouteText"></span>
+    <button id="recalc" hidden>Try again</button>
   </div>
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.6";
+const APP_VERSION = "2026-11-14.7";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -247,7 +257,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const state = {
-  to: null, from: null,           // {label, lat, lon}
+  to: null, from: null, via: null, // {label, lat, lon}
+  rerouting: false, lastRerouteAt: 0, bannerTimer: null,
   route: null, stations: [],      // from the Worker
   statusAt: null,
   user: { km: 0, min: 0, offKm: 0, acc: null, at: null },
@@ -299,7 +310,8 @@ function wireSearch(inputId, listId, key) {
 
 function updatePlanBtn() {
   const fromOk = !$("from").value.trim() || state.from;
-  $("planBtn").disabled = !(state.to && fromOk);
+  const viaOk = !$("via").value.trim() || state.via;
+  $("planBtn").disabled = !(state.to && fromOk && viaOk);
 }
 
 function showStartError(msg) { const p = $("startError"); p.textContent = msg; p.hidden = !msg; }
@@ -315,7 +327,9 @@ function currentPosition() {
 }
 
 async function plan(fromLonLat) {
-  const data = await api("/plan", { from: fromLonLat, to: [state.to.lon, state.to.lat] });
+  const body = { from: fromLonLat, to: [state.to.lon, state.to.lat] };
+  if (state.via) body.via = [state.via.lon, state.via.lat];
+  const data = await api("/plan", body);
   state.route = data.route;
   state.stations = data.stations;
   state.statusAt = Date.now();
@@ -439,7 +453,11 @@ function onPosition(lonlat, accuracy) {
   state.user = { km: pr.km, min: pr.min, offKm: pr.d, acc: accuracy, at: Date.now(), lonlat };
   const reliable = accuracy == null || accuracy < 100;
   state.offCount = reliable && pr.d > OFF_ROUTE_KM ? state.offCount + 1 : 0;
-  $("offRoute").hidden = state.offCount < 3;
+  // Once past the via point, it no longer matters for a new route.
+  if (state.via && state.route.viaKm != null && pr.km > state.route.viaKm && pr.d < OFF_ROUTE_KM) {
+    state.via = null; save();
+  }
+  if (state.offCount >= 3 && !state.rerouting && Date.now() - state.lastRerouteAt > 60000) reroute();
   render();
 }
 
@@ -504,20 +522,39 @@ $("newRoute").addEventListener("click", () => {
   $("offRoute").hidden = true;
 });
 
-$("recalc").addEventListener("click", async () => {
-  const btn = $("recalc");
-  btn.disabled = true; btn.textContent = "Recalculating…";
+function showBanner(text, { ok = false, retry = false, hideAfter = 0 } = {}) {
+  clearTimeout(state.bannerTimer);
+  $("offRouteText").textContent = text;
+  $("offRoute").classList.toggle("ok", ok);
+  $("recalc").hidden = !retry;
+  $("offRoute").hidden = false;
+  if (hideAfter) state.bannerTimer = setTimeout(() => { $("offRoute").hidden = true; }, hideAfter);
+}
+
+function roadsAhead(limit = 4) {
+  const refs = (state.route?.roads || []).filter((r) => r.toKm > state.user.km + 1).map((r) => r.ref);
+  return refs.filter((r, i) => r !== refs[i - 1]).slice(0, limit);
+}
+
+// You've left the route: plan a new one from where you are, and say so.
+async function reroute() {
+  state.rerouting = true;
+  state.lastRerouteAt = Date.now();
+  showBanner("You’ve left the route. Rerouting…");
   try {
     const from = state.user.lonlat || await currentPosition();
     await plan(from);
-    $("offRoute").hidden = true;
-    render();
+    state.stickToBottom = true;
+    const roads = roadsAhead();
+    showBanner(roads.length ? `New route via ${roads.join(" › ")}` : "New route planned", { ok: true, hideAfter: 8000 });
   } catch (e) {
-    $("age").textContent = e.message;
+    showBanner(`Couldn’t reroute: ${e.message}`, { retry: true });
   } finally {
-    btn.disabled = false; btn.textContent = "Recalculate";
+    state.rerouting = false;
+    render();
   }
-});
+}
+$("recalc").addEventListener("click", () => { state.lastRerouteAt = 0; reroute(); });
 
 // ------------------------------------------------------------- rendering
 
@@ -561,7 +598,8 @@ function stationRow(s) {
   const dm = detourOf(s);
   const detour = dm != null && dm >= SHOW_DETOUR_FROM
     ? `<span class="detour" title="${dm} minutes extra">+${dm}</span>` : "";
-  const country = s.country && s.country !== "NL" ? `<span class="country">${esc(s.country)}</span>` : "";
+  const country = s.road ? `<span class="road">${esc(s.road)}</span>`
+    : s.country && s.country !== "NL" ? `<span class="country">${esc(s.country)}</span>` : "";
   const sd = sideOf(s);
   const side = sd === "right" ? `<span class="side right" title="On your side of the road">Right</span>`
     : sd === "left" ? `<span class="side left" title="On the other side of the road">Left</span>` : "";
@@ -581,7 +619,7 @@ function render() {
 
   $("destRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
     <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
-      <div class="sub">Arrive ${clock(leftMin)}</div></div>
+      <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead().length ? `<div class="sub roads">via ${roadsAhead().map(esc).join(" › ")}</div>` : ""}</div>
     <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`;
 
   const gps = u.at == null ? "Waiting for your location…"
@@ -618,7 +656,7 @@ setInterval(() => { if (!$("drive").hidden) render(); }, 30000);
 function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
-      to: state.to, route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
+      to: state.to, via: state.via, route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
     }));
   } catch (_) { /* storage full or blocked; the app still works */ }
 }
@@ -627,7 +665,7 @@ function restore() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (!saved?.route) return;
-    Object.assign(state, { to: saved.to, route: saved.route, stations: saved.stations, statusAt: saved.statusAt });
+    Object.assign(state, { to: saved.to, via: saved.via || null, route: saved.route, stations: saved.stations, statusAt: saved.statusAt });
     $("sim").checked = !!saved.sim;
     startDriving();
     refreshStatus();
@@ -660,6 +698,7 @@ checkForUpdate(false);
 
 wireSearch("to", "toResults", "to");
 wireSearch("from", "fromResults", "from");
+wireSearch("via", "viaResults", "via");
 restore();
 </script>
 </body>

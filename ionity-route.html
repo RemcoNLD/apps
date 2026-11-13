@@ -229,12 +229,16 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.5";
+const APP_VERSION = "2026-11-14.6";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
 const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
+// Every charging stop costs a little time to pull in and out (exit lane, slow road through the
+// service area, merging again). That isn't a detour, so it's taken off before showing "+N".
+const PULL_IN_MIN = 2;
+function detourOf(s) { return s.detourMin == null ? null : Math.max(0, s.detourMin - PULL_IN_MIN); }
 const OFF_ROUTE_KM = 1.0;
 const MY_SIDE_MAX_DETOUR = 5; // minutes; stations without a side badge stay visible up to this detour
 const MY_SIDE_KEY = "ionity-route-myside";
@@ -526,7 +530,8 @@ function onMySide(s) {
   const side = sideOf(s);
   if (side === "right") return true;
   if (side === "left") return false;
-  return s.detourMin != null && s.detourMin <= MY_SIDE_MAX_DETOUR;
+  const dm = detourOf(s);
+  return dm != null && dm <= MY_SIDE_MAX_DETOUR;
 }
 
 function fmtKm(km) { return km < 10 ? Math.max(0, km).toFixed(1) : Math.round(km); }
@@ -553,8 +558,9 @@ function stationRow(s) {
   const km = s.alongKm - state.user.km;
   const min = s.alongMin - state.user.min;
   const kw = s.status?.maxKw || s.maxKw;
-  const detour = s.detourMin != null && s.detourMin >= SHOW_DETOUR_FROM
-    ? `<span class="detour" title="${s.detourMin} minutes extra">+${s.detourMin}</span>` : "";
+  const dm = detourOf(s);
+  const detour = dm != null && dm >= SHOW_DETOUR_FROM
+    ? `<span class="detour" title="${dm} minutes extra">+${dm}</span>` : "";
   const country = s.country && s.country !== "NL" ? `<span class="country">${esc(s.country)}</span>` : "";
   const sd = sideOf(s);
   const side = sd === "right" ? `<span class="side right" title="On your side of the road">Right</span>`

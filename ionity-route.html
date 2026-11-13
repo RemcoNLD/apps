@@ -83,6 +83,8 @@
     background: var(--sign-blue); color: #fff; border: 0; border-radius: 10px;
   }
   .primary:disabled { opacity: .45; cursor: default; }
+  .version { margin-top: 36px; }
+  .link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; font-size: inherit; }
   .error { color: var(--danger); margin-top: 14px; line-height: 1.45; }
 
   /* ---------- driving screen ---------- */
@@ -193,6 +195,7 @@
 
   <button id="planBtn" class="primary" disabled>Plan route</button>
   <p id="startError" class="error" hidden></p>
+  <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
 </section>
 
 <section id="drive" hidden>
@@ -213,6 +216,7 @@
 </section>
 
 <script>
+const APP_VERSION = "2026-11-14.2";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -599,6 +603,30 @@ function restore() {
     refreshStatus();
   } catch (_) { localStorage.removeItem(STORE_KEY); }
 }
+
+// ------------------------------------------------------------- updates
+// A home-screen web app keeps serving its cached copy, and has no pull-to-refresh.
+// So the app asks GitHub for the latest file itself, and reloads when the version changed.
+// Your planned route is saved, so it comes back after the reload.
+async function checkForUpdate(manual) {
+  try {
+    const res = await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" });
+    const latest = (await res.text()).match(/APP_VERSION = "([^"]+)"/)?.[1];
+    if (latest && latest !== APP_VERSION) {
+      if (sessionStorage.getItem("ionity-reloaded-for") === latest) return; // don't loop on a stale cache
+      sessionStorage.setItem("ionity-reloaded-for", latest);
+      location.replace(location.pathname + "?v=" + encodeURIComponent(latest));
+    } else if (manual) {
+      $("checkUpdate").textContent = "Up to date";
+    }
+  } catch (_) {
+    if (manual) $("checkUpdate").textContent = "Couldn’t check, try again later";
+  }
+}
+$("version").textContent = APP_VERSION;
+$("checkUpdate").addEventListener("click", () => checkForUpdate(true));
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(false); });
+checkForUpdate(false);
 
 wireSearch("to", "toResults", "to");
 wireSearch("from", "fromResults", "from");

@@ -113,6 +113,7 @@
   .list {
     flex: 1; min-height: 0; display: flex; flex-direction: column;
     overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    padding: 16px 0 14px; /* room for road badges on the line at the top and bottom edge */
   }
   .list::-webkit-scrollbar { display: none; }
   .list > :first-child { margin-top: auto; } /* rows sit at the bottom, next to you */
@@ -185,9 +186,8 @@
     position: absolute; z-index: 3; left: 18px; width: 48px; display: flex; justify-content: center;
     bottom: calc(var(--row-h) + 18px + 48px + 14px); pointer-events: none;
   }
-  .sticky-road > span { border-radius: 6px; box-shadow: 0 0 0 3px var(--asphalt); }
+  .sticky-road > span { display: block; border-radius: 8px; padding: 3px; background: var(--asphalt); }
   .sticky-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
-  .tl-road:has(.shield), .sticky-road > span:has(.shield) { box-shadow: none; }
   .fab:active { transform: scale(.95); }
   .you .marker {
     width: 38px; height: 38px; background: var(--line);
@@ -205,7 +205,8 @@
     background: var(--sign-blue); color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 800;
   }
   .banner.ok { border-left-color: var(--free); }
-  .sub.roads { color: var(--muted); font-weight: 600; font-size: 1rem; }
+  .sub.roads { color: var(--muted); font-weight: 600; font-size: 1rem; display: flex; align-items: center; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+  .sub.roads > * { flex-shrink: 0; }
   /* Road numbers styled like that country's road signs (see roadBadge) */
   .rb {
     display: inline-block; flex-shrink: 0; padding: 2px 6px 0; border-radius: 4px;
@@ -228,7 +229,7 @@
   .tl-road { position: absolute; left: 24px; transform: translate(-50%, 50%); z-index: 2; line-height: 1; }
   .tl-road.below { bottom: 0; }
   .tl-road.above { top: 0; transform: translate(-50%, -50%); }
-  .tl-road { border-radius: 6px; box-shadow: 0 0 0 3px var(--asphalt); }
+  .tl-road { border-radius: 8px; padding: 3px; background: var(--asphalt); }
   .tl-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
   .tl-road .rb.shield, .sticky-road .rb.shield { padding: 1.5px; }
   .tl-road .rb.shield > span, .sticky-road .rb.shield > span { padding: 1px 5px 0; }
@@ -584,6 +585,24 @@ function updateScrollUi() {
 }
 
 // Keeps the road in view above the down button while you scroll through the list.
+// Show as many whole road badges as fit on the via line, then "…" (never a half badge).
+function fitRoads(box) {
+  if (!box) return;
+  const over = () => box.scrollWidth > box.clientWidth + 1;
+  if (!over()) return;
+  const more = document.createElement("span");
+  more.className = "sep"; more.textContent = "› …";
+  box.appendChild(more);
+  while (over()) {
+    const badges = box.querySelectorAll(".rb");
+    if (badges.length <= 1) break;
+    const last = badges[badges.length - 1];
+    const sep = last.previousElementSibling;
+    last.remove();
+    if (sep?.classList.contains("sep")) sep.remove();
+  }
+}
+
 function updateStickyRoad() {
   const el = $("stickyRoad");
   const hide = () => { el.hidden = true; };
@@ -795,8 +814,9 @@ function render() {
 
   $("destRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
     <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
-      <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead().length ? `<div class="sub roads">via ${roadsAhead().map(roadPartBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
+      <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead(8).length ? `<div class="sub roads"><span>via&nbsp;</span>${roadsAhead(8).map(roadPartBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
     <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`;
+  fitRoads($("destRow").querySelector(".sub.roads"));
 
   const gps = u.at == null ? "Waiting for your location…"
     : u.acc != null && u.acc > 100 ? `Location rough (±${Math.round(u.acc)} m)` : "On route";

@@ -757,7 +757,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.35";
+const APP_VERSION = "2026-11-14.36";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1371,9 +1371,18 @@ let detourBusy = false, detourAgain = false;
 // known-unknown: the charger is shown, so a failing lookup can't hide it for good.)
 const detourPending = (s) => !("detourMin" in s) && (!s.detourTriedAt || s.detourLoading);
 // With "Easy to reach" on, the filter needs the detours of the chargers ahead, not just those on screen.
-const FILTER_AHEAD = 60; // at most 3 matrix calls per route
+// With "Easy to reach" on, a charger only appears once its detour is known, so the detours
+// ahead are asked for in advance: every charger still without one within 150 km of you, and
+// 50 km beyond the furthest row you've scrolled to (scroll up and further ones load).
+// Earlier this took "the first 60 ahead", which on a busy route left the rest hidden for good.
+const FILTER_AHEAD_KM = 150;
+const FILTER_BEYOND_VIEW_KM = 50;
+const FILTER_MAX = 80; // per round (4 matrix calls); the next round picks up the rest
 function detourCandidates(inView = []) {
-  const ahead = state.mySideOnly ? upcomingShown().slice(0, FILTER_AHEAD) : [];
+  if (!state.mySideOnly) return [...new Set(inView)];
+  const furthest = Math.max(state.user.km, ...inView.map((x) => x.alongKm));
+  const horizon = Math.max(state.user.km + FILTER_AHEAD_KM, furthest + FILTER_BEYOND_VIEW_KM);
+  const ahead = upcomingShown().filter((x) => detourPending(x) && x.alongKm <= horizon).slice(0, FILTER_MAX);
   return [...new Set([...inView, ...ahead])];
 }
 async function fetchDetours(stations) {
@@ -1406,7 +1415,8 @@ async function fetchDetours(stations) {
     for (const s of todo) s.detourLoading = false;
     detourBusy = false;
     save(); render();
-    if (detourAgain) { detourAgain = false; fetchDetours(detourCandidates(stationsInView())); }
+    const more = state.mySideOnly && detourCandidates(stationsInView()).some((x) => detourPending(x) && !x.detourTriedAt);
+    if (detourAgain || more) { detourAgain = false; fetchDetours(detourCandidates(stationsInView())); }
   }
 }
 

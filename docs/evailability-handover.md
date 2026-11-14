@@ -130,7 +130,7 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 - Via the OpenRouteService **matrix**: for each charger S, the times A→S, S→B and A→B, where A and B are route points 3 km before and after it. Detour = A→S + S→B − A→B, in minutes. 20 chargers fit in one matrix call.
 - The same matrix call also gives the drive A→S in km (`metrics: duration, distance`). The app uses it to show the real distance and time to a charger beyond an exit (see 5, Behaviour).
 - Cached 6 hours per charger and driving direction (`det2:<id>:<bearing>`), in memory.
-- Planning doesn't compute detours. The app asks `/detours` for the chargers it shows (and, with "Easy to reach" on, the next 60). This keeps the matrix quota (500/day) low.
+- Planning doesn't compute detours. The app asks `/detours` for the chargers it shows and, with "Easy to reach" on, for every charger still without a detour within 150 km ahead and 50 km beyond the furthest row scrolled to (at most 80 per round, continuing until done). This keeps the matrix quota (500/day) low.
 
 ### Live status
 
@@ -189,7 +189,7 @@ One file, `evailability.html`, with no libraries or build step. The version is i
 - **GPS:** `watchPosition`. Your position is projected onto the route. More than 1 km off it means rerouting from where you are, through the via points still ahead. Via points you've passed are dropped.
 - **Status refresh:** every minute for the chargers on screen (at least half visible), in batches of 4, only when the screen is on. Chargers checked within the last minute aren't asked again. Tap a row to update it (at most once a minute; otherwise "Checked N s ago").
 - **No blinking:** rows are only redrawn when their content changed (`patchList`, `setHtml`). While updating, a row keeps its numbers and colour; only its numbers turn grey when the value is more than 3 minutes old; the dot keeps the charger's colour (`dot-…` class) and shows a turning radar sweep while updating (`scanning`). A value that changed (free count, total or state) pops briefly (`flashAt`, class `changed`).
-- **Detours:** fetched for the rows on screen. With "Easy to reach" on, also for the next 60 chargers; a charger then only appears once its detour is known.
+- **Detours:** fetched for the rows on screen. With "Easy to reach" on, also for all chargers within 150 km ahead (and 50 km beyond the furthest row you scrolled to); a charger then only appears once its detour is known.
 - **Distance on a row:** for a charger next to the road (within 250 m: a service area) it's where the route passes it. For one further away it's the route up to point A (3 km before the closest point) plus the drive A→charger from `/detours` (`wayTo()`). Before that answer is in, the closest point on the route is used, which makes chargers around one junction all show the same distance.
 - **Charging power:** Fast (50 kW+), Extra fast (150 kW+) or HPC (300 kW+), on the start screen and in the brand sheet (`evailability-power`). A filter on the device: the live `maxKw` wins over Open Charge Map's (so an AC charger listed as fast drops out); unknown power shows only with Fast, except Ionity. Above Fast, the brands button shows e.g. "150+".
 - **Order and the other side:** at a service area your side comes first (`orderSites`: the other side counts 600 m later). A charger on the other side shows the real distance and time including the turn-around (route to point A + the drive A→charger from `/detours`).

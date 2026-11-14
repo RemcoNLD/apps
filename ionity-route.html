@@ -274,7 +274,10 @@ const PULL_IN_MIN = 2;
 const SERVICE_AREA_KM = 0.25;
 function detourOf(s) {
   if (s.detourMin == null) return null;
-  const pullIn = s.offRouteKm != null && s.offRouteKm <= SERVICE_AREA_KM ? PULL_IN_MIN : 0;
+  // On the other side of the road it can't be a service area you pull into: either you turn
+  // around (a big detour anyway) or it's at an exit reachable from both sides (e.g. Dietmannsried).
+  const serviceArea = s.offRouteKm != null && s.offRouteKm <= SERVICE_AREA_KM && sideOf(s) !== "left";
+  const pullIn = serviceArea ? PULL_IN_MIN : 0;
   return Math.max(0, s.detourMin - pullIn);
 }
 const OFF_ROUTE_KM = 1.0;

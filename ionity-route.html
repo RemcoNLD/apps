@@ -165,6 +165,7 @@
   .sub.meta > * { flex-shrink: 0; }
   .sub.meta .side { margin-right: 0; }
   .country { font-size: .85rem; font-weight: 600; color: var(--muted); }
+  .dmin { margin-left: 6px; color: var(--full); font-weight: 800; }
   .detour {
     font-size: 1.05rem; font-weight: 800; padding: 1px 8px 0; border-radius: 6px;
     border: 2px solid var(--full); color: var(--full);
@@ -304,7 +305,7 @@
 <section id="drive" hidden>
   <div class="bar">
     <button id="newRoute">New route</button>
-    <button id="mySide" class="toggle" aria-pressed="false">My side only</button>
+    <button id="mySide" class="toggle" aria-pressed="false">Easy to reach</button>
     <span id="age"></span>
   </div>
   <div class="strip">
@@ -321,7 +322,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.10";
+const APP_VERSION = "2026-11-14.11";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -345,7 +346,7 @@ function detourOf(s) {
   return Math.max(0, s.detourMin - pullIn);
 }
 const OFF_ROUTE_KM = 1.0;
-const MY_SIDE_MAX_DETOUR = 5; // minutes; stations without a side badge stay visible up to this detour
+const MY_SIDE_MAX_DETOUR = 6; // minutes; "Easy to reach" also shows any charger with at most this detour
 const MY_SIDE_KEY = "ionity-route-myside";
 
 const $ = (id) => document.getElementById(id);
@@ -738,7 +739,11 @@ function updateStickyRoad() {
   const row = rows.find((r) => r.getBoundingClientRect().bottom >= y);
   if (!row) return hide();
   // The row's own change badge is right there: let that one show instead.
-  if (row.querySelector(".tl-road.below") && Math.abs(row.getBoundingClientRect().bottom - y) < 28) return hide();
+  // A road badge on the line is right there: let that one show instead.
+  for (const b of $("list").querySelectorAll(".tl-road")) {
+    const r = b.getBoundingClientRect();
+    if (r.bottom > y - 30 && r.top < y + 30) return hide();
+  }
   const s = state.stations.find((x) => x.id === row.dataset.id);
   const road = s && roadParts().filter((r) => r.fromKm <= s.alongKm).at(-1);
   if (!road) return hide();
@@ -858,11 +863,11 @@ function upcoming() {
   return state.stations.filter((s) => s.alongKm > state.user.km - PASSED_KM);
 }
 
-// "My side only": stations on the right, plus ones near a junction you can reach with a short detour.
+// "Easy to reach": chargers on your side, plus any you can get to and back from with a short
+// detour. A charger on the other side with a small detour sits at an exit you can use both ways;
+// one that needs a turn-around at the next junction has a big detour and stays hidden.
 function onMySide(s) {
-  const side = sideOf(s);
-  if (side === "right") return true;
-  if (side === "left") return false;
+  if (sideOf(s) === "right") return true;
   const dm = detourOf(s);
   return dm != null && dm <= MY_SIDE_MAX_DETOUR;
 }
@@ -923,7 +928,7 @@ function stationRow(s, change, after) {
   const kw = s.status?.maxKw || s.maxKw;
   const dm = detourOf(s);
   const detour = dm != null && dm >= SHOW_DETOUR_FROM
-    ? `<span class="detour" title="${dm} minutes extra">+${dm}</span>` : "";
+    ? `<span class="dmin" title="${dm} minutes extra to get there and back">+${dm}</span>` : "";
   const country = s.road ? roadBadge(s.road, s.country)
     : s.country && s.country !== "NL" ? `<span class="country">${esc(s.country)}</span>` : "";
   const sd = sideOf(s);
@@ -933,8 +938,8 @@ function stationRow(s, change, after) {
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
     <span class="marker" aria-hidden="true"></span>
     <div><div class="name"><span class="label">${esc(shortName(s.name))}</span><span class="stat">${info.text}</span></div>
-      <div class="sub meta">${side}${detour}${country}${kw && info.cls !== "offline" ? `<span>${kw} kW</span>` : ""}</div></div>
-    <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}</div></div>
+      <div class="sub meta">${side}${country}${kw && info.cls !== "offline" ? `<span>${kw} kW</span>` : ""}</div></div>
+    <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}${detour}</div></div>
   </div>`;
 }
 
@@ -967,7 +972,7 @@ function render() {
         roadChange(i ? ahead[i - 1].alongKm : -Infinity, s.alongKm),
         i === ahead.length - 1 ? roadChange(s.alongKm, Infinity) : null)).reverse().join("")
     : hiddenCount
-      ? `<div class="empty">No more Ionity chargers on your side. ${hiddenCount} on the other side or further off are hidden.</div>`
+      ? `<div class="empty">No more easy-to-reach Ionity chargers. ${hiddenCount} that need a longer detour are hidden.</div>`
       : `<div class="empty">No more Ionity chargers within 5 km of your route.</div>`;
   // Stay at the bottom, or keep your place if you've scrolled up.
   list.scrollTop = state.stickToBottom ? list.scrollHeight : list.scrollHeight - list.clientHeight - fromBottom;

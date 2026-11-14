@@ -985,15 +985,13 @@ async function handleAlternatives(request, env) {
   // Plan the kept ones properly through the snapped point.
   const routes = await Promise.all(picks.map((v) => getRoute(env, [from, v, to]).then((r) => ({ r, v })).catch(() => null)));
 
-  // One Ionity lookup for all of them (the area around the fastest route plus a margin).
+  // Ionity sites per route, looked up in sections along each one (one big area gets cut short).
   const all = [{ r: fastest, v: null }, ...routes.filter(Boolean)];
-  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-  for (const { r } of all) for (const [lon, lat] of r.coords) {
-    minLon = Math.min(minLon, lon); maxLon = Math.max(maxLon, lon);
-    minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+  const found = new Map();
+  for (const { r } of all) {
+    try { for (const p of await ionityAlongRoute(env, r, 5)) found.set(p.ID, p); } catch (_) {}
   }
-  let pois = [];
-  try { pois = await ionityInBox(env, [minLon - 0.1, minLat - 0.07, maxLon + 0.1, maxLat + 0.07]); } catch (_) {}
+  const pois = [...found.values()];
 
   const options = [];
   for (const { r, v } of all) {

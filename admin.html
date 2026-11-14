@@ -23,6 +23,8 @@
     font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
     padding: calc(env(safe-area-inset-top, 0px) + 18px) 16px calc(env(safe-area-inset-bottom, 0px) + 28px);
   }
+  .apps-back { display: inline-block; margin: 0 0 10px; font-weight: 700; text-decoration: none; color: inherit; opacity: .65; }
+  .apps-back:active { opacity: 1; }
   h1 { font-size: 1.6rem; margin: 0 0 4px; }
   h2 { font-size: 1.15rem; margin: 26px 0 10px; }
   .muted { color: var(--muted); }
@@ -59,6 +61,7 @@
 </style>
 </head>
 <body>
+<a class="apps-back" href="./">‹ Apps</a>
 <h1>Usage</h1>
 <p class="muted">How much of the free tiers the Ionity route app uses, per data source.</p>
 

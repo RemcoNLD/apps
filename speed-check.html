@@ -40,7 +40,8 @@ body {
 }
 .wrap { max-width: 520px; margin: 0 auto; padding: 10px 14px 10px; }
 
-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 10px; }
+nav { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 10px; }
+nav a.apps-back-nav { padding: 9px 12px; }
 nav a { text-align: center; padding: 9px 0; border-radius: 10px; color: var(--muted); text-decoration: none; font-weight: 600; }
 nav a[aria-current="page"] { background: var(--ink); color: var(--bg); }
 nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
@@ -155,6 +156,7 @@ nav a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
 <body>
 <div class="wrap">
   <nav aria-label="Pages">
+    <a href="./" class="apps-back-nav">‹ Apps</a>
     <a href="#measure" id="navMeasure">Measure</a>
     <a href="#history" id="navHistory">History</a>
   </nav>

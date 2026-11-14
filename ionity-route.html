@@ -78,6 +78,8 @@
   .results button[aria-pressed="true"] { box-shadow: inset 4px 0 0 var(--sign-blue); }
   .check { display: flex; gap: 10px; align-items: center; margin: 22px 0 0; color: var(--muted); }
   .check input { width: 20px; height: 20px; accent-color: var(--sign-blue); }
+  .apps-back { display: inline-block; margin: 0 0 10px; font-weight: 700; text-decoration: none; color: inherit; opacity: .65; }
+  .apps-back:active { opacity: 1; }
   .primary {
     margin-top: 26px; width: 100%; padding: 16px; font-size: 1.2rem; font-weight: 800;
     background: var(--sign-blue); color: #fff; border: 0; border-radius: 10px;
@@ -297,6 +299,7 @@
 <body>
 
 <section id="start">
+  <a class="apps-back" href="./">‹ Apps</a>
   <h1>Ionity route</h1>
   <p class="lede">Ionity chargers along your route, with how many are free and how much of a detour each one is.</p>
 
@@ -349,7 +352,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.19";
+const APP_VERSION = "2026-11-14.20";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;

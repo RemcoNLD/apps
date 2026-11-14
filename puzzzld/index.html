@@ -96,6 +96,7 @@ body.kbopen #floatStatus{top:72px}
 body.kbopen #zoomCtl{display:none}
 /* reading your handwriting: a thin moving line under the toolbar, which never shifts anything */
 header{position:relative}
+.apps-back{color:inherit;text-decoration:none;opacity:.6;font-weight:700;margin-right:6px;padding:0 4px}
 body.reading header::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:3px;background:linear-gradient(90deg, transparent, var(--type), transparent) no-repeat;background-size:35% 100%;opacity:.9}
 @media (prefers-reduced-motion:no-preference){ body.reading header::after{animation:readbar 1s linear infinite} }
 @media (prefers-reduced-motion:reduce){ body.reading header::after{background:var(--type);opacity:.45} }
@@ -263,7 +264,7 @@ input[type=text]{flex:1;min-width:180px}
 </head>
 <body>
 <header>
-  <h1><svg class="logo" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="7" fill="#16202A" stroke="#3A4756"/><g fill="#FFE45C"><rect x="5" y="5" width="6" height="6" rx="1.2"/><rect x="12" y="5" width="6" height="6" rx="1.2"/><rect x="19" y="5" width="6" height="6" rx="1.2"/><rect x="12" y="12" width="6" height="6" rx="1.2"/><rect x="5" y="19" width="6" height="6" rx="1.2"/><rect x="12" y="19" width="6" height="6" rx="1.2"/><rect x="19" y="19" width="6" height="6" rx="1.2"/></g><g fill="#3A4756"><rect x="5" y="12" width="6" height="6" rx="1.2"/><rect x="19" y="12" width="6" height="6" rx="1.2"/></g></svg><span data-i18n="appName">Puzzzld</span></h1>
+  <h1><a class="apps-back" href="../" aria-label="Apps">‹</a><svg class="logo" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="28" height="28" rx="7" fill="#16202A" stroke="#3A4756"/><g fill="#FFE45C"><rect x="5" y="5" width="6" height="6" rx="1.2"/><rect x="12" y="5" width="6" height="6" rx="1.2"/><rect x="19" y="5" width="6" height="6" rx="1.2"/><rect x="12" y="12" width="6" height="6" rx="1.2"/><rect x="5" y="19" width="6" height="6" rx="1.2"/><rect x="12" y="19" width="6" height="6" rx="1.2"/><rect x="19" y="19" width="6" height="6" rx="1.2"/></g><g fill="#3A4756"><rect x="5" y="12" width="6" height="6" rx="1.2"/><rect x="19" y="12" width="6" height="6" rx="1.2"/></g></svg><span data-i18n="appName">Puzzzld</span></h1>
   <div class="seg" role="group" data-i18n-aria="tools" aria-label="Gereedschap">
     <button class="ib" id="toolPen" aria-pressed="true" data-i18n-aria="pen" aria-label="Potlood">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5l4 4L8 20H4v-4z"/><path d="M14 6l4 4"/></svg><span class="hide-s" data-i18n="pen">Potlood</span>

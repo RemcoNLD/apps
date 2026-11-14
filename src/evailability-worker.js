@@ -1097,11 +1097,113 @@ async function handlePlan(request, env) {
     },
     stations,
     brands,
+    // Map tiles along the Dutch part of the route, for the second source of chargers (NDW).
+    ndwTiles: ndwTilesAlong(route, env),
     generatedAt: new Date().toISOString(),
   });
 }
 
-// ---------------------------------------------------------------- route options
+// ---------------------------------------------------------------- second source: NDW (NL)
+// Open Charge Map misses sites (Fastned shares no data with it, so new Fastned sites appear late).
+// NDW knows every public charger in the Netherlands, but only answers per map box, slow chargers
+// included. So: fixed tiles of 0.05° x 0.08° (about 5.5 x 5.5 km) along the route, looked up once
+// a day per tile for everyone, trimmed to fast chargers of our brands before caching. The app asks
+// for a few tiles per call after planning; a tile that is too big to handle comes back as "split"
+// and the app asks for its four quarters instead.
+const NDW_TILE_LAT = 0.05, NDW_TILE_LON = 0.08;
+const NDW_TILE_MAX_BYTES = 450 * 1024; // above this, parsing risks the free plan's CPU limit
+const NL_BOX = [3.3, 50.7, 7.3, 53.6]; // lon/lat, for parts of the route whose country is unknown
+const tileKey = (lat, lon) => `${Math.floor(lat / NDW_TILE_LAT)}_${Math.floor(lon / NDW_TILE_LON)}`;
+function ndwTilesAlong(route, env) {
+  if (env.NDW_DISCOVERY === "off") return [];
+  const tiles = new Set();
+  const nearKm = 1.5; // service areas and chargers at exits; further out is a detour anyway
+  let lastKm = -Infinity;
+  for (let i = 0; i < route.coords.length; i++) {
+    if (route.km[i] - lastKm < 1 && i !== route.coords.length - 1) continue;
+    lastKm = route.km[i];
+    const [lon, lat] = route.coords[i];
+    const iso = isoAt(route, i);
+    const inNl = iso ? iso === "NL" : lon >= NL_BOX[0] && lon <= NL_BOX[2] && lat >= NL_BOX[1] && lat <= NL_BOX[3];
+    if (!inNl) continue;
+    const dLat = nearKm / 111, dLon = nearKm / (111 * Math.cos(toRad(lat)));
+    for (const a of [-dLat, 0, dLat]) for (const b of [-dLon, 0, dLon]) tiles.add(tileKey(lat + a, lon + b));
+  }
+  return [...tiles];
+}
+// "12345_678" is a whole tile; "12345_678/2" a quarter (0..3), "12345_678/2/1" a quarter of that.
+function tileBox(key) {
+  const [base, ...parts] = key.split("/");
+  const [ti, tj] = base.split("_").map(Number);
+  let lat0 = ti * NDW_TILE_LAT, lon0 = tj * NDW_TILE_LON, dLat = NDW_TILE_LAT, dLon = NDW_TILE_LON;
+  for (const q of parts.map(Number)) {
+    dLat /= 2; dLon /= 2;
+    if (q & 1) lon0 += dLon;
+    if (q & 2) lat0 += dLat;
+  }
+  return [lon0, lat0, lon0 + dLon, lat0 + dLat];
+}
+const validTile = (k) => typeof k === "string" && /^-?\d+_-?\d+(\/[0-3]){0,3}$/.test(k);
+
+async function ndwTile(env, key) {
+  const memoKey = `ndwt1:${key}`;
+  const hit = memoGet(memoKey);
+  if (hit !== undefined) return hit;
+  if (env.USAGE) {
+    try {
+      const kv = JSON.parse((await kvGet(env, memoKey)) || "null");
+      if (kv) { memoSet(memoKey, kv, 60 * 60 * 1000); return kv; }
+    } catch (_) {}
+  }
+  const bbox = tileBox(key).map((v) => v.toFixed(5)).join(",");
+  countCall("NDW");
+  const res = await fetch(`${NDW_BBOX}?bbox=${bbox}`, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new HttpError(502, `NDW returned ${res.status}`);
+  const len = Number(res.headers.get("content-length") || 0);
+  if (len > NDW_TILE_MAX_BYTES && key.split("/").length < 4) { try { res.body?.cancel(); } catch (_) {} return { split: true }; }
+  const text = await res.text();
+  if (text.length > NDW_TILE_MAX_BYTES && key.split("/").length < 4) return { split: true };
+  let features = [];
+  try { features = JSON.parse(text).features || []; } catch (_) { throw new HttpError(502, "NDW did not return JSON"); }
+  // Keep only fast chargers of the brands the app knows, with the few fields it uses.
+  const sites = [];
+  for (const f of features) {
+    const brand = BRANDS.find((b) => featureIsBrand(f, b));
+    if (!brand) continue;
+    const c = extractCounts(f);
+    if (!c || (brand.key !== "ionity" && !(c.maxKw >= FAST_KW))) continue;
+    const pr = f.properties || {};
+    const [lon, lat] = f.geometry?.coordinates || [];
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    sites.push({ id: String(f.id ?? `${lat},${lon}`), brand: brand.key, name: pr.name || pr.location_name || null,
+      address: [pr.address, pr.city].filter(Boolean).join(", ") || null, lat, lon, maxKw: c.maxKw, points: c.total });
+  }
+  const out = { sites };
+  memoSet(memoKey, out, 60 * 60 * 1000);
+  if (env.USAGE) {
+    try { await env.USAGE.put(memoKey, JSON.stringify(out), { expirationTtl: 24 * 3600 }); countCall("KV writes"); } catch (_) {}
+  }
+  return out;
+}
+
+async function handleNdwSites(request, env) {
+  const body = await request.json().catch(() => ({}));
+  if (env.NDW_DISCOVERY === "off") return json(request, { sites: [], split: [], done: [] });
+  const tiles = (Array.isArray(body.tiles) ? body.tiles : []).filter(validTile).slice(0, 3);
+  const brands = new Set((Array.isArray(body.brands) ? body.brands : []).filter((k) => BRAND[k]));
+  const sites = [], split = [], done = [];
+  for (const t of tiles) {
+    try {
+      const r = await ndwTile(env, t);
+      if (r.split) { split.push(...[0, 1, 2, 3].map((q) => `${t}/${q}`)); continue; }
+      for (const x of r.sites) if (!brands.size || brands.has(x.brand)) sites.push(x);
+      done.push(t);
+    } catch (e) {
+      console.log("NDW tile failed", t, e.message);
+    }
+  }
+  return json(request, { sites, split, done });
+}
 
 // The routing service only gives alternatives below 100 km, so we make our own: plan through
 // points left and right of the fastest route, keep the ones that use different main roads.
@@ -1496,6 +1598,7 @@ async function route(request, env) {
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
   if (path === "/detours" && request.method === "POST") return handleDetours(request, env);
+  if (path === "/ndw-sites" && request.method === "POST") return handleNdwSites(request, env);
   if (path === "/brands" && request.method === "GET") {
     return json(request, { brands: BRANDS.map(({ key, name, color }) => ({ key, name, color })) });
   }

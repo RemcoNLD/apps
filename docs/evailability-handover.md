@@ -104,6 +104,7 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 | `POST /alternatives` | `{from, to}` → up to 3 route options (see below), each with main roads, cities on the way and the number of Ionity sites. |
 | `POST /plan` | `{from, to, via?, brands?, corridorKm?}` → route (coordinates, km and minutes per point, roads, via positions) plus the chargers of those brands within 5 km. `via`: one point or a list of up to 3. Detours are included only if cached; status only for the first 8 chargers. |
 | `POST /status` | `{stations:[{id, lat, lon, country, brand}]}` → live status per charger. |
+| `POST /ndw-sites` | `{tiles, brands}` (max 3 tiles) → `{sites, split, done}`: fast chargers of those brands from NDW in those tiles; `split` lists quarter tiles to ask for instead. |
 | `POST /detours` | `{items:[{id, lat, lon, a, b}]}` (max 20) → `detours`: extra minutes per charger; `reach`: `{toMin, toKm}`, the drive from `a` to the charger. `a`/`b` are route points 3 km before and after it. |
 | `GET /brands` *public* | The brands (key, name, colour). |
 | `GET /logo/<brand>` *public* | The brand's site icon (image). |
@@ -124,6 +125,7 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 - **Fast only:** for brands other than Ionity, only sites with a charger of 50 kW or more (`FAST_KW`).
 - **Trimming:** each answer is cut down to the few fields used (id, operator, number of points, title, address, coordinates, country, power). It is cached for an hour in memory and a day in KV (`ocm2:…`). This keeps the Worker within the free plan's CPU and memory limits on long routes with many brands.
 - **Along the route:** each site is projected onto the route: distance along it (km and minutes) and distance off it. Sites more than 5 km off are dropped.
+- **Second source in the Netherlands (NDW):** Open Charge Map misses sites (Fastned shares no data with it). `/plan` returns `ndwTiles`: fixed tiles of 0.05° × 0.08° (about 5.5 km) within 1.5 km of the Dutch part of the route. After planning, the app asks `POST /ndw-sites {tiles (max 3), brands}` in the background. The Worker fetches NDW per tile, keeps only fast chargers (≥ 50 kW, Ionity always) of known brands, and caches the trimmed tile a day in memory and KV (`ndwt1:<tile>`), shared by everyone. A tile whose answer is over 450 kB comes back as `split` and the app asks for its quarters (up to 3 levels), so no single request parses too much. The app adds sites not already there (same brand within 250 m, or matched live id), projected onto the route, within 5 km. Turn off with Worker variable `NDW_DISCOVERY = off`. Cost per new route: about 20–40 NDW calls and as many KV writes; repeated routes in the same area that day cost nothing.
 
 ### Detours
 
@@ -159,6 +161,7 @@ Every outgoing call is counted per source (`countCall`). The tally is written to
 | `usage:<date>` | Calls per source that day | 40 days |
 | `ocm-ref-v2` | Open Charge Map operators and countries | 7 days |
 | `ocm2:<operators>:<box>` | Trimmed chargers in a box | 1 day |
+| `ndwt1:<tile>` | NDW fast chargers of known brands in a tile | 1 day |
 | `logo:<brand>` | Site icon | 7 days (miss: 1 day) |
 | `hist:<charger id>` | State seen, since when, last full | 2 days |
 

@@ -757,7 +757,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.37";
+const APP_VERSION = "2026-11-14.38";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -972,6 +972,41 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.user = { km: 0, min: 0, offKm: 0, acc: null, at: null };
   state.offCount = 0;
   save();
+  addNdwSites(data.ndwTiles || [], state.planBrands); // in the background: the route shows straight away
+}
+
+// Second source of chargers in the Netherlands (NDW), for sites Open Charge Map doesn't have
+// (e.g. newer Fastned sites). The Worker looks up map tiles along the route, a few per call;
+// a busy tile comes back split into quarters. New sites join the list as they arrive.
+const NDW_CORRIDOR_KM = 5;
+let ndwRun = 0;
+async function addNdwSites(tiles, brands) {
+  const run = ++ndwRun; // a newer route stops an older lookup
+  const queue = [...tiles];
+  let added = 0;
+  while (queue.length && run === ndwRun && state.route) {
+    const batch = queue.splice(0, 3);
+    let r;
+    try { r = await api("/ndw-sites", { tiles: batch, brands }); } catch (_) { break; }
+    if (run !== ndwRun || !state.route) return;
+    queue.push(...(r.split || []));
+    for (const x of r.sites || []) {
+      const id = `ndw-${x.id}`;
+      if (state.stations.some((s) => s.id === id || s.status?.liveId === x.id)) continue;
+      // Already there from Open Charge Map (same brand, same place): the live matching handles it.
+      if (state.stations.some((s) => brandKey(s) === x.brand && distKm(s, x) <= 0.25)) continue;
+      const pr = projectPoint(x.lat, x.lon);
+      if (!pr || pr.d > NDW_CORRIDOR_KM || pr.km < state.user.km - PASSED_KM) continue;
+      state.stations.push({
+        id, brand: x.brand, name: x.name || (BRAND[x.brand] || {}).name || "Charger", address: x.address,
+        country: "NL", lat: x.lat, lon: x.lon, maxKw: x.maxKw, points: x.points, source: "NDW",
+        alongKm: Math.round(pr.km * 10) / 10, alongMin: Math.round(pr.min), offRouteKm: Math.round(pr.d * 100) / 100,
+        status: null, statusAt: null,
+      });
+      added++;
+    }
+    if (added) { state.stations.sort((a, b) => a.alongKm - b.alongKm); save(); render(); refreshWhenSettled(); }
+  }
 }
 
 // ---------------------------------------------------------------- route options
@@ -2411,7 +2446,7 @@ function helpHtml() {
     <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old; the dot keeps its colour. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
-  <p>Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>
+  <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>
   <p>A free charger now is no guarantee it is still free when you arrive.</p>
 
   <h3>Detours</h3>

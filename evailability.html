@@ -838,7 +838,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.48";
+const APP_VERSION = "2026-11-14.49";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1053,7 +1053,12 @@ function wireSearch(inputId, listId, key) {
   const isVia = /^via/.test(inputId); // on a via the x is always there: it removes the via
   const syncClear = () => { clear.hidden = isVia ? false : !input.value; };
   input.addEventListener("input", () => { syncClear(); search(); });
-  input.addEventListener("focus", () => { if (!state[key]) showRecent(); });
+  // Tapping a field shows the places used before, also when a place from an earlier route is
+  // still remembered for it but the field itself is empty (after "New route").
+  const onFocus = () => { if (input.value.trim().length < 3) showRecent(); };
+  input.addEventListener("focus", onFocus);
+  input.addEventListener("click", onFocus); // iOS: a tap on a field that already has focus
+
   // Leaving the field hides the recent places (a little later, so a tap on one still counts).
   input.addEventListener("blur", () => setTimeout(() => {
     if (document.activeElement !== input && input.value.trim().length < 3 && list.querySelector(".recent")) list.innerHTML = "";
@@ -2011,6 +2016,13 @@ $("newRoute").addEventListener("click", () => {
   state.route = null; state.stations = [];
   state.arrived = false; state.wasAway = false;
   letSleep();
+  // A clean start screen: the fields and what they stand for are emptied together (before, a
+  // destination from an earlier route could still count while its field showed nothing).
+  // The previous places are one tap away in each field's history.
+  for (const k of ["to", "from", "via1", "via2"]) { state[k] = null; $(k).value = ""; $(`${k}Results`).innerHTML = ""; }
+  $("via1Row").hidden = true; $("via2Row").hidden = true; syncAddVia();
+  document.querySelectorAll(".clear-btn[data-for='to'], .clear-btn[data-for='from']").forEach((b) => { b.hidden = true; });
+  updatePlanBtn();
   $("drive").hidden = true; $("start").hidden = false;
   $("offRoute").hidden = true;
 });

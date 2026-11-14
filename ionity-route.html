@@ -128,9 +128,14 @@
     justify-self: center; width: 30px; height: 30px; border-radius: 50%;
     border: 5px solid var(--asphalt); background: var(--offline); z-index: 1;
   }
-  .name { font-size: 1.45rem; font-weight: 800; line-height: 1.1; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
+  .name { font-size: 1.35rem; font-weight: 800; line-height: 1.1; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
   .name .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .name .detour, .name .country { flex-shrink: 0; }
+  .name .stat { flex-shrink: 0; margin-left: auto; font-size: 1.3rem; font-weight: 600; color: var(--muted); }
+  .name .stat strong { font-weight: 800; }
+  .sub.meta { display: flex; align-items: center; gap: 10px; }
+  .sub.meta > * { flex-shrink: 0; }
+  .sub.meta .side { margin-right: 0; }
   .country { font-size: .85rem; font-weight: 600; color: var(--muted); }
   .detour {
     font-size: 1.05rem; font-weight: 800; padding: 1px 8px 0; border-radius: 6px;
@@ -149,9 +154,9 @@
   .dist .min { font-size: 1.05rem; color: var(--muted); margin-top: 2px; }
 
   .st.free .marker { background: var(--free); }
-  .st.free .sub strong { color: var(--free); }
+  .st.free .stat strong { color: var(--free); }
   .st.full .marker { background: var(--full); }
-  .st.full .sub strong { color: var(--full); }
+  .st.full .stat strong { color: var(--full); }
   .st.offline .marker { background: var(--offline); }
   .st.offline .name, .st.offline .dist { opacity: .55; }
   .st.nodata .marker { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
@@ -593,15 +598,18 @@ function fmtMin(m) {
 function clock(minFromNow) {
   return new Date(Date.now() + minFromNow * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
-function shortName(n) { return String(n || "Ionity").replace(/^ionity\s+/i, ""); }
+function shortName(n) {
+  return String(n || "Ionity").replace(/^ionity\s+/i, "").replace(/^(Raststätte|Rastanlage|Rasthof|Autohof)\s+/i, "");
+}
 
 function statusInfo(s) {
   const st = s.status;
-  if (!st) return { cls: "nodata", text: s.country === "NL" ? "Status not found" : "No live data" };
-  if (st.available == null) return { cls: "nodata", text: "Status unknown" };
-  if (st.state === "free") return { cls: "free", text: `<strong>${st.available}/${st.total} free</strong>` };
-  if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Likely offline</strong>` };
-  return { cls: "full", text: `<strong>Full, 0/${st.total}</strong>` };
+  // Kept short: the station name gets the room. Colour says free (green) or full (orange).
+  if (!st) return { cls: "nodata", text: `<span title="${s.country === "NL" ? "Status not found" : "No live data"}">–</span>` };
+  if (st.available == null) return { cls: "nodata", text: `<span title="Status unknown">?</span>` };
+  if (st.state === "free") return { cls: "free", text: `<strong title="${st.available} of ${st.total} free">${st.available}/${st.total}</strong>` };
+  if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Offline</strong>` };
+  return { cls: "full", text: `<strong title="All in use">0/${st.total}</strong>` };
 }
 
 function stationRow(s) {
@@ -619,8 +627,8 @@ function stationRow(s) {
     : sd === "left" ? `<span class="side left" title="On the other side of the road">Left</span>` : "";
   return `<div class="row st ${info.cls}">
     <span class="marker" aria-hidden="true"></span>
-    <div><div class="name"><span class="label">${esc(shortName(s.name))}</span>${detour}${country}</div>
-      <div class="sub">${side}${info.text}${kw && info.cls !== "offline" ? `&ensp;${kw} kW` : ""}</div></div>
+    <div><div class="name"><span class="label">${esc(shortName(s.name))}</span><span class="stat">${info.text}</span></div>
+      <div class="sub meta">${side}${detour}${country}${kw && info.cls !== "offline" ? `<span>${kw} kW</span>` : ""}</div></div>
     <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}</div></div>
   </div>`;
 }

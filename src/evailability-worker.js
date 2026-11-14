@@ -127,6 +127,8 @@ const USAGE_FLUSH_MS = 2 * 60 * 1000;
 const usage = { pending: {}, ors: {}, orsHeaders: {}, lastFlush: Date.now(), kvWrites: 0 };
 const today = () => new Date().toISOString().slice(0, 10);
 function countCall(source, n = 1) { usage.pending[source] = (usage.pending[source] || 0) + n; }
+// Every KV read counts against the free plan's 100,000 a day, so it's counted like a call.
+function kvGet(env, key) { countCall("KV reads"); return env.USAGE.get(key); }
 
 function orsService(url) {
   const m = String(url).match(/\/v2\/(directions|matrix|isochrones)|\/pelias\/v1\/(search|reverse|autocomplete)/);
@@ -154,7 +156,7 @@ function noteQuota(url, res) {
 
 async function readUsageDay(env, day) {
   if (!env.USAGE) return null;
-  try { return JSON.parse((await env.USAGE.get(`usage:${day}`)) || "null"); } catch { return null; }
+  try { return JSON.parse((await kvGet(env, `usage:${day}`)) || "null"); } catch { return null; }
 }
 async function flushUsage(env, force = false) {
   if (!env.USAGE) return;
@@ -536,7 +538,7 @@ async function brandOperators(env) {
   if (cached) return cached;
   let ref = null;
   if (env.USAGE) {
-    try { ref = JSON.parse((await env.USAGE.get("ocm-ref-v2")) || "null"); } catch { ref = null; }
+    try { ref = JSON.parse((await kvGet(env, "ocm-ref-v2")) || "null"); } catch { ref = null; }
   }
   if (!ref) {
     const data = await fetchJson(`${OCM_BASE}/referencedata/?output=json&key=${env.OCM_API_KEY}`, {}, "Open Charge Map");
@@ -591,7 +593,7 @@ async function sitesInBox(env, box, brands = ["ionity"]) {
   // and parse thousands of chargers again (that is what runs out of the free plan's CPU and memory).
   if (env.USAGE) {
     try {
-      const kv = JSON.parse((await env.USAGE.get(key)) || "null");
+      const kv = JSON.parse((await kvGet(env, key)) || "null");
       if (kv) { memoSet(key, kv, 60 * 60 * 1000); return kv; }
     } catch (_) {}
   }
@@ -963,7 +965,7 @@ async function observe(env, id, nowState) {
   const key = `hist:${id}`;
   let h = memoGet(key);
   if (h === undefined && env.USAGE) {
-    try { h = JSON.parse((await env.USAGE.get(key)) || "null"); } catch { h = null; }
+    try { h = JSON.parse((await kvGet(env, key)) || "null"); } catch { h = null; }
   }
   const now = new Date().toISOString();
   if (!h || h.state !== nowState) {
@@ -1372,7 +1374,7 @@ async function handleLogo(request, env, key) {
   const headers = (type) => ({ "Content-Type": type, "Cache-Control": `public, max-age=${LOGO_TTL_S}`, ...corsHeaders(request) });
   let rec = memoGet(`logo:${key}`);
   if (rec === undefined && env.USAGE) {
-    try { rec = JSON.parse((await env.USAGE.get(`logo:${key}`)) || "null") ?? undefined; } catch { rec = undefined; }
+    try { rec = JSON.parse((await kvGet(env, `logo:${key}`)) || "null") ?? undefined; } catch { rec = undefined; }
   }
   if (rec === undefined) {
     const icon = await findIcon(brand.site);

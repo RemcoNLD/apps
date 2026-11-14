@@ -42,6 +42,10 @@
   .session { display: flex; gap: 18px; margin: 12px 0 4px; }
   .link { padding: 0; background: none; color: var(--blue); font-weight: 600; text-decoration: underline; }
   .card { background: var(--card); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .group h3 { margin: 0 0 8px; font-size: .95rem; letter-spacing: .02em; text-transform: uppercase; color: var(--muted, #93a0a8); }
+  .group .line { padding: 8px 0; }
+  .group .line + .line { border-top: 1px solid rgba(127,127,127,.18); }
+  .group > .small.muted:last-child { margin-top: 6px; }
   .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .name { font-weight: 700; }
   .num { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
@@ -88,13 +92,14 @@ try { const old = localStorage.getItem("ionity-admin-token"); if (old && !localS
 // OpenRouteService reports its own limits, so those come live from the Worker.
 const KNOWN_LIMITS = {
   "Worker requests": { limit: 100000, note: "Cloudflare Workers free plan" },
+  "KV reads": { limit: 100000, note: "Cloudflare KV free plan" },
   "KV writes": { limit: 1000, note: "Cloudflare KV free plan" },
 };
 const LABELS = {
   "Routing": "OpenRouteService routes", "Matrix": "OpenRouteService detours", "Geocoder": "Place search & names",
   "Open Charge Map": "Open Charge Map", "NDW": "NDW (Netherlands live)", "E-Control": "E-Control (Austria live)",
   "MobiData BW": "MobiData BW (Germany live)", "Nominatim": "Nominatim (backup search)",
-  "Worker requests": "Worker requests", "KV writes": "Usage saves (KV writes)",
+  "Worker requests": "Worker requests", "KV reads": "KV reads", "KV writes": "KV writes", "Logo fetch": "Brand logos",
 };
 const ORS_LABELS = { directions: "Routes", matrix: "Detours (matrix)", "geocode/search": "Place search", "geocode/reverse": "Place names" };
 
@@ -133,40 +138,55 @@ function render(d) {
       Add the KV namespace (binding <b>USAGE</b>) to keep them.</div>`;
   }
 
-  html += `<h2>OpenRouteService quota</h2>`;
-  const orsKeys = Object.keys(ors);
-  if (!orsKeys.length) {
-    const hdr = d.orsHeaders || {};
-    const keys = Object.keys(hdr);
-    html += keys.length
-      ? `<div class="card small muted">OpenRouteService answered, but without a recognised quota. What it sent:<br>${
-          keys.map((k) => `<b>${esc(ORS_LABELS[k] || k)}</b>: ${Object.keys(hdr[k].headers || {}).length
-            ? Object.entries(hdr[k].headers).map(([h, v]) => `${esc(h)} = ${esc(v)}`).join(", ") : "no quota headers"}`).join("<br>")}</div>`
-      : `<div class="card small muted">No quota reported yet today. It appears after the next route is planned.</div>`;
-  }
-  for (const k of orsKeys) {
-    const q = ors[k];
-    const used = q.limit != null && q.remaining != null ? q.limit - q.remaining : null;
-    html += `<div class="card">
-      <div class="row"><span class="name">${esc(ORS_LABELS[k] || k)}</span>
-        <span class="num">${used != null ? `${fmt(used)} / ${fmt(q.limit)}` : q.remaining != null ? `${fmt(q.remaining)} left` : "?"}</span></div>
-      ${used != null ? bar(used, q.limit) : ""}
-      <div class="small muted">${[resetText(q.reset), `as of ${ago(q.at)}`].filter(Boolean).join(" · ")}</div>
-    </div>`;
-  }
+  // One block per provider, then one for the rest. Each line: what was counted today, and the
+  // free limit where one is known (OpenRouteService reports its own; Cloudflare's are fixed).
+  const used = new Set();
+  const line = (k, label) => {
+    used.add(k);
+    const lim = KNOWN_LIMITS[k];
+    const n = calls[k] || 0;
+    return `<div class="line"><div class="row"><span class="name">${esc(label || LABELS[k] || k)}</span>
+      <span class="num">${fmt(n)}${lim ? ` / ${fmt(lim.limit)}` : ""}</span></div>${lim ? bar(n, lim.limit) : ""}</div>`;
+  };
+  const group = (title, body, note = "") =>
+    `<div class="card group"><h3>${esc(title)}</h3>${body}${note ? `<div class="small muted">${note}</div>` : ""}</div>`;
 
   html += `<h2>Today</h2>`;
-  const order = Object.keys(LABELS).filter((k) => calls[k] != null);
-  for (const k of Object.keys(calls)) if (!order.includes(k)) order.push(k);
-  if (!order.length) html += `<div class="card small muted">Nothing counted yet today.</div>`;
-  for (const k of order) {
-    const lim = KNOWN_LIMITS[k];
-    html += `<div class="card">
-      <div class="row"><span class="name">${esc(LABELS[k] || k)}</span>
-        <span class="num">${fmt(calls[k])}${lim ? ` / ${fmt(lim.limit)}` : ""}</span></div>
-      ${lim ? bar(calls[k], lim.limit) + `<div class="small muted">${esc(lim.note)}</div>` : `<div class="small muted">${["Routing", "Matrix", "Geocoder"].includes(k) ? "Limit: see quota above" : "No daily limit published"}</div>`}
-    </div>`;
+  html += group("Cloudflare", ["Worker requests", "KV reads", "KV writes"].map((k) => line(k)).join(""),
+    "Free plan. Over a limit, further calls of that kind fail until the reset at 00:00 UTC (01:00 Dutch time in winter, 02:00 in summer).");
+
+  // OpenRouteService: its own quota per service, with the Worker's count of calls beside it.
+  const orsRows = [["directions", "Routing"], ["matrix", "Matrix"], ["geocode/search", "Geocoder"], ["geocode/reverse", null]];
+  let orsBody = "";
+  for (const [svc, callKey] of orsRows) {
+    const q = ors[svc];
+    if (callKey) used.add(callKey);
+    if (!q && !(callKey && calls[callKey])) continue;
+    const u = q && q.limit != null && q.remaining != null ? q.limit - q.remaining : null;
+    const counted = callKey && calls[callKey] != null ? `counted by the Worker: ${fmt(calls[callKey])}` : "";
+    orsBody += `<div class="line"><div class="row"><span class="name">${esc(ORS_LABELS[svc])}</span>
+      <span class="num">${u != null ? `${fmt(u)} / ${fmt(q.limit)}` : q?.remaining != null ? `${fmt(q.remaining)} left` : callKey ? fmt(calls[callKey]) : "?"}</span></div>
+      ${u != null ? bar(u, q.limit) : ""}
+      <div class="small muted">${[q ? resetText(q.reset) : "", q ? `as of ${ago(q.at)}` : "no quota reported yet", u != null ? counted : ""].filter(Boolean).join(" · ")}</div></div>`;
   }
+  if (!orsBody) {
+    const hdr = d.orsHeaders || {};
+    orsBody = Object.keys(hdr).length
+      ? `<div class="small muted">Answered, but without a recognised quota. What it sent:<br>${
+          Object.keys(hdr).map((k) => `<b>${esc(ORS_LABELS[k] || k)}</b>: ${Object.keys(hdr[k].headers || {}).length
+            ? Object.entries(hdr[k].headers).map(([h, v]) => `${esc(h)} = ${esc(v)}`).join(", ") : "no quota headers"}`).join("<br>")}</div>`
+      : `<div class="small muted">Nothing yet today. The quota appears after the next route is planned.</div>`;
+  }
+  html += group("OpenRouteService", orsBody, "Limits as OpenRouteService reports them.");
+
+  html += group("Open Charge Map", line("Open Charge Map", "Calls"), "No daily limit published; blocks bursts.");
+  html += group("NDW (Netherlands live)", line("NDW", "Calls"), "Open data, no daily limit published.");
+  html += group("MobiData BW (Germany live)", line("MobiData BW", "Calls"), "Open data, no daily limit published.");
+  html += group("E-Control (Austria live)", line("E-Control", "Calls"), "No daily limit published.");
+
+  // Everything else: brand logos, the backup place search, and anything counted that isn't listed above.
+  const rest = ["Logo fetch", "Nominatim", ...Object.keys(calls)].filter((k, i, a) => a.indexOf(k) === i && !used.has(k) && calls[k] != null);
+  if (rest.length) html += group("Other", rest.map((k) => line(k)).join(""), "No daily limits published.");
 
   if (d.days.length > 1) {
     const days = d.days.slice().reverse();

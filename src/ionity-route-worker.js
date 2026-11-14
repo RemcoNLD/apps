@@ -497,13 +497,37 @@ async function ionityOperatorId(env) {
 }
 
 // Ionity sites inside a box: [minLon, minLat, maxLon, maxLat]
+// Open Charge Map blocks bursts of requests (HTTP 429). So: remember answers for an hour
+// (charger locations hardly change), pause briefly between calls, and retry once when blocked.
+let ocmLastCall = 0;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function ionityInBox(env, box) {
   const operatorId = await ionityOperatorId(env);
-  const [minLon, minLat, maxLon, maxLat] = box.map((v) => v.toFixed(5));
+  // Round outward to 0.05° so nearby lookups (route options, rerouting) reuse the same answer.
+  const r = (v, up) => (up ? Math.ceil(v * 20) : Math.floor(v * 20)) / 20;
+  const [minLon, minLat, maxLon, maxLat] = [r(box[0]), r(box[1]), r(box[2], true), r(box[3], true)];
+  const key = `ocm:${minLon},${minLat},${maxLon},${maxLat}`;
+  const cached = memoGet(key);
+  if (cached !== undefined) return cached;
   const url = `${OCM_BASE}/poi/?output=json&compact=false&verbose=false&maxresults=500` +
     `&operatorid=${operatorId}` +
     `&boundingbox=(${maxLat},${minLon}),(${minLat},${maxLon})&key=${env.OCM_API_KEY}`;
-  return fetchJson(url, {}, "Open Charge Map");
+  for (let attempt = 0; ; attempt++) {
+    const wait = 250 - (Date.now() - ocmLastCall);
+    if (wait > 0) await sleep(wait);
+    ocmLastCall = Date.now();
+    try {
+      const data = await fetchJson(url, {}, "Open Charge Map");
+      memoSet(key, data, 60 * 60 * 1000);
+      return data;
+    } catch (e) {
+      if (attempt < 2 && /returned 429/.test(e.message)) { await sleep(1500 * (attempt + 1)); continue; }
+      if (/returned 429/.test(e.message)) {
+        throw new HttpError(503, "Open Charge Map is busy (too many requests). Please try again in a minute.");
+      }
+      throw e;
+    }
+  }
 }
 
 // Cut the route into pieces of ~150 km, search a box around each piece,
@@ -513,7 +537,7 @@ async function ionityAlongRoute(env, route, corridorKm) {
   const pieces = [];
   let start = 0;
   for (let i = 1; i < route.coords.length; i++) {
-    if (route.km[i] - route.km[start] >= 150 || i === route.coords.length - 1) {
+    if (route.km[i] - route.km[start] >= 250 || i === route.coords.length - 1) {
       pieces.push([start, i]);
       start = i;
     }

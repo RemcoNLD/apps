@@ -85,6 +85,10 @@
   }
   .results button:hover, .results button[aria-pressed="true"] { background: var(--asphalt-raised); }
   .results button[aria-pressed="true"] { box-shadow: inset 4px 0 0 var(--sign-blue); }
+  .results li.recent { display: flex; align-items: stretch; }
+  .results li.recent > button[data-i] { flex: 1; min-width: 0; }
+  .results .clock { margin-right: 8px; opacity: .7; }
+  .results button.forget { flex: none; width: 44px; text-align: center; color: var(--muted); font-size: 1.3rem; }
   .check { display: flex; gap: 10px; align-items: center; margin: 22px 0 0; color: var(--muted); }
   .check input { width: 20px; height: 20px; accent-color: var(--sign-blue); }
   .apps-back { display: inline-block; margin: 0 0 10px; font-weight: 700; text-decoration: none; color: inherit; opacity: .65; }
@@ -717,12 +721,12 @@
   <ul id="toResults" class="results"></ul>
   <div class="fld" id="via1Row" hidden>
     <label class="tag" for="via1">Via</label>
-    <div class="input-wrap"><input id="via1" class="input" type="search" placeholder="Town to drive through" autocomplete="off" aria-label="First via point"><button type="button" class="clear-btn" data-for="via1" aria-label="Remove via point" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+    <div class="input-wrap"><input id="via1" class="input" type="search" placeholder="Pass a town or address" autocomplete="off" aria-label="First via point"><button type="button" class="clear-btn" data-for="via1" aria-label="Remove via point" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
   </div>
   <ul id="via1Results" class="results"></ul>
   <div class="fld" id="via2Row" hidden>
     <label class="tag" for="via2">Via</label>
-    <div class="input-wrap"><input id="via2" class="input" type="search" placeholder="Town to drive through" autocomplete="off" aria-label="Second via point"><button type="button" class="clear-btn" data-for="via2" aria-label="Remove via point" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+    <div class="input-wrap"><input id="via2" class="input" type="search" placeholder="Pass a town or address" autocomplete="off" aria-label="Second via point"><button type="button" class="clear-btn" data-for="via2" aria-label="Remove via point" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
   </div>
   <ul id="via2Results" class="results"></ul>
   <div class="fld" id="fromRow">
@@ -834,7 +838,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.41";
+const APP_VERSION = "2026-11-14.42";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -977,35 +981,83 @@ async function unlock() {
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
+// Places used before (start, via or destination), offered in every address field: tap the
+// field to see them, type to narrow them down; the search results follow below them.
+const RECENT_KEY = "evailability-recent";
+const RECENT_MAX = 10;
+function recentPlaces() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]").filter((r) => r && r.label && Number.isFinite(r.lat)); }
+  catch (_) { return []; }
+}
+function rememberPlaces(places) {
+  let list = recentPlaces();
+  const same = (a, b) => a.label === b.label || (Math.abs(a.lat - b.lat) < 1e-4 && Math.abs(a.lon - b.lon) < 1e-4);
+  for (const p of places.filter((x) => x && x.label && !x.auto && Number.isFinite(x.lat)).reverse()) {
+    // Keep the place as it was found (a town keeps its centre and exact: false, so as a via it is snapped again).
+    list = [{ label: p.label, lat: p.lat, lon: p.lon, exact: p.exact }, ...list.filter((r) => !same(r, p))];
+  }
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (_) {}
+}
+function forgetPlace(label) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(recentPlaces().filter((r) => r.label !== label))); } catch (_) {}
+}
+
 function wireSearch(inputId, listId, key) {
   const input = $(inputId), list = $(listId);
+  let shown = []; // what the buttons in the list stand for
+  const choose = (item) => {
+    state[key] = { ...item };
+    input.value = item.label.split(",")[0];
+    list.innerHTML = ""; // chosen: the suggestions go away
+    input.blur();
+    syncClear();
+    updatePlanBtn();
+  };
+  const draw = (recent, results = [], note = "") => {
+    shown = [...recent, ...results];
+    const row = (r, i, isRecent) => `<li${isRecent ? ' class="recent"' : ""}><button type="button" data-i="${i}" aria-pressed="false">${
+      isRecent ? '<span class="clock" aria-hidden="true">🕘</span>' : ""}${esc(r.label)}</button>${
+      isRecent ? `<button type="button" class="forget" data-forget="${esc(r.label)}" aria-label="Forget ${esc(r.label.split(",")[0])}">×</button>` : ""}</li>`;
+    list.innerHTML = recent.map((r, i) => row(r, i, true)).join("") +
+      results.map((r, i) => row(r, recent.length + i, false)).join("") + note;
+    list.querySelectorAll("button[data-i]").forEach((b) => b.addEventListener("click", () => choose(shown[+b.dataset.i])));
+    list.querySelectorAll("button[data-forget]").forEach((b) => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      forgetPlace(b.dataset.forget);
+      showRecent();
+      input.focus();
+    }));
+  };
+  const matching = (q) => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    return recentPlaces().filter((r) => words.every((w) => r.label.toLowerCase().includes(w)));
+  };
+  const showRecent = () => {
+    if (input.value.trim().length >= 3) return;
+    draw(matching(input.value.trim()).slice(0, 6));
+  };
   const search = debounce(async () => {
     const q = input.value.trim();
     state[key] = null; updatePlanBtn();
-    if (q.length < 3) { list.innerHTML = ""; return; }
+    if (q.length < 3) { showRecent(); return; }
+    const recent = matching(q).slice(0, 3);
     try {
       const { results } = await api(`/geocode?q=${encodeURIComponent(q)}`);
       // Europe first: the geocoder also knows the other Venlo, in North Dakota.
       const inEurope = (r) => r.lat > 34 && r.lat < 72 && r.lon > -25 && r.lon < 45;
       results.sort((a, b) => inEurope(b) - inEurope(a));
-      list.innerHTML = results.map((r, i) =>
-        `<li><button type="button" data-i="${i}" aria-pressed="false">${esc(r.label)}</button></li>`).join("");
-      list.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-        list.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", "false"));
-        b.setAttribute("aria-pressed", "true");
-        state[key] = results[+b.dataset.i];
-        input.value = state[key].label.split(",")[0];
-        list.innerHTML = ""; // chosen: the suggestions go away
-        input.blur();
-        syncClear();
-        updatePlanBtn();
-      }));
-    } catch (e) { list.innerHTML = `<li class="error">${esc(e.message)}</li>`; }
+      draw(recent, results.filter((r) => !recent.some((x) => x.label === r.label)));
+    } catch (e) { draw(recent, [], `<li class="error">${esc(e.message)}</li>`); }
   }, 350);
   const clear = document.querySelector(`.clear-btn[data-for="${inputId}"]`);
   const isVia = /^via/.test(inputId); // on a via the x is always there: it removes the via
   const syncClear = () => { clear.hidden = isVia ? false : !input.value; };
   input.addEventListener("input", () => { syncClear(); search(); });
+  input.addEventListener("focus", () => { if (!state[key]) showRecent(); });
+  // Leaving the field hides the recent places (a little later, so a tap on one still counts).
+  input.addEventListener("blur", () => setTimeout(() => {
+    if (document.activeElement !== input && input.value.trim().length < 3 && list.querySelector(".recent")) list.innerHTML = "";
+  }, 250));
   clear.addEventListener("click", () => {
     input.value = "";
     state[key] = null;
@@ -1038,8 +1090,17 @@ function currentPosition() {
 // Rerouting and switching routes keep the brands of the current route; the start screen passes its own.
 async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   const body = { from: fromLonLat, to: [state.to.lon, state.to.lat], brands };
-  if (state.vias?.length) body.via = state.vias.map((v) => [v.lon, v.lat]);
+  if (state.vias?.length) {
+    body.via = state.vias.map((v) => [v.lon, v.lat]);
+    // A town (not a street address) is passed on the main road nearest to it, not through its centre.
+    body.viaSnap = state.vias.map((v) => v.exact === false && !v.snapped);
+  }
   const data = await api("/plan", body);
+  // Keep the points as the Worker used them, so rerouting doesn't snap (or drive into town) again.
+  if (Array.isArray(data.vias) && state.vias?.length === data.vias.length) {
+    state.vias = state.vias.map((v, i) => body.viaSnap?.[i]
+      ? { ...v, lon: data.vias[i][0], lat: data.vias[i][1], snapped: true } : v);
+  }
   state.route = data.route;
   state.stations = data.stations;
   state.planBrands = data.brands || ["ionity"];
@@ -1194,6 +1255,7 @@ $("planBtn").addEventListener("click", async () => {
     const from = state.from ? [state.from.lon, state.from.lat] : await currentPosition();
     // With your own via points, plan those; otherwise offer the options found.
     state.vias = [state.via1, state.via2].filter((v, i) => v && !$(`via${i + 1}Row`).hidden);
+    rememberPlaces([state.to, state.from, ...state.vias]); // offered again in every address field
     if (!state.vias.length) {
       btn.textContent = "Finding routes…";
       let options = [], altError = null;
@@ -2552,7 +2614,8 @@ function helpHtml() {
   <h3>Planning a route</h3>
   <ul>
     <li><b>To</b>: a town or address. <b>From</b> left empty means where you are now. The <b>×</b> empties a field.</li>
-    <li><b>+</b> next to To adds a <b>via</b> point (up to two), to choose your own way, for example via Luxembourg instead of Brussels. The × on a via removes it.</li>
+    <li>Tap a field to see the <b>places you used before</b> (as start, via or destination), the last ten; type to narrow them down. The × next to one forgets it.</li>
+    <li><b>+</b> next to To adds a <b>via</b> point (up to two), to choose your own way, for example via Luxembourg instead of Brussels. The × on a via removes it. A <b>town</b> as via is passed on the main road nearest to it (via Dordrecht = the N3/A16 by Dordrecht, not its centre); a <b>street address</b> is driven to exactly.</li>
     <li>Without a via, you get <b>route options</b> to choose from, with their main roads and the cities on the way.</li>
     <li><b>Chargers</b>: the brands to look for. Only fast chargers (50 kW and up) are shown. Live free counts in the Netherlands, Germany and Austria; elsewhere location and detour only.</li>
     <li><b>Simulate the drive</b>: drives the route for you, sped up, to try the app at home.</li>

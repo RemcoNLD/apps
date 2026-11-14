@@ -343,10 +343,13 @@ async function geocode(env, q) {
   try {
     const url = `${PELIAS_BASE}/search?text=${encodeURIComponent(q)}&size=5`;
     const data = await fetchJson(url, { headers: orsHeaders(env) }, "Geocoder");
+    // exact: an address, street or named spot, driven to as it is. A town or region isn't: as a via
+    // point it's passed on the main road nearest to it, not through its centre.
     const hits = (data.features || []).map((f) => ({
       label: f.properties?.label || f.properties?.name || q,
       lon: f.geometry.coordinates[0],
       lat: f.geometry.coordinates[1],
+      exact: ["address", "street", "venue", "postalcode"].includes(f.properties?.layer),
     }));
     if (hits.length) return hits;
   } catch (_) { /* fall back to Nominatim below */ }
@@ -354,7 +357,8 @@ async function geocode(env, q) {
   const data = await fetchJson(url, {
     headers: { "User-Agent": "evailability personal app (github.com/RemcoNLD)" },
   }, "Nominatim");
-  return data.map((d) => ({ label: d.display_name, lat: +d.lat, lon: +d.lon }));
+  return data.map((d) => ({ label: d.display_name, lat: +d.lat, lon: +d.lon,
+    exact: !["city", "town", "village", "municipality", "county", "state", "region", "suburb", "hamlet"].includes(d.addresstype) }));
 }
 
 // The routing service looks for a road within 350 m of each point by default. A GPS fix in a
@@ -1036,6 +1040,18 @@ async function handlePlan(request, env) {
   const brands = [...new Set((Array.isArray(body.brands) ? body.brands : ["ionity"]).filter((k) => BRAND[k]))];
   if (!brands.length) brands.push("ionity");
 
+  // A via point that is a town (viaSnap true) is passed on the numbered road nearest to it:
+  // plan a rough route through its centre, then take the point where that route runs on an
+  // A or N road closest to the centre. Its coordinates go back to the app, which keeps them.
+  const snapFlags = Array.isArray(body.viaSnap) ? body.viaSnap : [];
+  for (let i = 0; i < vias.length; i++) {
+    if (snapFlags[i] !== true) continue;
+    try {
+      const rough = await roughRoute(env, [from, vias[i], to]);
+      const p = snapToMainRoad(rough, vias[i]);
+      if (p && haversineKm(p, vias[i]) < 15) vias[i] = [+p[0].toFixed(5), +p[1].toFixed(5)];
+    } catch (_) { /* keep the centre */ }
+  }
   const route = await getRoute(env, [from, ...vias, to]);
   const pois = await sitesAlongRoute(env, route, corridorKm, brands);
   learnCountries(route, pois.map((p) => ({
@@ -1097,6 +1113,7 @@ async function handlePlan(request, env) {
     },
     stations,
     brands,
+    vias, // as used: a town via point moved onto its nearest main road
     // Map tiles along the Dutch part of the route, for the second source of chargers (NDW).
     ndwTiles: ndwTilesAlong(route, env),
     generatedAt: new Date().toISOString(),
@@ -1473,6 +1490,9 @@ async function handleAlternatives(request, env) {
     if (v && r.durationMin > fastest.durationMin * t.maxSlower) continue;
     const o = await describeOption(env, r, v, pois, 4, t.mainRoadKm);
     if (v && options.some((x) => x.signature === o.signature)) continue; // snapping made it the same road after all
+    // A side trip that leaves a road and comes back onto it later (A27 > N631 > A58 > A27) isn't a real alternative.
+    const refs = o.roads.map((x) => x.ref);
+    if (v && refs.some((ref, i) => refs.indexOf(ref) !== i)) continue;
     options.push(o);
   }
   return json(request, { options, tried: tries.length, generatedAt: new Date().toISOString() });

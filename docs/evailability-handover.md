@@ -102,7 +102,7 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 | `POST /unlock` *public* | `{code}` → `{token}` if the code passes the check (section 6). |
 | `GET /geocode?q=` | Place search (Pelias), for the address fields. |
 | `POST /alternatives` | `{from, to}` → up to 3 route options (see below), each with main roads, cities on the way and the number of Ionity sites. |
-| `POST /plan` | `{from, to, via?, brands?, corridorKm?}` → route (coordinates, km and minutes per point, roads, via positions) plus the chargers of those brands within 5 km. `via`: one point or a list of up to 3. Detours are included only if cached; status only for the first 8 chargers. |
+| `POST /plan` | `{from, to, via?, viaSnap?, brands?, corridorKm?}` (viaSnap: per via, true for a town: it is moved onto the nearest A/N road of a rough route through it; the used points come back as `vias`) → route (coordinates, km and minutes per point, roads, via positions) plus the chargers of those brands within 5 km. `via`: one point or a list of up to 3. Detours are included only if cached; status only for the first 8 chargers. |
 | `POST /status` | `{stations:[{id, lat, lon, country, brand}]}` → live status per charger. |
 | `POST /places` | `{points:[{id, lat, lon}]}` (max 8) → `{places:{id:{area, town}}}`: service-area name (a nearby place named like one) and town, for chargers named only by their brand. Cached 30 days per ~100 m (`pl1:` in KV). |
 | `POST /ndw-sites` | `{tiles, brands}` (max 3 tiles) → `{sites, split, done}`: fast chargers of those brands from NDW in those tiles; `split` lists quarter tiles to ask for instead. |
@@ -116,7 +116,7 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 
 - **Routing:** OpenRouteService `directions/driving-car` with `extra_info: countryinfo` and instructions. Each point may snap to a road up to 5 km away (`radiuses`), so a start in a car park still works.
 - **Roads:** road numbers (A, E, B, N, S, M…) come from the instruction step names. The badges in the app are styled per country like real road signs.
-- **Route options:** OpenRouteService gives no alternative routes over 100 km. So `/alternatives` makes them itself: it plans via points left and right of the fastest route at 1/4, 1/2 and 3/4 of the way, at 12% of the trip length (6–40 km), plus twice that halfway (8 rough routes). It drops options more than 25% slower or with the same main roads as another option (a main road: driven at least 10% of the trip, 8–30 km), keeps up to 3, and names each by its main roads and the large cities it passes (`MAJOR_CITIES`). The chosen option is planned again with its via point. After planning, the app says when there was nothing to choose from, or why the comparison failed.
+- **Route options:** OpenRouteService gives no alternative routes over 100 km. So `/alternatives` makes them itself: it plans via points left and right of the fastest route at 1/4, 1/2 and 3/4 of the way, at 12% of the trip length (6–40 km), plus twice that halfway (8 rough routes). It drops options more than 25% slower or with the same main roads as another option (a main road: driven at least 10% of the trip, 8–30 km), keeps up to 3, drops side trips that return to a road they left, and names each by its main roads and the large cities it passes (`MAJOR_CITIES`). The chosen option is planned again with its via point. After planning, the app says when there was nothing to choose from, or why the comparison failed.
 
 ### Chargers along the route
 
@@ -216,6 +216,7 @@ One file, `evailability.html`, with no libraries or build step. The version is i
 | `evailability-intro-seen` | Introduction shown |
 | `evailability-splash-off` | Splash screen switched off |
 | `evailability-power` | Minimum charging power: 50, 150 or 300 |
+| `evailability-recent` | Last 10 places used as start, via or destination (label, position, exact), offered in every address field |
 
 On first start the app moves settings from the old `ionity-route-…` keys to these. sessionStorage `evailability-session` marks that the splash was already considered in this session.
 

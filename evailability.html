@@ -436,6 +436,8 @@
   .ml.full .stat strong { color: var(--full); }
   .ml.offline .stat strong { color: var(--offline); }
   .ml.stale .stat, .ml.stale .stat strong { color: var(--muted); font-weight: 700; }
+  /* Older than 5 minutes: outlined numbers only, so it's plain they're old. */
+  .stat.old, .stat.old strong, .stat.old .tot { color: transparent !important; -webkit-text-stroke: 1.2px var(--muted); }
   /* Brand picker on the start screen */
   .brands { display: flex; flex-wrap: wrap; gap: 8px; }
   /* Minimum charging power: Fast / Extra fast / HPC */
@@ -844,7 +846,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.58";
+const APP_VERSION = "2026-11-14.59";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -862,6 +864,15 @@ const STORE_KEY = "evailability-v1";
 const STATUS_EVERY_MS = 60 * 1000;
 const FRESH_MS = 60 * 1000;         // a charger checked within a minute isn't asked again when it scrolls into view
 const STALE_MS = 3 * 60 * 1000;     // further ones turn grey after 3 minutes; tap to refresh
+const OLD_MS = 5 * 60 * 1000;       // after 5 minutes the numbers are only outlined: really old
+// France: one national file for the whole country, which the server can read only now and then
+// (it costs more CPU than the free plan allows). So one lookup covers every French charger on the
+// route: every 2 minutes while the next French charger is on screen, otherwise every 5 minutes;
+// a tap on a French charger updates them all (at most once a minute).
+const FR_NEXT_EVERY_MS = 2 * 60 * 1000;
+const FR_EVERY_MS = 5 * 60 * 1000;
+const FR_MIN_GAP_MS = 60 * 1000;
+const FR_MAX = 250; // French chargers per lookup, nearest ahead first
 const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
 const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
@@ -937,7 +948,7 @@ const state = {
 // If the server is busy, a second try usually works.
 const ACCESS_KEY = "evailability-access";
 const accessToken = () => { try { return localStorage.getItem(ACCESS_KEY) || ""; } catch (_) { return ""; } };
-async function api(path, body, timeoutMs) {
+async function api(path, body, timeoutMs, retry = true) {
   const headers = { "X-Access": accessToken() };
   const opts = body
     ? { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) }
@@ -949,7 +960,7 @@ async function api(path, body, timeoutMs) {
     const timer = ctl && setTimeout(() => ctl.abort(), timeoutMs);
     try { res = await fetch(WORKER + path, ctl ? { ...opts, signal: ctl.signal } : opts); break; }
     catch (e) {
-      if (attempt >= 1) throw new Error("Couldn’t reach the server. Please try again in a moment.");
+      if (attempt >= 1 || !retry) throw new Error("Couldn’t reach the server. Please try again in a moment.");
       await new Promise((r) => setTimeout(r, 2000));
     }
     finally { if (timer) clearTimeout(timer); }
@@ -1536,13 +1547,21 @@ async function fetchStatus(stations) {
     const res = await Promise.all(batches.slice(i, i + 3).map((b) => api("/status", { stations: b }, 20000)));
     for (const r of res) Object.assign(status, r.status);
   }
+  applyStatus(status);
+}
+
+// Put new statuses on the chargers. A status's age counts from when the server read it (checkedAt),
+// so a French value from a read 80 s ago doesn't look brand new.
+function applyStatus(status) {
   const now = Date.now();
   let changed = false;
   const sig = (st) => (st ? `${st.state}|${st.available}|${st.total}` : "");
   const before = new Map(state.stations.map((s) => [s.id, sig(s.status)]));
   for (const s of state.stations) {
     if (!(s.id in status)) continue;
-    s.status = status[s.id]; s.statusAt = now;
+    s.status = status[s.id];
+    const read = Date.parse(s.status?.checkedAt || "");
+    s.statusAt = read && read <= now && now - read < 10 * 60 * 1000 ? read : now;
   }
   reconcileLive();
   for (const s of state.stations) {
@@ -1615,7 +1634,11 @@ function statusBusy() {
 }
 
 async function refreshOne(ids) {
-  const list = state.stations.filter((x) => ids.includes(x.id) && !(x.loadingAt && Date.now() - x.loadingAt < 20000));
+  const picked = state.stations.filter((x) => ids.includes(x.id));
+  if (picked.some((x) => x.country === "FR") && !(await refreshFrance(true))) {
+    if (picked.every((x) => x.country === "FR")) toast("France updates at most once a minute");
+  }
+  const list = picked.filter((x) => x.country !== "FR" && !(x.loadingAt && Date.now() - x.loadingAt < 20000));
   if (!list.length) return;
   for (const s of list) s.loadingAt = Date.now();
   render();
@@ -1715,7 +1738,8 @@ async function refreshStatus(force = true) {
   const inView = stationsInView();
   fetchDetours(detourCandidates(inView));
   fetchPlaces(); // rows on screen and the next few above them
-  const todo = inView.filter((s) => !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
+  refreshFrance(false);
+  const todo = inView.filter((s) => s.country !== "FR" && !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
   if (!todo.length) return;
   for (const s of todo) s.loadingAt = now;
   render();
@@ -1730,6 +1754,41 @@ async function refreshStatus(force = true) {
     save();
     render();
   }
+}
+
+// France: all French chargers ahead in one lookup (see FR_NEXT_EVERY_MS). Returns false when it
+// didn't ask (too soon, nothing French ahead, or already asking).
+let frBusy = false;
+async function refreshFrance(force) {
+  if (frBusy || !state.route || $("drive").hidden || document.visibilityState !== "visible") return false;
+  const ahead = upcoming().filter((s) => s.country === "FR").slice(0, FR_MAX);
+  if (!ahead.length) return false;
+  const now = Date.now();
+  if (now - (state.frTriedAt || 0) < FR_MIN_GAP_MS) return false;
+  if (!force) {
+    const next = visibleAhead().find((s) => s.country === "FR");
+    const nextOnScreen = next && stationsInView().some((s) => s.id === next.id);
+    const never = stationsInView().some((s) => s.country === "FR" && !s.statusAt);
+    if (!never && now - (state.frAt || 0) < (nextOnScreen ? FR_NEXT_EVERY_MS : FR_EVERY_MS)) return false;
+  }
+  frBusy = true;
+  state.frTriedAt = now;
+  const shown = new Set(stationsInView().map((s) => s.id));
+  for (const s of ahead) if (shown.has(s.id)) s.loadingAt = now; // the sweep, only where you can see it
+  render();
+  try {
+    const r = await api("/fr-status", { stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 30000, false);
+    applyStatus(r.status || {});
+    state.frAt = Date.now();
+    state.frError = null;
+  } catch (e) {
+    state.frError = e.message; // the old values stay and age: grey, then outlined
+  } finally {
+    for (const s of ahead) s.loadingAt = null;
+    frBusy = false;
+    save(); render();
+  }
+  return true;
 }
 
 // After scrolling: wait until the list has been still for a moment, then fetch what's in view.
@@ -2499,6 +2558,7 @@ function shownStatus(s) {
   // Updating a recent value: nothing changes on screen until the answer differs.
   // Grey only when the value is old (or there's none yet).
   if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="${loading ? "Updating" : "Tap to check"}">↻</span>` };
+  info.old = !!s.status && !!s.statusAt && Date.now() - s.statusAt > OLD_MS;
   return info;
 }
 const CLS_ORDER = ["free", "full", "offline", "stale", "nodata"];
@@ -2526,13 +2586,13 @@ function stationRow(site, change, after) {
   let avail, nameLogo = "";
   if (members.length === 1) {
     if (manyBrands) nameLogo = logoHtml(brandKey(s));
-    avail = `<div class="avail"><span class="stat${flashCls(s)}">${infos[0].text}</span></div>`;
+    avail = `<div class="avail"><span class="stat${flashCls(s)}${infos[0].old ? " old" : ""}">${infos[0].text}</span></div>`;
   } else {
     if (manyBrands) nameLogo = `<span class="logo spacer" aria-hidden="true"></span>`; // names line up with the rows that have a logo
     const shown = members.slice(0, 3);
     const more = members.length - shown.length;
     avail = `<div class="avail multi${shown.length >= 3 ? " n3" : ""}">${shown.map((m, i) =>
-      `<span class="ml ${infos[i].cls}">${logoHtml(brandKey(m))}<span class="stat${flashCls(m)}">${infos[i].text}</span></span>`).join("")}${
+      `<span class="ml ${infos[i].cls}">${logoHtml(brandKey(m))}<span class="stat${flashCls(m)}${infos[i].old ? " old" : ""}">${infos[i].text}</span></span>`).join("")}${
       more ? `<span class="more">+${more} more</span>` : ""}</div>`;
   }
   const title = members.length > 1 ? `${members.map((m) => (BRAND[brandKey(m)] || {}).name).join(", ")}. Tap to update` : "Tap to update this charger";
@@ -2830,7 +2890,7 @@ function helpHtml() {
     <div class="k">${dot("free")}</div><div class="v"><b class="kv" style="color:var(--free)">3/6</b>&ensp;3 of 6 chargers free right now.</div>
     <div class="k">${dot("full")}</div><div class="v"><b class="kv" style="color:var(--full)">0/4</b>&ensp;All in use.</div>
     <div class="k">${dot("offline")}</div><div class="v"><b>Offline</b>: reported out of order, or nothing has changed for hours.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old; the dot keeps its colour. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old, outlined numbers more than 5 minutes; the dot keeps its colour. France is updated every 2 minutes while the next French charger is on screen, otherwise every 5 minutes; tap a French charger to update them all. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>

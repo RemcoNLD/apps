@@ -99,6 +99,7 @@ const LABELS = {
   "Routing": "OpenRouteService routes", "Matrix": "OpenRouteService detours", "Geocoder": "Place search & names",
   "Open Charge Map": "Open Charge Map", "NDW": "NDW (Netherlands live)", "E-Control": "E-Control (Austria live)",
   "MobiData BW": "MobiData BW (Germany live)", "Nominatim": "Nominatim (backup search)",
+  "PAN FR": "transport.data.gouv.fr (France live)", "PAN FR index": "France index (GitHub Pages)",
   "Worker requests": "Worker requests", "KV reads": "KV reads", "KV writes": "KV writes", "Logo fetch": "Brand logos",
 };
 const ORS_LABELS = { directions: "Routes", matrix: "Detours (matrix)", "geocode/search": "Place search", "geocode/reverse": "Place names" };
@@ -183,6 +184,7 @@ function render(d) {
   html += group("NDW (Netherlands live)", line("NDW", "Calls"), "Open data, no daily limit published.");
   html += group("MobiData BW (Germany live)", line("MobiData BW", "Calls"), "Open data, no daily limit published.");
   html += group("E-Control (Austria live)", line("E-Control", "Calls"), "No daily limit published.");
+  html += group("transport.data.gouv.fr (France live)", line("PAN FR", "Whole-file reads") + line("PAN FR index", "Index loads"), "Open data. Each read is the whole country (~9.5 MB) and costs more CPU than the free plan allows per request.");
 
   // Everything else: brand logos, the backup place search, and anything counted that isn't listed above.
   const rest = ["Logo fetch", "Nominatim", ...Object.keys(calls)].filter((k, i, a) => a.indexOf(k) === i && !used.has(k) && calls[k] != null);

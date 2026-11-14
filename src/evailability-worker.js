@@ -6,6 +6,7 @@
 //   POST /plan                  {from:[lon,lat], to:[lon,lat], corridorKm?:5, brands?:["ionity","fastned",…]}
 //                               -> route + chargers of those brands along it (detour minutes only when cached)
 //   POST /status                {stations:[{id, lat, lon, country, brand}]}
+//   POST /fr-status             {stations:[{id, lat, lon, brand}]}  France, from one national file (read at most every 90 s)
 //                               -> live availability per station (NL, DE, AT)
 //   POST /detours               {items:[{id, lat, lon, a:[lon,lat], b:[lon,lat]}]} (max 20)
 //                               -> detour minutes per charger (a, b: route points 3 km before and after it)
@@ -1045,6 +1046,108 @@ async function frWhole(ids, url = FR_DYNAMIC_URL) {
   return { bytes, lines, rows };
 }
 
+// France live status. The national file is read whole (no Range), which costs ~20–30 ms CPU: over the
+// free plan's 10 ms, tolerated now and then but not often (Error 1102 after 5–6 reads in a row). So it
+// has its own endpoint (a failure only loses France), the app asks at most every 2 minutes, and each
+// Worker copy reads the file at most once per FR_SNAPSHOT_MS; all French chargers come from that read.
+const FR_INDEX_URL = "https://remconld.github.io/apps/data/fr-fast-sites.json"; // tools/build-fr-index.py
+const FR_INDEX_MS = 24 * 3600 * 1000;
+const FR_SNAPSHOT_MS = 90 * 1000;
+const FR_NOT_LIVE_MS = 24 * 3600 * 1000; // newest change at a site older than this: its data looks frozen
+const FR_MATCH_KM = 0.6;   // Open Charge Map pin → index site of the same brand
+const FR_NEARBY_KM = 1.2;  // sites sent back for the app's pin matching (like NDW's nearby)
+const FR_MAX_STATIONS = 250;
+const FR_CELL = 0.02;      // grid for the index, ~2 km
+
+let frIndexState = null; // { at, promise }
+async function frIndex() {
+  if (frIndexState && Date.now() - frIndexState.at < FR_INDEX_MS) return frIndexState.promise;
+  const promise = (async () => {
+    countCall("PAN FR index");
+    const res = await fetch(FR_INDEX_URL, { cf: { cacheTtl: 3600 } });
+    if (!res.ok) throw new HttpError(502, `France index: HTTP ${res.status}`);
+    const data = await res.json();
+    const ids = new Set(), grid = new Map();
+    const sites = data.sites.map(([brand, lat, lon, maxKw, name, pdcIds], i) => {
+      for (const id of pdcIds) ids.add(id);
+      const site = { key: `fr${i}`, brand, lat, lon, maxKw, name, ids: pdcIds };
+      const k = `${brand}|${Math.floor(lat / FR_CELL)}|${Math.floor(lon / FR_CELL)}`;
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(site);
+      return site;
+    });
+    return { built: data.built, ids, grid, count: sites.length };
+  })();
+  frIndexState = { at: Date.now(), promise };
+  promise.catch(() => { if (frIndexState?.promise === promise) frIndexState = null; });
+  return promise;
+}
+function frSitesNear(index, brand, lat, lon, km) {
+  const out = [];
+  const cy = Math.floor(lat / FR_CELL), cx = Math.floor(lon / FR_CELL);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    for (const s of index.grid.get(`${brand}|${cy + dy}|${cx + dx}`) || []) {
+      const d = haversineKm([s.lon, s.lat], [lon, lat]);
+      if (d <= km) out.push({ s, d });
+    }
+  }
+  return out.sort((a, b) => a.d - b.d);
+}
+
+let frSnapState = null; // { at, promise } — one read shared by every request in this Worker copy
+async function frSnapshot(index) {
+  if (frSnapState && Date.now() - frSnapState.at < FR_SNAPSHOT_MS) return frSnapState.promise;
+  const promise = frWhole(index.ids).then((w) => ({ rows: w.rows, at: new Date().toISOString() }));
+  frSnapState = { at: Date.now(), promise };
+  promise.catch(() => { if (frSnapState?.promise === promise) frSnapState = null; });
+  return promise;
+}
+
+// One index site → counts. Only points present in the live file count (old ids stay in the static file).
+function frSummary(site, snap) {
+  const live = site.ids.map((id) => snap.rows[id]).filter(Boolean);
+  const base = { maxKw: site.maxKw, source: "transport.data.gouv.fr", checkedAt: snap.at };
+  if (!live.length) return { ...base, available: null, total: null, note: "no live data for this site" };
+  const time = (r) => Date.parse(String(r.horodatage).replace(" ", "T")) || 0;
+  const newest = Math.max(...live.map(time));
+  const changedAt = newest ? new Date(newest).toISOString() : null;
+  if (!newest || Date.parse(snap.at) - newest > FR_NOT_LIVE_MS) {
+    return { ...base, available: null, total: null, changedAt, note: "live data looks frozen" };
+  }
+  const working = live.filter((r) => r.etat !== "hors_service");
+  const free = working.filter((r) => r.etat === "en_service" && r.occupation === "libre");
+  const known = working.filter((r) => r.occupation === "libre" || r.occupation === "occupe" || r.occupation === "reserve");
+  if (!working.length) return { ...base, available: 0, total: live.length, state: "likely_offline", changedAt };
+  if (!known.length) return { ...base, available: null, total: working.length, changedAt, note: "occupation unknown" };
+  const state = free.length ? "free" : "full";
+  const taken = working.filter((r) => r.occupation !== "libre").map(time).filter(Boolean);
+  return {
+    ...base, available: free.length, total: working.length, state, changedAt,
+    fullSince: state === "full" && taken.length ? new Date(Math.max(...taken)).toISOString() : null,
+  };
+}
+
+async function frStatusFor(stations) {
+  const index = await frIndex();
+  const snap = await frSnapshot(index);
+  const out = {};
+  for (const st of stations.slice(0, FR_MAX_STATIONS)) {
+    const brand = brandOf(st.brand).key;
+    const near = frSitesNear(index, brand, Number(st.lat), Number(st.lon), FR_NEARBY_KM);
+    if (!near.length || near[0].d > FR_MATCH_KM) { out[st.id] = null; continue; }
+    const main = near[0].s;
+    out[st.id] = {
+      ...frSummary(main, snap), liveId: main.key, liveLat: main.lat, liveLon: main.lon,
+      nearby: near.slice(0, 4).map(({ s }) => {
+        const c = frSummary(s, snap);
+        return { id: s.key, lat: s.lat, lon: s.lon, name: s.name || null, available: c.available, total: c.total,
+          maxKw: c.maxKw, state: c.state, changedAt: c.changedAt, fullSince: c.fullSince };
+      }),
+    };
+  }
+  return { status: out, checkedAt: snap.at, index: index.built };
+}
+
 async function liveStatus(station, env) {
   if (!LIVE_COUNTRIES.has(station.country)) return null;
   const brand = brandOf(station.brand);
@@ -1889,6 +1992,11 @@ async function route(request, env) {
   if (path === "/admin/usage" && request.method === "GET") return handleUsage(request, env);
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
+  if (path === "/fr-status" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
+    return json(request, await frStatusFor(body.stations));
+  }
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
   if (path === "/detours" && request.method === "POST") return handleDetours(request, env);
   if (path === "/ndw-sites" && request.method === "POST") return handleNdwSites(request, env);

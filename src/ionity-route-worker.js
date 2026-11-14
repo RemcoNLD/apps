@@ -1273,7 +1273,7 @@ export default {
     if (request.method !== "OPTIONS") countCall("Worker requests");
     // Save the tally after answering: straight away after planning (rare, many calls),
     // otherwise at most every 2 minutes. A new deploy discards anything not yet saved.
-    const urgent = /^\/(plan|alternatives|geocode)/.test(new URL(request.url).pathname);
+    const urgent = /^\/(plan|alternatives)/.test(new URL(request.url).pathname);
     try {
       return await route(request, env);
     } catch (e) {

@@ -349,11 +349,11 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.18";
+const APP_VERSION = "2026-11-14.19";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
-const AUTO_STATUS = 5;              // only the next 5 chargers refresh by themselves
+const FRESH_MS = 60 * 1000;         // a charger checked within a minute isn't asked again when it scrolls into view
 const STALE_MS = 3 * 60 * 1000;     // further ones turn grey after 3 minutes; tap to refresh
 const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
@@ -709,18 +709,48 @@ async function refreshOne(id) {
   s.loadingAt = null; save(); render();
 }
 
-async function refreshStatus() {
-  // Only the next few chargers refresh by themselves; further ones on request.
-  const ahead = visibleAhead().slice(0, AUTO_STATUS);
-  if (!ahead.length) return;
+// Chargers whose row is (mostly) on screen right now.
+function stationsInView() {
+  const list = $("list");
+  const box = list.getBoundingClientRect();
+  const ids = new Set();
+  for (const row of list.querySelectorAll(".row.st[data-id]")) {
+    const r = row.getBoundingClientRect();
+    const shown = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
+    if (shown >= r.height * 0.5) ids.add(row.dataset.id);
+  }
+  return state.stations.filter((s) => ids.has(s.id));
+}
+
+// Look up the chargers on screen. With force (the 1-minute timer, "Status now") all of them;
+// otherwise (after scrolling or switching the filter) only those not checked in the last minute.
+// A lookup isn't cancelled when its row scrolls away: the answer is kept for when you scroll back,
+// and a charger already being looked up isn't asked for twice.
+async function refreshStatus(force = true) {
+  if (document.visibilityState !== "visible" || $("drive").hidden || !state.route) return;
+  const now = Date.now();
+  const busy = (s) => s.loadingAt && now - s.loadingAt < 20000;
+  const todo = stationsInView().filter((s) => !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
+  if (!todo.length) return;
+  for (const s of todo) s.loadingAt = now;
+  render();
   try {
-    await fetchStatus(ahead);
+    await fetchStatus(todo);
     state.statusAt = Date.now();
-    save();
-    render();
   } catch (e) {
     $("age").textContent = "Couldn’t refresh charger status";
+  } finally {
+    for (const s of todo) s.loadingAt = null;
+    save();
+    render();
   }
+}
+
+// After scrolling: wait until the list has been still for a moment, then fetch what's in view.
+let settleTimer = null;
+function refreshWhenSettled() {
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => refreshStatus(false), 600);
 }
 
 async function keepAwake() {
@@ -782,7 +812,7 @@ function updateStickyRoad() {
   el.innerHTML = `<span>${roadPartBadge(road)}</span>`;
   el.hidden = false;
 }
-$("list").addEventListener("scroll", updateScrollUi, { passive: true });
+$("list").addEventListener("scroll", () => { updateScrollUi(); refreshWhenSettled(); }, { passive: true });
 $("list").addEventListener("click", (e) => {
   const row = e.target.closest(".row.st[data-id]");
   if (row) refreshOne(row.dataset.id);
@@ -801,6 +831,7 @@ $("mySide").addEventListener("click", () => {
   syncMySide();
   state.stickToBottom = true;
   render();
+  refreshWhenSettled(); // other chargers may have come into view
 });
 syncMySide();
 
@@ -1032,7 +1063,7 @@ function fmtClock(m) {
 function stationRow(s, change, after) {
   let info = statusInfo(s);
   const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
-  const stale = !state.autoIds?.has(s.id) && (!s.statusAt || Date.now() - s.statusAt > STALE_MS);
+  const stale = !s.statusAt || Date.now() - s.statusAt > STALE_MS;
   if (loading) info = { cls: "stale", text: `<span title="Updating">…</span>` };
   else if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="Tap to check">↻</span>` };
   const km = s.alongKm - state.user.km;
@@ -1075,7 +1106,6 @@ function render() {
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcoming();
   const ahead = visibleAhead();
-  state.autoIds = new Set(ahead.slice(0, AUTO_STATUS).map((s) => s.id));
   const hiddenCount = all.length - ahead.length;
   const list = $("list");
   const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;

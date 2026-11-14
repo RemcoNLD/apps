@@ -838,7 +838,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.45";
+const APP_VERSION = "2026-11-14.46";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2162,7 +2162,7 @@ async function fetchPlaces(stations) {
   // v2: with the service-area name from OpenStreetMap (older answers had the town only).
   // An answer whose service-area lookup failed (ok: false) is asked again after 10 minutes.
   const now = Date.now();
-  const stale = (s) => s.place?.v !== 3 || (s.place.ok === false && now - (s.placeAt || 0) > 10 * 60 * 1000);
+  const stale = (s) => s.place?.v !== 4 || (s.place.ok === false && now - (s.placeAt || 0) > 10 * 60 * 1000);
   const todo = stations.filter((s) => s._needsPlace && stale(s) && !(s.placeTriedAt && now - s.placeTriedAt < 10 * 60 * 1000)).slice(0, 5);
   if (!todo.length) return;
   placesBusy = true;

@@ -1389,7 +1389,7 @@ const OVERPASS_MIRRORS = [
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
 async function serviceAreaNear(lat, lon) {
-  const q = `[out:json][timeout:8];nwr[highway~"^(services|rest_area)$"][name](around:800,${lat},${lon});out tags center 5;`;
+  const q = `[out:json][timeout:8];nwr[highway~"^(services|rest_area)$"][name](around:800,${lat},${lon});out geom 6;`;
   let data = null, lastErr = null;
   for (const url of OVERPASS_MIRRORS) {
     countCall("Overpass");
@@ -1408,18 +1408,47 @@ async function serviceAreaNear(lat, lon) {
     }
   }
   if (!data) throw lastErr || new Error("Overpass unavailable");
+  // Pick by the area's outline, not its centre: a charger lies inside (or right at the edge of)
+  // the service area on its own side, while the one across the road is a carriageway away.
+  // By centre, a long service area on your side could lose to a short one opposite.
   let best = null, bestD = Infinity;
   for (const el of data.elements || []) {
-    const c = el.center || (el.lat != null ? { lat: el.lat, lon: el.lon } : null);
     const name = el.tags?.name;
-    if (!c || !name) continue;
-    const d = haversineKm([c.lon, c.lat], [lon, lat]);
+    if (!name) continue;
+    const d = distanceToElement(el, lat, lon);
     if (d < bestD) { bestD = d; best = name; }
   }
   return best ? best.replace(AREA_RE, "").replace(/^[\s:–-]+/, "").trim() || best : null;
 }
+// Distance in km from a point to an Overpass element: 0 inside a closed outline, otherwise to the
+// nearest edge (ways, relation members) or to the node itself.
+function distanceToElement(el, lat, lon) {
+  if (el.lat != null && el.lon != null) return haversineKm([el.lon, el.lat], [lon, lat]);
+  const rings = [];
+  if (Array.isArray(el.geometry)) rings.push(el.geometry);
+  for (const m of el.members || []) if (Array.isArray(m.geometry)) rings.push(m.geometry);
+  let best = Infinity, inside = false;
+  const p = toXY([lon, lat], lat);
+  for (const g of rings) {
+    const pts = g.filter((q) => q && Number.isFinite(q.lat)).map((q) => toXY([q.lon, q.lat], lat));
+    for (let i = 0; i + 1 < pts.length; i++) best = Math.min(best, pointSegment(p, pts[i], pts[i + 1]).dist);
+    const closed = g.length > 3 && g[0].lat === g[g.length - 1].lat && g[0].lon === g[g.length - 1].lon;
+    if (closed) {
+      let c = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        const [xi, yi] = pts[i], [xj, yj] = pts[j];
+        if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) c = !c;
+      }
+      if (c) inside = true;
+    }
+  }
+  if (inside) return 0;
+  if (Number.isFinite(best)) return best;
+  return el.center ? haversineKm([el.center.lon, el.center.lat], [lon, lat]) : Infinity;
+}
+
 async function placeFor(env, lat, lon) {
-  const key = `pl3:${lat.toFixed(3)},${lon.toFixed(3)}`;
+  const key = `pl4:${lat.toFixed(3)},${lon.toFixed(3)}`;
   const hit = memoGet(key);
   if (hit !== undefined) return hit;
   if (env.USAGE) {
@@ -1437,7 +1466,7 @@ async function placeFor(env, lat, lon) {
     }
   } catch (_) {}
   if (!town) town = await placeName(env, [lon, lat]);
-  const out = { area, town, v: 3, ok };
+  const out = { area, town, v: 4, ok };
   memoSet(key, out, (ok ? 24 : 1) * 3600 * 1000);
   // Kept 30 days for everyone, but not when the service-area lookup failed (try again later).
   if (env.USAGE && ok && (area || town)) {

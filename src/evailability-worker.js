@@ -19,6 +19,8 @@
 //   GET  /debug/ocm-ionity      Ionity sites Open Charge Map knows in a box (default: NL)
 //   GET  /debug/at?lat=&lon=    raw answer from the Austrian charging register (E-Control)
 //   GET  /debug/de?lat=&lon=    raw German answer (MobiData BW OCPDB, AFIR data) plus what we parse from it
+//   GET  /debug/fr-range[?part=&parts=&ids=]  France: does the national live file allow partial downloads (Range)?
+//                               With part: fetches that piece only and looks for ids in it (CPU test)
 //
 // Secrets (Cloudflare > Worker > Settings > Variables and Secrets)
 //   ORS_API_KEY   OpenRouteService / HeiGIT key
@@ -930,6 +932,84 @@ function summariseDe(locations, station, brand = BRAND.ionity) {
 
 async function deStatus(station, brand = BRAND.ionity) {
   return summariseDe(await deLocationsNear(station.lat, station.lon), station, brand);
+}
+
+// ---------------------------------------------------------------- France (transport.data.gouv.fr)
+// The national live file has no area or id query: always the whole country (~9.5 MB CSV,
+// id_pdc_itinerance,etat_pdc,occupation_pdc,horodatage,…). Reading it whole costs ~20–30 ms CPU,
+// more than the free plan allows per request. If the server allows Range requests, each Worker
+// call can read one piece (~1 MB) instead; the app would ask for the pieces side by side.
+const FR_DYNAMIC_URL = "https://transport.data.gouv.fr/resources/84098/download";
+const FR_PIECE_OVERLAP = 2048; // bytes read past a piece's end, so its last line is complete
+
+// Size of the file and whether Range works. Reads at most 1 kB of body.
+async function frProbe() {
+  countCall("PAN FR");
+  const res = await fetch(FR_DYNAMIC_URL, { headers: { Range: "bytes=0-1023" } });
+  const h = (k) => res.headers.get(k);
+  const total = Number((h("content-range") || "").split("/")[1]) || null;
+  let head = "";
+  if (res.body) {
+    const reader = res.body.getReader();
+    const { value } = await reader.read();
+    reader.cancel().catch(() => {});
+    head = new TextDecoder().decode((value || new Uint8Array()).subarray(0, 1024));
+  }
+  return {
+    status: res.status,
+    rangeWorks: res.status === 206 && !!total,
+    total,
+    finalUrl: res.url,
+    redirected: res.redirected,
+    headers: {
+      "content-range": h("content-range"), "accept-ranges": h("accept-ranges"),
+      "content-length": h("content-length"), "content-encoding": h("content-encoding"),
+      "content-type": h("content-type"), "last-modified": h("last-modified"), etag: h("etag"),
+      "cache-control": h("cache-control"), age: h("age"),
+    },
+    firstLines: head.split("\n").slice(0, 3),
+  };
+}
+
+// One piece of the file: the lines that START inside bytes [start, end]. Returns rows for the wanted ids
+// (the newest horodatage wins when an id appears twice) and how many lines were read.
+async function frPiece(total, part, parts, ids, url = FR_DYNAMIC_URL) {
+  const start = Math.floor((total * part) / parts);
+  const end = Math.floor((total * (part + 1)) / parts) - 1;
+  const from = Math.max(0, start - 1); // one byte early: tells whether `start` begins a line
+  const to = Math.min(total - 1, end + FR_PIECE_OVERLAP);
+  countCall("PAN FR");
+  const res = await fetch(url, { headers: { Range: `bytes=${from}-${to}` } });
+  if (res.status !== 206) {
+    res.body?.cancel?.().catch?.(() => {});
+    throw new HttpError(502, `French live file: expected a partial answer (206), got ${res.status}`);
+  }
+  const text = await res.text();
+  let pos = 0;
+  if (start > 0) {
+    const nl = text.indexOf("\n");
+    pos = nl < 0 ? text.length : nl + 1; // `from` is start-1, so a line starting at `start` begins at index 1
+  }
+  const limit = end - from; // a line must start at or before this index (relative to `from`)
+  const rows = {};
+  let lines = 0, cut = false;
+  while (pos <= limit && pos < text.length) {
+    const nl = text.indexOf("\n", pos);
+    if (nl < 0 && to < total - 1) { cut = true; break; } // a line longer than the overlap: shouldn't happen
+    const lineEnd = nl < 0 ? text.length : nl;
+    const comma = text.indexOf(",", pos);
+    if (comma > pos && comma < lineEnd) {
+      const id = text.slice(pos, comma);
+      if (ids.has(id)) {
+        const [etat, occupation, horodatage] = text.slice(comma + 1, lineEnd).replace(/\r$/, "").split(",");
+        const prev = rows[id];
+        if (!prev || String(horodatage) > String(prev.horodatage)) rows[id] = { etat, occupation, horodatage };
+      }
+    }
+    lines++;
+    pos = lineEnd + 1;
+  }
+  return { part, parts, bytes: { from, to, start, end }, lines, cut, rows };
 }
 
 async function liveStatus(station, env) {
@@ -1911,6 +1991,22 @@ async function route(request, env) {
       detourMinRaw: det.get("x")?.min ?? null,
       reach: det.get("x") ? { toMin: det.get("x").toMin, toKm: det.get("x").toKm } : null,
     });
+  }
+  if (path === "/debug/fr-range" && request.method === "GET") {
+    // /debug/fr-range                      → does Range work, how big is the file
+    // /debug/fr-range?part=3&parts=10      → read piece 3 of 10 only (check this call's CPU time in the Cloudflare logs)
+    // &ids=FRIOYE413102,FRIOYE413103       → ids to look for (default: Ionity Village Catalan Est)
+    const probe = await frProbe();
+    const partParam = url.searchParams.get("part");
+    if (partParam == null || !probe.rangeWorks) return json(request, { probe });
+    const parts = Math.min(50, Math.max(1, Number(url.searchParams.get("parts")) || 10));
+    const part = Math.min(parts - 1, Math.max(0, Number(partParam) || 0));
+    const ids = new Set((url.searchParams.get("ids") ||
+      "FRIOYE413102,FRIOYE413103,FRIOYE413104,FRIOYE413105,FRIOYE413152,FRIOYE413153,FRIOYE413202,FRIOYE413203,FRIOYE413204,FRIOYE413205,FRIOYE413252,FRIOYE413253")
+      .split(",").map((s) => s.trim()).filter(Boolean));
+    const t0 = Date.now();
+    const piece = await frPiece(probe.total, part, parts, ids);
+    return json(request, { probe: { total: probe.total, lastModified: probe.headers["last-modified"] }, wallMs: Date.now() - t0, ...piece });
   }
   if (path === "/debug/ocm-operator" && request.method === "GET") {
     return json(request, { ionity: (await brandOperators(env)).byBrand.ionity });

@@ -757,7 +757,27 @@ async function route(request, env) {
     return json(request, { works: null, tried }, 502);
   }
   if (path === "/debug/de" && request.method === "GET") {
-    const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+    let lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+    const name = (url.searchParams.get("name") || "").trim();
+    if (name) {
+      // Find the Ionity site by name in Open Charge Map (Germany), then look around it.
+      const pois = await ionityInBox(env, [5.8, 47.2, 15.1, 55.1]);
+      const hit = pois.find((p) => (p.AddressInfo?.Title || "").toLowerCase().includes(name.toLowerCase()));
+      if (!hit) return json(request, { error: `No Ionity site named like "${name}" in Open Charge Map`, known: pois.length });
+      const st = { lat: hit.AddressInfo.Latitude, lon: hit.AddressInfo.Longitude };
+      const locs = await deLocationsNear(st.lat, st.lon, Math.min(Number(url.searchParams.get("radius")) || 2000, 5000));
+      const near = (l) => Math.round(1000 * haversineKm(
+        [Number(l.coordinates?.longitude ?? l.coordinates?.lon), Number(l.coordinates?.latitude ?? l.coordinates?.lat)], [st.lon, st.lat]));
+      return json(request, {
+        ocm: { title: hit.AddressInfo.Title, ...st },
+        parsed: summariseDe(locs, st),
+        ionity: locs.filter(isIonityLoc).map((l) => ({ name: l.name, operator: l.operator?.name, source: l.source, metres: near(l),
+          evses: (l.evses || []).map((e) => `${e.evse_id || e.uid} ${e.status}`) })),
+        fastOthers: locs.filter((l) => !isIonityLoc(l) && near(l) < 800)
+          .map((l) => ({ name: l.name, operator: l.operator?.name, owner: l.owner?.name, source: l.source, metres: near(l),
+            evses: (l.evses || []).slice(0, 3).map((e) => `${e.evse_id || e.uid} ${e.status}`) })),
+      });
+    }
     if (!url.searchParams.has("lat")) {
       // No point given: test the Ionity sites Open Charge Map knows around Cologne and the Ruhr.
       const pois = (await ionityInBox(env, [6.4, 50.6, 7.6, 51.6])).slice(0, 6);

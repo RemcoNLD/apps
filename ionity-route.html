@@ -293,6 +293,36 @@
   .rb.blue { background: #1d4fa3; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.7); }
   .sub.roads .rb { font-size: .9rem; margin-right: 2px; }
   .sub.roads .sep { color: var(--muted); margin: 0 3px; }
+  /* Brand logos (site icons, on a white tile so dark logos stay visible) */
+  .logo {
+    display: inline-block; flex-shrink: 0; width: 20px; height: 20px; border-radius: 5px; background: #fff;
+    padding: 2px; object-fit: contain; vertical-align: middle;
+  }
+  .logo.ini {
+    padding: 0; display: inline-grid; place-items: center; color: #fff; font-size: .72rem; font-weight: 800;
+    line-height: 1; text-shadow: 0 0 2px rgba(0,0,0,.5); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.6);
+  }
+  .name .logo { align-self: center; }
+  .name { gap: 8px; }
+  /* Several brands at one site: one small line per brand on the right */
+  .avail.multi { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 3px; }
+  .avail.multi .ml { display: flex; align-items: center; gap: 6px; }
+  .avail.multi .stat { font-size: 1.2rem; letter-spacing: 0; }
+  .avail.multi.n3 .stat { font-size: 1.02rem; }
+  .avail.multi.n3 .logo { width: 17px; height: 17px; }
+  .avail.multi .more { color: var(--muted); font-size: .85rem; font-weight: 700; }
+  .ml.free .stat strong { color: var(--free); }
+  .ml.full .stat strong { color: var(--full); }
+  .ml.offline .stat strong { color: var(--offline); }
+  .ml.stale .stat, .ml.stale .stat strong { color: var(--muted); font-weight: 700; }
+  /* Brand picker on the start screen */
+  .brands { display: flex; flex-wrap: wrap; gap: 8px; }
+  .brand-btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px; border-radius: 999px;
+    background: var(--asphalt-raised); border: 2px solid transparent; font-weight: 700; font-size: 1rem; color: var(--muted);
+  }
+  .brand-btn[aria-pressed="true"] { border-color: var(--sign-blue); color: var(--line); }
+  .brand-btn[aria-pressed="false"] .logo { opacity: .45; filter: grayscale(1); }
   .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
 </style>
 </head>
@@ -301,7 +331,7 @@
 <section id="start">
   <a class="apps-back" href="./">‹ Apps</a>
   <h1>Ionity route</h1>
-  <p class="lede">Ionity chargers along your route, with how many are free and how much of a detour each one is.</p>
+  <p class="lede">Fast chargers along your route, Ionity and any others you pick, with how many are free and how much of a detour each one is.</p>
 
   <label class="field" for="to">Destination</label>
   <input id="to" class="input" type="search" placeholder="Town or address" autocomplete="off">
@@ -316,6 +346,10 @@
   <input id="from" class="input" type="search" placeholder="Your current location" autocomplete="off">
   <div class="hint">Leave empty to start from where you are now.</div>
   <ul id="fromResults" class="results"></ul>
+
+  <span class="field" id="brandsLabel" style="display:block;font-weight:600;margin:18px 0 8px">Chargers to show</span>
+  <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
+  <div class="hint">Live free counts in the Netherlands, Germany and Austria. Elsewhere: location and detour only.</div>
 
   <label class="check"><input id="sim" type="checkbox"> Simulate the drive, for testing at home</label>
 
@@ -352,7 +386,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.20";
+const APP_VERSION = "2026-11-14.21";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -378,6 +412,31 @@ function detourOf(s) {
 const OFF_ROUTE_KM = 1.0;
 const MY_SIDE_MAX_DETOUR = 6; // minutes; "Easy to reach" also shows any charger with at most this detour
 const MY_SIDE_KEY = "ionity-route-myside";
+const BRANDS_KEY = "ionity-route-brands";
+const DETOUR_RETRY_MS = 5 * 60 * 1000;
+// Same keys as the Worker's brand table. The logo comes from the Worker (the brand's site icon).
+const BRANDS = [
+  { key: "ionity", name: "Ionity", color: "#2b2e83" },
+  { key: "fastned", name: "Fastned", color: "#c9a400" },
+  { key: "tesla", name: "Tesla", color: "#e31937" },
+  { key: "enbw", name: "EnBW", color: "#000099" },
+  { key: "aral", name: "Aral pulse", color: "#0064aa" },
+  { key: "shell", name: "Shell Recharge", color: "#dd1d21" },
+  { key: "total", name: "TotalEnergies", color: "#ed0000" },
+  { key: "electra", name: "Electra", color: "#00a6a0" },
+  { key: "izivia", name: "Izivia", color: "#00a0dc" },
+  { key: "powerdot", name: "Powerdot", color: "#6a2c91" },
+  { key: "allego", name: "Allego", color: "#ff6a13" },
+];
+const BRAND = Object.fromEntries(BRANDS.map((b) => [b.key, b]));
+const brandKey = (s) => (BRAND[s.brand] ? s.brand : "ionity");
+function loadBrands() {
+  try {
+    const v = JSON.parse(localStorage.getItem(BRANDS_KEY) || "null");
+    const ok = Array.isArray(v) ? v.filter((k) => BRAND[k]) : [];
+    return ok.length ? ok : ["ionity"];
+  } catch (_) { return ["ionity"]; }
+}
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -390,7 +449,8 @@ const state = {
   user: { km: 0, min: 0, offKm: 0, acc: null, at: null },
   offCount: 0,
   stickToBottom: true,
-  mySideOnly: localStorage.getItem(MY_SIDE_KEY) === "1",           // follow the nearest chargers unless you've scrolled up
+  mySideOnly: localStorage.getItem(MY_SIDE_KEY) === "1",
+  brands: loadBrands(),           // follow the nearest chargers unless you've scrolled up
   watchId: null, simTimer: null, statusTimer: null, wakeLock: null,
 };
 
@@ -453,12 +513,14 @@ function currentPosition() {
 }
 
 async function plan(fromLonLat) {
-  const body = { from: fromLonLat, to: [state.to.lon, state.to.lat] };
+  const body = { from: fromLonLat, to: [state.to.lon, state.to.lat], brands: state.brands };
   if (state.via) body.via = [state.via.lon, state.via.lat];
   const data = await api("/plan", body);
   state.route = data.route;
   state.stations = data.stations;
-  for (const s of state.stations) s.statusAt = Date.now();
+  state.planBrands = data.brands || ["ionity"];
+  // Only the first few come with a status; the rest are fetched once they're on screen.
+  for (const s of state.stations) s.statusAt = s.statusChecked === false ? null : Date.now();
   state.statusAt = Date.now();
   state.user = { km: 0, min: 0, offKm: 0, acc: null, at: null };
   state.offCount = 0;
@@ -645,6 +707,7 @@ function startDriving() {
   state.statusTimer = setInterval(refreshStatus, STATUS_EVERY_MS);
   keepAwake();
   render();
+  setTimeout(() => refreshStatus(false), 300); // what's on screen and not known yet
 }
 
 function stopTracking() {
@@ -691,7 +754,7 @@ function visibleAhead() {
 
 // Ask in small batches: each Worker call may only make a limited number of lookups.
 async function fetchStatus(stations) {
-  const list = stations.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, country: s.country }));
+  const list = stations.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, country: s.country, brand: brandKey(s) }));
   const batches = [];
   for (let i = 0; i < list.length; i += STATUS_BATCH) batches.push(list.slice(i, i + STATUS_BATCH));
   const status = {};
@@ -704,12 +767,37 @@ async function fetchStatus(stations) {
 }
 
 // Tap a charger to refresh just that one.
-async function refreshOne(id) {
-  const s = state.stations.find((x) => x.id === id);
-  if (!s || (s.loadingAt && Date.now() - s.loadingAt < 20000)) return;
-  s.loadingAt = Date.now(); render();
-  try { await fetchStatus([s]); } catch (e) { /* keeps the old (grey) value */ }
-  s.loadingAt = null; save(); render();
+async function refreshOne(ids) {
+  const list = state.stations.filter((x) => ids.includes(x.id) && !(x.loadingAt && Date.now() - x.loadingAt < 20000));
+  if (!list.length) return;
+  for (const s of list) s.loadingAt = Date.now();
+  render();
+  try { await fetchStatus(list); } catch (e) { /* keeps the old (grey) value */ }
+  for (const s of list) s.loadingAt = null;
+  save(); render();
+}
+
+// Detour minutes are worked out only for chargers you actually see (the matrix quota is small).
+// The app sends the route points 3 km before and after each charger.
+let detourBusy = false;
+async function fetchDetours(stations) {
+  const now = Date.now();
+  const todo = stations.filter((s) => !("detourMin" in s) && !(s.detourTriedAt && now - s.detourTriedAt < DETOUR_RETRY_MS));
+  if (!todo.length || detourBusy) return;
+  detourBusy = true;
+  for (const s of todo) s.detourTriedAt = now;
+  try {
+    for (let i = 0; i < todo.length; i += 20) {
+      const chunk = todo.slice(i, i + 20);
+      const items = chunk.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, a: pointAtKm(Math.max(0, s.alongKm - 3)), b: pointAtKm(Math.min(state.route.distanceKm, s.alongKm + 3)) }));
+      const { detours } = await api("/detours", { items });
+      for (const s of chunk) if (detours && s.id in detours) s.detourMin = detours[s.id];
+    }
+  } catch (_) { /* try again in a few minutes */ }
+  finally {
+    detourBusy = false;
+    save(); render();
+  }
 }
 
 // Chargers whose row is (mostly) on screen right now.
@@ -717,10 +805,10 @@ function stationsInView() {
   const list = $("list");
   const box = list.getBoundingClientRect();
   const ids = new Set();
-  for (const row of list.querySelectorAll(".row.st[data-id]")) {
+  for (const row of list.querySelectorAll(".row.st[data-ids]")) {
     const r = row.getBoundingClientRect();
     const shown = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
-    if (shown >= r.height * 0.5) ids.add(row.dataset.id);
+    if (shown >= r.height * 0.5) for (const id of row.dataset.ids.split(" ")) ids.add(id);
   }
   return state.stations.filter((s) => ids.has(s.id));
 }
@@ -733,7 +821,9 @@ async function refreshStatus(force = true) {
   if (document.visibilityState !== "visible" || $("drive").hidden || !state.route) return;
   const now = Date.now();
   const busy = (s) => s.loadingAt && now - s.loadingAt < 20000;
-  const todo = stationsInView().filter((s) => !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
+  const inView = stationsInView();
+  fetchDetours(inView);
+  const todo = inView.filter((s) => !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
   if (!todo.length) return;
   for (const s of todo) s.loadingAt = now;
   render();
@@ -800,7 +890,7 @@ function updateStickyRoad() {
   const hide = () => { el.hidden = true; };
   if (state.stickToBottom || !state.route) return hide();
   const y = $("more").getBoundingClientRect().top - 24; // where the badge sits
-  const rows = [...$("list").querySelectorAll(".row.st[data-id]")];
+  const rows = [...$("list").querySelectorAll(".row.st[data-ids]")];
   const row = rows.find((r) => r.getBoundingClientRect().bottom >= y);
   if (!row) return hide();
   // The row's own change badge is right there: let that one show instead.
@@ -809,7 +899,7 @@ function updateStickyRoad() {
     const r = b.getBoundingClientRect();
     if (r.bottom > y - 30 && r.top < y + 30) return hide();
   }
-  const s = state.stations.find((x) => x.id === row.dataset.id);
+  const s = state.stations.find((x) => x.id === row.dataset.ids.split(" ")[0]);
   const road = s && roadParts().filter((r) => r.fromKm <= s.alongKm).at(-1);
   if (!road) return hide();
   el.innerHTML = `<span>${roadPartBadge(road)}</span>`;
@@ -817,8 +907,8 @@ function updateStickyRoad() {
 }
 $("list").addEventListener("scroll", () => { updateScrollUi(); refreshWhenSettled(); }, { passive: true });
 $("list").addEventListener("click", (e) => {
-  const row = e.target.closest(".row.st[data-id]");
-  if (row) refreshOne(row.dataset.id);
+  const row = e.target.closest(".row.st[data-ids]");
+  if (row) refreshOne(row.dataset.ids.split(" "));
 });
 $("more").addEventListener("click", () => {
   const list = $("list");
@@ -959,8 +1049,11 @@ function fmtMin(m) {
 function clock(minFromNow) {
   return new Date(Date.now() + minFromNow * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
+// Drop the brand from the name (the logo says it) and words like "Raststätte".
+const BRAND_WORDS = /^(ionity|fastned( snelladen| fast charging)?|tesla( supercharger)?|supercharger|enbw( hypercharger| schnellladepark)?|aral( pulse)?|shell( recharge)?|total(energies)?|electra|izivia|powerdot|allego)\b[\s:–-]*/i;
 function shortName(n) {
-  return String(n || "Ionity").replace(/^ionity\s+/i, "").replace(/^(Raststätte|Rastanlage|Rasthof|Autohof)\s+/i, "");
+  const out = String(n || "").replace(BRAND_WORDS, "").replace(/^(Raststätte|Rastanlage|Rasthof|Autohof)\s+/i, "").trim();
+  return out || String(n || "Charger");
 }
 
 function statusInfo(s) {
@@ -1063,29 +1156,93 @@ function fmtClock(m) {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
 }
 
-function stationRow(s, change, after) {
+// ---- brand logos: the brand's site icon via the Worker; a coloured letter if that fails
+const failedLogos = new Set();
+function initialChip(key) {
+  const b = BRAND[key] || BRAND.ionity;
+  return `<span class="logo ini" style="background:${b.color}" title="${esc(b.name)}" role="img" aria-label="${esc(b.name)}">${esc(b.name[0])}</span>`;
+}
+function logoHtml(key) {
+  const b = BRAND[key] || BRAND.ionity;
+  if (failedLogos.has(key)) return initialChip(key);
+  return `<img class="logo" src="${WORKER}/logo/${key}" alt="${esc(b.name)}" title="${esc(b.name)}" data-k="${key}" onerror="logoFail(this)">`;
+}
+window.logoFail = (img) => {
+  const key = img.dataset.k;
+  failedLogos.add(key);
+  img.outerHTML = initialChip(key);
+};
+
+// ---- sites: chargers of different brands at the same place (same side of the road) share a row
+const SITE_KM = 0.2;
+function distKm(a, b) {
+  const x = rad(b.lon - a.lon) * Math.cos(rad((a.lat + b.lat) / 2)), y = rad(b.lat - a.lat);
+  return Math.sqrt(x * x + y * y) * R;
+}
+function sitesOf(stations) {
+  const sites = [];
+  for (const s of stations) {
+    const side = sideOf(s) || s._exitSide || null;
+    const site = sites.slice(-3).find((x) =>
+      distKm(x.members[0], s) <= SITE_KM && (sideOf(x.members[0]) || x.members[0]._exitSide || null) === side);
+    if (site) site.members.push(s); else sites.push({ members: [s] });
+  }
+  for (const site of sites) {
+    // Ionity first (it's what the app is for), then by how close to the road.
+    site.members.sort((a, b) => (brandKey(b) === "ionity") - (brandKey(a) === "ionity") || (a.offRouteKm ?? 0) - (b.offRouteKm ?? 0));
+    site.primary = site.members[0];
+    site.alongKm = Math.min(...site.members.map((m) => m.alongKm));
+    site.alongMin = Math.min(...site.members.map((m) => m.alongMin));
+  }
+  return sites;
+}
+
+// Status of one charger as shown: free / full / offline / stale / nodata, plus its text.
+function shownStatus(s) {
   let info = statusInfo(s);
   const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
   const stale = !s.statusAt || Date.now() - s.statusAt > STALE_MS;
   if (loading) info = { cls: "stale", text: `<span title="Updating">…</span>` };
   else if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="Tap to check">↻</span>` };
-  const km = s.alongKm - state.user.km;
-  const min = s.alongMin - state.user.min;
-  const kw = s.status?.maxKw || s.maxKw;
-  const dm = detourOf(s);
+  return info;
+}
+const CLS_ORDER = ["free", "full", "offline", "stale", "nodata"];
+
+function stationRow(site, change, after) {
+  const s = site.primary, members = site.members;
+  const infos = members.map(shownStatus);
+  const cls = CLS_ORDER.find((c) => infos.some((i) => i.cls === c)) || "nodata";
+  const km = site.alongKm - state.user.km;
+  const min = site.alongMin - state.user.min;
+  const kw = Math.max(0, ...members.map((m) => m.status?.maxKw || m.maxKw || 0)) || null;
+  // The quickest one to reach decides the detour shown.
+  const withDetour = members.filter((m) => detourOf(m) != null);
+  const quick = withDetour.length ? withDetour.reduce((a, b) => (detourOf(b) < detourOf(a) ? b : a)) : s;
+  const dm = detourOf(quick);
+  const reach = reachOf(quick);
   const detour = dm != null && dm >= SHOW_DETOUR_FROM
-    ? `<span class="dmin${reachOf(s) === "roundtrip" ? " round" : ""}" title="${dm} minutes extra to get there and back">+${dm}</span>` : "";
-  const country = s.road ? roadBadge(s.road, s.country)
-    : s.country ? `<span class="flag" title="${esc(s.country)}">${flagOf(s.country)}</span>` : "";
-  const sd = sideOf(s);
-  const reach = reachOf(s);
-  const side = reachMark(reach, sd || s._exitSide);
-  return `<div class="row st ${info.cls}" data-id="${esc(s.id)}" role="button" title="Tap to update this charger">
+    ? `<span class="dmin${reach === "roundtrip" ? " round" : ""}" title="${dm} minutes extra to get there and back">+${dm}</span>` : "";
+  const country = s.country ? `<span class="flag" title="${esc(s.country)}">${flagOf(s.country)}</span>` : "";
+  const side = reachMark(reach, sideOf(quick) || quick._exitSide);
+  const manyBrands = (state.planBrands || state.brands).length > 1;
+  let avail, nameLogo = "";
+  if (members.length === 1) {
+    if (manyBrands) nameLogo = logoHtml(brandKey(s));
+    avail = `<div class="avail"><span class="stat">${infos[0].text}</span></div>`;
+  } else {
+    const shown = members.slice(0, 3);
+    const more = members.length - shown.length;
+    avail = `<div class="avail multi${shown.length >= 3 ? " n3" : ""}">${shown.map((m, i) =>
+      `<span class="ml ${infos[i].cls}">${logoHtml(brandKey(m))}<span class="stat">${infos[i].text}</span></span>`).join("")}${
+      more ? `<span class="more">+${more} more</span>` : ""}</div>`;
+  }
+  const title = members.length > 1 ? `${members.map((m) => (BRAND[brandKey(m)] || {}).name).join(", ")}. Tap to update` : "Tap to update this charger";
+  return `<div class="row st ${cls}" data-ids="${esc(members.map((m) => m.id).join(" "))}" role="button" title="${esc(title)}">
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
     <span class="marker" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
-    <div><div class="name"><span class="label">${esc(shortName(s.name))}</span></div>
-      <div class="sub meta"><span class="when"><b>${fmtKm(km)}</b>&nbsp;km&ensp;${fmtClock(min)}</span>${s.road ? "" : country}${kw && info.cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
-    <div class="avail"><span class="stat">${info.text}</span></div>
+    <div><div class="name">${nameLogo}<span class="label">${esc(shortName(s.name))}</span></div>
+      <div class="sub meta"><span class="when"><b>${fmtKm(km)}</b>&nbsp;km&ensp;${fmtClock(min)}</span>${s.road ? "" : country}${kw && cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
+    ${avail}
   </div>`;
 }
 
@@ -1108,8 +1265,8 @@ function render() {
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcoming();
-  const ahead = visibleAhead();
-  const hiddenCount = all.length - ahead.length;
+  const ahead = sitesOf(visibleAhead());
+  const hiddenCount = sitesOf(all).length - ahead.length;
   const list = $("list");
   const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
   list.innerHTML = ahead.length
@@ -1117,8 +1274,8 @@ function render() {
         roadChange(i ? ahead[i - 1].alongKm : -Infinity, s.alongKm),
         i === ahead.length - 1 ? roadChange(s.alongKm, Infinity) : null)).reverse().join("")
     : hiddenCount
-      ? `<div class="empty">No more easy-to-reach Ionity chargers. ${hiddenCount} that need a longer detour are hidden.</div>`
-      : `<div class="empty">No more Ionity chargers within 5 km of your route.</div>`;
+      ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
+      : `<div class="empty">No more chargers within 5 km of your route.</div>`;
   // Stay at the bottom, or keep your place if you've scrolled up.
   list.scrollTop = state.stickToBottom ? list.scrollHeight : list.scrollHeight - list.clientHeight - fromBottom;
   updateScrollUi();
@@ -1138,6 +1295,7 @@ function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       to: state.to, via: state.via, route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
+      planBrands: state.planBrands,
     }));
   } catch (_) { /* storage full or blocked; the app still works */ }
 }
@@ -1146,7 +1304,8 @@ function restore() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (!saved?.route) return;
-    Object.assign(state, { to: saved.to, via: saved.via || null, route: saved.route, stations: saved.stations, statusAt: saved.statusAt });
+    Object.assign(state, { to: saved.to, via: saved.via || null, route: saved.route, stations: saved.stations, statusAt: saved.statusAt,
+      planBrands: saved.planBrands || ["ionity"] });
     $("sim").checked = !!saved.sim;
     startDriving();
     refreshStatus();
@@ -1176,6 +1335,23 @@ $("version").textContent = APP_VERSION;
 $("checkUpdate").addEventListener("click", () => checkForUpdate(true));
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(false); });
 checkForUpdate(false);
+
+// Brand picker: at least one stays on. Applies to the next route you plan.
+function renderBrandPicker() {
+  $("brands").innerHTML = BRANDS.map((b) =>
+    `<button type="button" class="brand-btn" data-k="${b.key}" aria-pressed="${state.brands.includes(b.key)}">${logoHtml(b.key)}${esc(b.name)}</button>`).join("");
+}
+$("brands").addEventListener("click", (e) => {
+  const btn = e.target.closest(".brand-btn");
+  if (!btn) return;
+  const k = btn.dataset.k;
+  const on = state.brands.includes(k);
+  if (on && state.brands.length === 1) return;
+  state.brands = on ? state.brands.filter((x) => x !== k) : BRANDS.map((b) => b.key).filter((x) => x === k || state.brands.includes(x));
+  try { localStorage.setItem(BRANDS_KEY, JSON.stringify(state.brands)); } catch (_) {}
+  btn.setAttribute("aria-pressed", String(!on));
+});
+renderBrandPicker();
 
 wireSearch("to", "toResults", "to");
 wireSearch("from", "fromResults", "from");

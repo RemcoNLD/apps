@@ -3,10 +3,15 @@
 // Endpoints
 //   GET  /                      health check: shows which secrets are set
 //   GET  /geocode?q=Venlo       address search -> [{label, lat, lon}]
-//   POST /plan                  {from:[lon,lat], to:[lon,lat], corridorKm?:5}
-//                               -> route + Ionity stations along it, with detour minutes
-//   POST /status                {stations:[{id, lat, lon, country}]}
-//                               -> live availability per station (NL only in phase 1)
+//   POST /plan                  {from:[lon,lat], to:[lon,lat], corridorKm?:5, brands?:["ionity","fastned",…]}
+//                               -> route + chargers of those brands along it (detour minutes only when cached)
+//   POST /status                {stations:[{id, lat, lon, country, brand}]}
+//                               -> live availability per station (NL, DE, AT)
+//   POST /detours               {items:[{id, lat, lon, a:[lon,lat], b:[lon,lat]}]} (max 20)
+//                               -> detour minutes per charger (a, b: route points 3 km before and after it)
+//   GET  /brands                the brands the app can show (key, name, colour)
+//   GET  /logo/<brand>          the brand's site icon, fetched from its website and kept 7 days in KV
+//   GET  /debug/brands          which Open Charge Map operators each brand matches
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /debug/ndw?lat=&lon=   raw Dutch (NDW) data around a point, to tune the parser
@@ -45,6 +50,29 @@ const ALLOWED_ORIGINS = [
   "null", // a file opened directly from your laptop
 ];
 
+// ---------------------------------------------------------------- brands
+// ocm:  matches Open Charge Map operator titles (to find the operator IDs)
+// live: matches operator/owner names in the live sources (NDW, MobiData BW, E-Control)
+// evse: matches the start of a charger's EVSE ID ("DE*IOY*…"), a second way to recognise it
+// site: the brand's website, for its icon
+const BRANDS = [
+  { key: "ionity", name: "Ionity", color: "#2b2e83", ocm: /ionity/i, live: /ionity/i, evse: /^[A-Z]{2}\*?IO[NY]\*?/i, site: "ionity.eu" },
+  { key: "fastned", name: "Fastned", color: "#ffd200", ocm: /fastned/i, live: /fastned/i, evse: /^[A-Z]{2}\*?FLA\*?/i, site: "fastnedcharging.com" },
+  { key: "tesla", name: "Tesla", color: "#e31937", ocm: /tesla/i, live: /tesla/i, evse: /^[A-Z]{2}\*?(TSL|TES)\*?/i, site: "tesla.com" },
+  { key: "enbw", name: "EnBW", color: "#000099", ocm: /\benbw\b/i, live: /\benbw\b/i, evse: /^DE\*?EBW\*?/i, site: "enbw.com" },
+  { key: "aral", name: "Aral pulse", color: "#0064aa", ocm: /\baral\b/i, live: /\baral\b/i, evse: /^DE\*?(ARL|ARP)\*?/i, site: "aral.de" },
+  { key: "shell", name: "Shell Recharge", color: "#dd1d21", ocm: /shell|newmotion/i, live: /shell|newmotion/i, evse: /^[A-Z]{2}\*?(TNM|SHL|SRS)\*?/i, site: "shell.com" },
+  { key: "total", name: "TotalEnergies", color: "#ed0000", ocm: /\btotal(energies)?\b/i, live: /\btotal(energies)?\b/i, evse: /^[A-Z]{2}\*?(TCB|TOT)\*?/i, site: "totalenergies.com" },
+  { key: "electra", name: "Electra", color: "#00a6a0", ocm: /\belectra\b/i, live: /\belectra\b/i, evse: /^FR\*?ELC\*?/i, site: "go-electra.com" },
+  { key: "izivia", name: "Izivia", color: "#00a0dc", ocm: /izivia|corri.?door/i, live: /izivia|corri.?door/i, evse: /^FR\*?(IZI|CDO)\*?/i, site: "izivia.com" },
+  { key: "powerdot", name: "Powerdot", color: "#6a2c91", ocm: /power ?dot/i, live: /power ?dot/i, evse: /^[A-Z]{2}\*?PWD\*?/i, site: "powerdot.eu" },
+  { key: "allego", name: "Allego", color: "#ff6a13", ocm: /allego/i, live: /allego/i, evse: /^[A-Z]{2}\*?ALL\*?/i, site: "allego.eu" },
+];
+const BRAND = Object.fromEntries(BRANDS.map((b) => [b.key, b]));
+const brandOf = (key) => BRAND[key] || BRAND.ionity;
+// Only fast chargers: everything below this is left out for the other brands.
+const FAST_KW = 50;
+
 const STATUS_TTL_MS = 60 * 1000;
 const LIVE_COUNTRIES = new Set(["NL", "AT", "DE"]);
 const MAX_DE_LOOKUPS = 12; // Germany: the next 12 sites on the route
@@ -61,7 +89,7 @@ function memoGet(key) {
 }
 function memoSet(key, value, ttlMs) {
   memo.set(key, { value, expires: Date.now() + ttlMs });
-  if (memo.size > 500) memo.delete(memo.keys().next().value);
+  if (memo.size > 3000) memo.delete(memo.keys().next().value);
 }
 
 // ---------------------------------------------------------------- HTTP plumbing
@@ -492,33 +520,62 @@ function roadAtIndex(route, index) {
   return bestGap <= 1 ? best : null;
 }
 
-async function ionityOperatorId(env) {
-  if (env.OCM_IONITY_OPERATOR_ID) return Number(env.OCM_IONITY_OPERATOR_ID);
-  const cached = memoGet("ocm-ionity-id");
+// Open Charge Map operator IDs per brand, looked up by name once a day (and kept 7 days in KV,
+// so a fresh copy of the Worker doesn't have to download the whole list again).
+async function brandOperators(env) {
+  const cached = memoGet("ocm-operators");
   if (cached) return cached;
-  const url = `${OCM_BASE}/poi/?output=json&chargepointid=${OCM_KNOWN_IONITY_POI}&compact=true&verbose=false&key=${env.OCM_API_KEY}`;
-  const data = await fetchJson(url, {}, "Open Charge Map");
-  const id = data?.[0]?.OperatorID;
-  if (!id) throw new HttpError(502, "Could not find Ionity's operator ID in Open Charge Map");
-  memoSet("ocm-ionity-id", id, 24 * 3600 * 1000);
-  return id;
+  let ops = null;
+  if (env.USAGE) {
+    try { ops = JSON.parse((await env.USAGE.get("ocm-operators")) || "null"); } catch { ops = null; }
+  }
+  if (!ops) {
+    const data = await fetchJson(`${OCM_BASE}/referencedata/?output=json&key=${env.OCM_API_KEY}`, {}, "Open Charge Map");
+    ops = (data.Operators || []).map((o) => [o.ID, o.Title || ""]);
+    if (env.USAGE && ops.length) {
+      try { await env.USAGE.put("ocm-operators", JSON.stringify(ops), { expirationTtl: 7 * 24 * 3600 }); countCall("KV writes"); } catch (_) {}
+    }
+  }
+  const byBrand = {};
+  for (const b of BRANDS) byBrand[b.key] = ops.filter(([, t]) => b.ocm.test(t)).map(([id, t]) => ({ id, title: t }));
+  if (env.OCM_IONITY_OPERATOR_ID) byBrand.ionity = [{ id: Number(env.OCM_IONITY_OPERATOR_ID), title: "IONITY (set by hand)" }];
+  if (!byBrand.ionity.length) {
+    // Fallback: read Ionity's operator ID off a known Ionity site.
+    const url = `${OCM_BASE}/poi/?output=json&chargepointid=${OCM_KNOWN_IONITY_POI}&compact=true&verbose=false&key=${env.OCM_API_KEY}`;
+    const id = (await fetchJson(url, {}, "Open Charge Map"))?.[0]?.OperatorID;
+    if (!id) throw new HttpError(502, "Could not find Ionity's operator ID in Open Charge Map");
+    byBrand.ionity = [{ id, title: "IONITY (via a known site)" }];
+  }
+  const idToBrand = {};
+  for (const [k, list] of Object.entries(byBrand)) for (const o of list) idToBrand[o.id] ??= k;
+  const out = { byBrand, idToBrand };
+  memoSet("ocm-operators", out, 24 * 3600 * 1000);
+  return out;
 }
 
-// Ionity sites inside a box: [minLon, minLat, maxLon, maxLat]
+// Is any connector a fast (DC) one? Unknown power counts only when the level says DC fast.
+function isFastPoi(p) {
+  return (p.Connections || []).some((c) =>
+    (c.PowerKW || 0) >= FAST_KW || (c.PowerKW == null && (c.LevelID === 3 || c.CurrentTypeID === 30)));
+}
+
+// Charger sites of the given brands inside a box: [minLon, minLat, maxLon, maxLat]
 // Open Charge Map blocks bursts of requests (HTTP 429). So: remember answers for an hour
 // (charger locations hardly change), pause briefly between calls, and retry once when blocked.
 let ocmLastCall = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function ionityInBox(env, box) {
-  const operatorId = await ionityOperatorId(env);
+async function sitesInBox(env, box, brands = ["ionity"]) {
+  const { byBrand, idToBrand } = await brandOperators(env);
+  const ids = [...new Set(brands.flatMap((k) => (byBrand[k] || []).map((o) => o.id)))].sort((a, b) => a - b);
+  if (!ids.length) return [];
   // Round outward to 0.05° so nearby lookups (route options, rerouting) reuse the same answer.
   const r = (v, up) => (up ? Math.ceil(v * 20) : Math.floor(v * 20)) / 20;
   const [minLon, minLat, maxLon, maxLat] = [r(box[0]), r(box[1]), r(box[2], true), r(box[3], true)];
-  const key = `ocm:${minLon},${minLat},${maxLon},${maxLat}`;
+  const key = `ocm:${ids.join(",")}:${minLon},${minLat},${maxLon},${maxLat}`;
   const cached = memoGet(key);
   if (cached !== undefined) return cached;
-  const url = `${OCM_BASE}/poi/?output=json&compact=false&verbose=false&maxresults=500` +
-    `&operatorid=${operatorId}` +
+  const url = `${OCM_BASE}/poi/?output=json&compact=false&verbose=false&maxresults=2000` +
+    `&operatorid=${ids.join(",")}` +
     `&boundingbox=(${maxLat},${minLon}),(${minLat},${maxLon})&key=${env.OCM_API_KEY}`;
   for (let attempt = 0; ; attempt++) {
     const wait = 250 - (Date.now() - ocmLastCall);
@@ -526,8 +583,11 @@ async function ionityInBox(env, box) {
     ocmLastCall = Date.now();
     try {
       const data = await fetchJson(url, {}, "Open Charge Map");
-      memoSet(key, data, 60 * 60 * 1000);
-      return data;
+      const list = (Array.isArray(data) ? data : [])
+        .map((p) => ({ ...p, _brand: idToBrand[p.OperatorID] || null }))
+        .filter((p) => p._brand && (p._brand === "ionity" || isFastPoi(p)));
+      memoSet(key, list, 60 * 60 * 1000);
+      return list;
     } catch (e) {
       if (attempt < 2 && /returned 429/.test(e.message)) { await sleep(1500 * (attempt + 1)); continue; }
       if (/returned 429/.test(e.message)) {
@@ -537,10 +597,11 @@ async function ionityInBox(env, box) {
     }
   }
 }
+const ionityInBox = (env, box) => sitesInBox(env, box, ["ionity"]);
 
 // Cut the route into pieces of ~150 km, search a box around each piece,
 // then keep only sites within the corridor (checked again in handlePlan).
-async function ionityAlongRoute(env, route, corridorKm) {
+async function sitesAlongRoute(env, route, corridorKm, brands = ["ionity"]) {
   const marginLat = corridorKm / 111;
   const pieces = [];
   let start = 0;
@@ -559,27 +620,44 @@ async function ionityAlongRoute(env, route, corridorKm) {
       minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
     }
     const marginLon = corridorKm / (111 * Math.cos(toRad((minLat + maxLat) / 2)));
-    const pois = await ionityInBox(env, [minLon - marginLon, minLat - marginLat, maxLon + marginLon, maxLat + marginLat]);
+    const pois = await sitesInBox(env, [minLon - marginLon, minLat - marginLat, maxLon + marginLon, maxLat + marginLat], brands);
     for (const p of pois) seen.set(p.ID, p);
   }
   return [...seen.values()];
 }
+const ionityAlongRoute = (env, route, corridorKm) => sitesAlongRoute(env, route, corridorKm, ["ionity"]);
 
 // Detour in minutes = A->S + S->B - A->B, with A and B on the route 3 km before and after the station.
 // Detour per charger and driving direction, remembered for 6 hours: replanning, rerouting and
 // switching route options then don't use the (scarce: 500 a day) matrix quota again.
-function detourKey(route, s) {
-  const a = pointAtKm(route, s.alongKm - 3), b = pointAtKm(route, s.alongKm + 3);
+function detourKeyAB(id, a, b) {
   const bearing = (Math.atan2(b[0] - a[0], b[1] - a[1]) * 180 / Math.PI + 360) % 360;
-  return `det:${s.id}:${Math.round(bearing / 45) % 8}`;
+  return `det:${id}:${Math.round(bearing / 45) % 8}`;
+}
+const detourItem = (route, s) => ({
+  id: s.id, lat: s.lat, lon: s.lon,
+  a: pointAtKm(route, s.alongKm - 3), b: pointAtKm(route, s.alongKm + 3),
+});
+
+// Only what's already known: planning doesn't spend matrix quota. The app asks for the
+// rest (POST /detours) when those chargers come into view.
+function cachedDetours(route, stations) {
+  const result = new Map();
+  for (const s of stations) {
+    const it = detourItem(route, s);
+    const hit = memoGet(detourKeyAB(it.id, it.a, it.b));
+    if (hit !== undefined) result.set(s.id, hit);
+  }
+  return result;
 }
 
-async function detours(env, route, stations) {
+// items: [{id, lat, lon, a:[lon,lat], b:[lon,lat]}]
+async function detourItems(env, items) {
   const result = new Map();
   const todo = [];
-  for (const s of stations) {
-    const hit = memoGet(detourKey(route, s));
-    if (hit !== undefined) result.set(s.id, hit); else todo.push(s);
+  for (const it of items) {
+    const hit = memoGet(detourKeyAB(it.id, it.a, it.b));
+    if (hit !== undefined) result.set(it.id, hit); else todo.push(it);
   }
   // One matrix call computes every source x destination pair: 2n x 2n for n chargers.
   // 20 chargers = 1,600 pairs, well under the public limit of 3,500.
@@ -587,10 +665,8 @@ async function detours(env, route, stations) {
   for (let c = 0; c < todo.length; c += chunkSize) {
     const chunk = todo.slice(c, c + chunkSize);
     const locations = [], sources = [], destinations = [];
-    chunk.forEach((s, k) => {
-      const A = pointAtKm(route, s.alongKm - 3);
-      const B = pointAtKm(route, s.alongKm + 3);
-      locations.push(A, [s.lon, s.lat], B);
+    chunk.forEach((it, k) => {
+      locations.push(it.a, [it.lon, it.lat], it.b);
       sources.push(3 * k, 3 * k + 1);
       destinations.push(3 * k + 1, 3 * k + 2);
     });
@@ -600,15 +676,15 @@ async function detours(env, route, stations) {
         headers: orsHeaders(env),
         body: JSON.stringify({ locations, sources, destinations, metrics: ["duration"] }),
       }, "Matrix");
-      chunk.forEach((s, k) => {
+      chunk.forEach((it, k) => {
         // rows: 2k = A, 2k+1 = S ; columns: 2k = S, 2k+1 = B
         const AS = m.durations?.[2 * k]?.[2 * k];
         const SB = m.durations?.[2 * k + 1]?.[2 * k + 1];
         const AB = m.durations?.[2 * k]?.[2 * k + 1];
         if ([AS, SB, AB].every((v) => typeof v === "number")) {
           const d = Math.max(0, Math.round((AS + SB - AB) / 60));
-          result.set(s.id, d);
-          memoSet(detourKey(route, s), d, 6 * 3600 * 1000);
+          result.set(it.id, d);
+          memoSet(detourKeyAB(it.id, it.a, it.b), d, 6 * 3600 * 1000);
         }
       });
     } catch (e) {
@@ -617,15 +693,19 @@ async function detours(env, route, stations) {
   }
   return result;
 }
+const detours = (env, route, stations) => detourItems(env, stations.map((s) => detourItem(route, s)));
 
 // ---------------------------------------------------------------- live status (NL)
 
 // NDW GeoJSON: properties.cpo_id ("IOY" for Ionity), properties.operator_name,
 // properties.availabilities[] = {available, total, power_type, connector_type, power_max}
-function looksLikeIonity(feature) {
+function featureIsBrand(feature, brand) {
   const p = feature.properties || {};
-  return p.cpo_id === "IOY" || p.cpo_id === "ION" || /ionity/i.test(p.operator_name || "");
+  const names = `${p.operator_name || ""} ${p.owner_name || ""} ${p.suboperator_name || ""}`;
+  return brand.live.test(names) || brand.evse.test(`${p.country_code || "XX"}*${p.cpo_id || ""}*`) ||
+    brand.evse.test(String(feature.id || "").replace(/^([A-Z]{2})-([A-Z0-9]{3})-.*/, "$1*$2*"));
 }
+const looksLikeIonity = (feature) => featureIsBrand(feature, BRAND.ionity);
 
 // Sums the DC entries (Ionity is DC-only, but this keeps AC out if it ever appears).
 function extractCounts(feature) {
@@ -673,24 +753,26 @@ function oppositeSides(a, b) {
 }
 
 // E-Control: a search returns sites around a point, each with points[] and a status per charger.
-async function atStatus(station, env) {
+async function atStatus(station, env, brand = BRAND.ionity) {
   if (!env.ECONTROL_API_KEY) return null;
   const url = `${ECONTROL_BASE}/search?latitude=${station.lat}&longitude=${station.lon}`;
   const sites = await fetchJson(url, {
     headers: { Accept: "application/json", Apikey: env.ECONTROL_API_KEY, Referer: ECONTROL_REFERER },
   }, "E-Control");
-  const ionity = (Array.isArray(sites) ? sites : [])
-    .filter((x) => x.operatorId === "IOY" || /ionity/i.test(`${x.operatorName} ${x.label}`))
+  const mine = (Array.isArray(sites) ? sites : [])
+    .filter((x) => brand.live.test(`${x.operatorName || ""} ${x.label || ""}`) || brand.evse.test(`AT*${x.operatorId || ""}*`))
     .map((x) => ({ x, d: haversineKm([x.location?.lon, x.location?.lat], [station.lon, station.lat]) }))
     .filter((e) => Number.isFinite(e.d) && e.d < 1)
     .sort((a, b) => a.d - b.d);
-  if (!ionity.length) return null;
-  // Some places have two Ionity sites side by side (e.g. Nassereith). Count those together,
+  if (!mine.length) return null;
+  // Some places have two sites of the brand side by side (e.g. Nassereith). Count those together,
   // but not a site whose name says it is on the other side of the road (Nord/Süd, Ost/West).
-  const nearest = ionity[0];
-  const nearby = ionity.filter((e) => e === nearest ||
+  const nearest = mine[0];
+  const nearby = mine.filter((e) => e === nearest ||
     (e.d <= nearest.d + 0.3 && !oppositeSides(`${nearest.x.label} ${nearest.x.name || ""}`, `${e.x.label} ${e.x.name || ""}`)));
-  const points = nearby.flatMap((e) => e.x.points || []).filter((p) => !["REMOVED", "PLANNED"].includes(p.status));
+  let points = nearby.flatMap((e) => e.x.points || []).filter((p) => !["REMOVED", "PLANNED"].includes(p.status));
+  const fastAt = points.filter((p) => (p.capacityKw || 0) >= FAST_KW);
+  if (fastAt.length) points = fastAt; // count the fast chargers only, if the site has any
   if (!points.length) return null;
   const count = (...st) => points.filter((p) => st.includes(p.status)).length;
   const available = count("AVAILABLE");
@@ -714,10 +796,11 @@ async function atStatus(station, env) {
 
 // ---------------------------------------------------------------- live status (DE)
 
-const isIonityEvse = (e) => /^DE\*?IO[NY]\*?/i.test(String(e.evse_id || e.uid || "").replace(/\s/g, ""));
-const isIonityLoc = (l) =>
-  /ionity/i.test(`${l.operator?.name || ""} ${l.owner?.name || ""} ${l.suboperator?.name || ""} ${l.name || ""}`) ||
-  (l.evses || []).some(isIonityEvse);
+const isBrandEvse = (e, brand) => brand.evse.test(String(e.evse_id || e.uid || "").replace(/\s/g, ""));
+const isBrandLoc = (l, brand) =>
+  brand.live.test(`${l.operator?.name || ""} ${l.owner?.name || ""} ${l.suboperator?.name || ""} ${l.name || ""}`) ||
+  (l.evses || []).some((e) => isBrandEvse(e, brand));
+const isIonityLoc = (l) => isBrandLoc(l, BRAND.ionity);
 
 async function deLocationsNear(lat, lon, radius = 400) {
   const url = `${OCPDB_LOCATIONS}?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&radius=${radius}&limit=50`;
@@ -727,11 +810,11 @@ async function deLocationsNear(lat, lon, radius = 400) {
 
 // Summarise the Ionity chargers around one site. The same charger can be reported twice
 // (operator feed and the federal register); merge by EVSE ID and prefer a live status.
-function summariseDe(locations, station) {
+function summariseDe(locations, station, brand = BRAND.ionity) {
   const dist = (l) => haversineKm(
     [Number(l.coordinates?.longitude ?? l.coordinates?.lon), Number(l.coordinates?.latitude ?? l.coordinates?.lat)],
     [station.lon, station.lat]);
-  const ion = locations.filter(isIonityLoc).map((l) => ({ l, d: dist(l) })).filter((x) => x.d <= 0.6);
+  const ion = locations.filter((l) => isBrandLoc(l, brand)).map((l) => ({ l, d: dist(l) })).filter((x) => x.d <= 0.6);
   if (!ion.length) return null;
   // Motorway sites often have one site per side (e.g. "West" and "Ost"), a few hundred metres apart.
   // Keep only the entries close to the nearest one, so the other side is not counted in.
@@ -751,7 +834,7 @@ function summariseDe(locations, station) {
   }
   let points = [...byId.values()];
   if (!points.length) return null;
-  const fast = points.filter((p) => p.kw >= 50);
+  const fast = points.filter((p) => p.kw >= FAST_KW);
   if (fast.length) points = fast; // count the fast chargers only, if the site has any
   const withLive = points.filter((p) => p.live);
   if (withLive.length) points = withLive; // register-only duplicates would inflate the total
@@ -775,47 +858,36 @@ function summariseDe(locations, station) {
   };
 }
 
-async function deStatus(station) {
-  return summariseDe(await deLocationsNear(station.lat, station.lon), station);
+async function deStatus(station, brand = BRAND.ionity) {
+  return summariseDe(await deLocationsNear(station.lat, station.lon), station, brand);
 }
 
 async function liveStatus(station, env) {
   if (!LIVE_COUNTRIES.has(station.country)) return null;
-  if (station.country === "DE") {
-    const key = `status:${station.id}`;
-    const cached = memoGet(key);
-    if (cached !== undefined) return cached;
-    let status = null;
-    try { status = await deStatus(station); } catch (e) { console.log("MobiData BW failed", station.id, e.message); }
-    memoSet(key, status, STATUS_TTL_MS);
-    return status;
-  }
-  if (station.country === "AT") {
-    const key = `status:${station.id}`;
-    const cached = memoGet(key);
-    if (cached !== undefined) return cached;
-    let status = null;
-    try { status = await atStatus(station, env); } catch (e) { console.log("E-Control failed", station.id, e.message); }
-    memoSet(key, status, STATUS_TTL_MS);
-    return status;
-  }
+  const brand = brandOf(station.brand);
   const key = `status:${station.id}`;
   const cached = memoGet(key);
   if (cached !== undefined) return cached;
   let status = null;
-  try {
-    const features = (await ndwFeaturesNear(station.lat, station.lon)).filter(looksLikeIonity);
-    if (features.length) {
-      features.sort((a, b) =>
-        haversineKm(a.geometry.coordinates, [station.lon, station.lat]) -
-        haversineKm(b.geometry.coordinates, [station.lon, station.lat]));
-      const counts = extractCounts(features[0]);
-      status = counts
-        ? { ...counts, ...classify(counts), source: "NDW", checkedAt: new Date().toISOString() }
-        : { available: null, total: null, source: "NDW", note: "found, but counts not recognised", checkedAt: new Date().toISOString() };
+  if (station.country === "DE") {
+    try { status = await deStatus(station, brand); } catch (e) { console.log("MobiData BW failed", station.id, e.message); }
+  } else if (station.country === "AT") {
+    try { status = await atStatus(station, env, brand); } catch (e) { console.log("E-Control failed", station.id, e.message); }
+  } else {
+    try {
+      const features = (await ndwFeaturesNear(station.lat, station.lon)).filter((f) => featureIsBrand(f, brand));
+      if (features.length) {
+        features.sort((a, b) =>
+          haversineKm(a.geometry.coordinates, [station.lon, station.lat]) -
+          haversineKm(b.geometry.coordinates, [station.lon, station.lat]));
+        const counts = extractCounts(features[0]);
+        status = counts
+          ? { ...counts, ...classify(counts), source: "NDW", checkedAt: new Date().toISOString() }
+          : { available: null, total: null, source: "NDW", note: "found, but counts not recognised", checkedAt: new Date().toISOString() };
+      }
+    } catch (e) {
+      console.log("NDW failed", station.id, e.message);
     }
-  } catch (e) {
-    console.log("NDW failed", station.id, e.message);
   }
   memoSet(key, status, STATUS_TTL_MS);
   return status;
@@ -847,8 +919,11 @@ async function handlePlan(request, env) {
   if (!valid(from) || !valid(to)) throw new HttpError(400, "Send from and to as [lon, lat]");
   if (via != null && !valid(via)) throw new HttpError(400, "Send via as [lon, lat]");
 
+  const brands = [...new Set((Array.isArray(body.brands) ? body.brands : ["ionity"]).filter((k) => BRAND[k]))];
+  if (!brands.length) brands.push("ionity");
+
   const route = await getRoute(env, via ? [from, via, to] : [from, to]);
-  const pois = await ionityAlongRoute(env, route, corridorKm);
+  const pois = await sitesAlongRoute(env, route, corridorKm, brands);
   learnCountries(route, pois.map((p) => ({
     index: projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).index,
     iso: p.AddressInfo?.Country?.ISOCode,
@@ -860,7 +935,8 @@ async function handlePlan(request, env) {
     const maxKw = Math.max(0, ...(p.Connections || []).map((c) => c.PowerKW || 0));
     return {
       id: `ocm-${p.ID}`,
-      name: a.Title || "Ionity",
+      brand: p._brand || "ionity",
+      name: a.Title || brandOf(p._brand).name,
       address: [a.AddressLine1, a.Town].filter(Boolean).join(", "),
       country: a.Country?.ISOCode || null,
       lat: a.Latitude,
@@ -876,9 +952,18 @@ async function handlePlan(request, env) {
   stations = stations.filter((s) => s.offRouteKm <= corridorKm);
   stations.sort((a, b) => a.alongKm - b.alongKm);
 
-  const det = await detours(env, route, stations);
-  const status = await statusForMany(stations, env);
-  stations = stations.map((s) => ({ ...s, detourMin: det.has(s.id) ? det.get(s.id) : null, status: status[s.id] }));
+  // Detours only from what's cached: the app asks for the rest (and for live status)
+  // for the chargers it shows. With many brands, asking for everything would waste quota.
+  const det = cachedDetours(route, stations);
+  // Only the first few (the ones on screen right after planning); the app fetches the rest itself.
+  const first = stations.slice(0, 8);
+  const status = await statusForMany(first, env);
+  const checked = new Set(first.filter((s) => status[s.id] != null || !LIVE_COUNTRIES.has(s.country)).map((s) => s.id));
+  stations = stations.map((s) => {
+    const out = { ...s, status: status[s.id] ?? null, statusChecked: checked.has(s.id) };
+    if (det.has(s.id)) out.detourMin = det.get(s.id);
+    return out;
+  });
 
   // Send a lighter route to the app (about 25 m precision), with km and minutes per point.
   const keep = simplifyIndices(route.coords, 0.025);
@@ -896,6 +981,7 @@ async function handlePlan(request, env) {
       min: keep.map((i) => Math.round(route.min[i] * 10) / 10),
     },
     stations,
+    brands,
     generatedAt: new Date().toISOString(),
   });
 }
@@ -1128,6 +1214,85 @@ async function handleAlternatives(request, env) {
   return json(request, { options, tried: tries.length, generatedAt: new Date().toISOString() });
 }
 
+async function handleDetours(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const ok = (p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
+  const items = (Array.isArray(body.items) ? body.items : [])
+    .filter((it) => it && typeof it.id === "string" && Number.isFinite(it.lat) && Number.isFinite(it.lon) && ok(it.a) && ok(it.b))
+    .slice(0, 20);
+  const det = await detourItems(env, items);
+  return json(request, { detours: Object.fromEntries(det), checkedAt: new Date().toISOString() });
+}
+
+// ---------------------------------------------------------------- logos
+// The brand's site icon, fetched once from its own website and kept 7 days in KV.
+const LOGO_TTL_S = 7 * 24 * 3600;
+function absUrl(href, base) { try { return new URL(href, base).href; } catch { return null; } }
+async function findIcon(site) {
+  const base = `https://${site}/`;
+  const tries = [];
+  try {
+    const res = await fetch(base, { headers: { "User-Agent": "Mozilla/5.0 (ionity-route logo fetch)", Accept: "text/html" }, redirect: "follow" });
+    countCall("Logo fetch");
+    const html = (await res.text()).slice(0, 300000);
+    const links = [...html.matchAll(/<link\b[^>]*>/gi)].map((m) => m[0]);
+    const cands = [];
+    for (const l of links) {
+      const rel = (l.match(/rel=["']([^"']+)["']/i) || [])[1] || "";
+      if (!/icon/i.test(rel)) continue;
+      const href = (l.match(/href=["']([^"']+)["']/i) || [])[1];
+      if (!href) continue;
+      const sizes = (l.match(/sizes=["'](\d+)x\d+["']/i) || [])[1];
+      const size = sizes ? Number(sizes) : /apple-touch/i.test(rel) ? 180 : 32;
+      const url = absUrl(href, res.url || base);
+      if (url) cands.push({ url, size, svg: /\.svg(\?|$)/i.test(url) });
+    }
+    // Small but sharp: prefer about 64 px, then larger, then smaller. SVG last (can be a mask icon).
+    cands.sort((a, b) => (a.svg - b.svg) || Math.abs(Math.log((a.size || 32) / 64)) - Math.abs(Math.log((b.size || 32) / 64)));
+    tries.push(...cands.map((c) => c.url));
+  } catch (_) { /* the site may block us; try the usual places */ }
+  tries.push(`${base}favicon.ico`, `https://www.google.com/s2/favicons?domain=${site}&sz=64`);
+  for (const url of tries.slice(0, 5)) {
+    try {
+      const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (ionity-route logo fetch)" }, redirect: "follow" });
+      countCall("Logo fetch");
+      const type = (res.headers.get("Content-Type") || "").split(";")[0].trim();
+      if (!res.ok || !/^image\//.test(type)) continue;
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength < 100 || buf.byteLength > 200000) continue;
+      return { type, buf, from: url };
+    } catch (_) { /* next */ }
+  }
+  return null;
+}
+function toB64(buf) {
+  let s = ""; const b = new Uint8Array(buf);
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function fromB64(b64) { const s = atob(b64); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
+
+async function handleLogo(request, env, key) {
+  const brand = BRAND[key];
+  if (!brand) throw new HttpError(404, "Unknown brand");
+  const headers = (type) => ({ "Content-Type": type, "Cache-Control": `public, max-age=${LOGO_TTL_S}`, ...corsHeaders(request) });
+  let rec = memoGet(`logo:${key}`);
+  if (rec === undefined && env.USAGE) {
+    try { rec = JSON.parse((await env.USAGE.get(`logo:${key}`)) || "null") ?? undefined; } catch { rec = undefined; }
+  }
+  if (rec === undefined) {
+    const icon = await findIcon(brand.site);
+    rec = icon ? { type: icon.type, b64: toB64(icon.buf), from: icon.from } : { none: true };
+    if (env.USAGE) {
+      // A miss is kept a day only, so a site that was down gets another chance.
+      try { await env.USAGE.put(`logo:${key}`, JSON.stringify(rec), { expirationTtl: rec.none ? 24 * 3600 : LOGO_TTL_S }); countCall("KV writes"); } catch (_) {}
+    }
+  }
+  memoSet(`logo:${key}`, rec, 3600 * 1000);
+  if (rec.none) return new Response("No icon found", { status: 404, headers: { "Cache-Control": "public, max-age=3600", ...corsHeaders(request) } });
+  return new Response(fromB64(rec.b64), { headers: headers(rec.type) });
+}
+
 async function handleStatus(request, env) {
   const body = await request.json().catch(() => ({}));
   const stations = Array.isArray(body.stations) ? body.stations : [];
@@ -1156,6 +1321,15 @@ async function route(request, env) {
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
+  if (path === "/detours" && request.method === "POST") return handleDetours(request, env);
+  if (path === "/brands" && request.method === "GET") {
+    return json(request, { brands: BRANDS.map(({ key, name, color }) => ({ key, name, color })) });
+  }
+  if (path.startsWith("/logo/") && request.method === "GET") return handleLogo(request, env, path.slice(6).toLowerCase());
+  if (path === "/debug/brands" && request.method === "GET") {
+    const { byBrand } = await brandOperators(env);
+    return json(request, { operators: byBrand });
+  }
 
   if (path === "/debug/ndw" && request.method === "GET") {
     const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
@@ -1280,7 +1454,7 @@ async function route(request, env) {
     });
   }
   if (path === "/debug/ocm-operator" && request.method === "GET") {
-    return json(request, { ionityOperatorId: await ionityOperatorId(env) });
+    return json(request, { ionity: (await brandOperators(env)).byBrand.ionity });
   }
   throw new HttpError(404, "Unknown endpoint");
 }

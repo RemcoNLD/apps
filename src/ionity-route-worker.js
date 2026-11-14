@@ -353,11 +353,16 @@ async function geocode(env, q) {
   return data.map((d) => ({ label: d.display_name, lat: +d.lat, lon: +d.lon }));
 }
 
+// The routing service looks for a road within 350 m of each point by default. A GPS fix in a
+// car park, a building or off a private road can be further away than that, so allow 5 km.
+const SNAP_RADIUS_M = 5000;
+const snapRadii = (points) => points.map(() => SNAP_RADIUS_M);
+
 async function getRoute(env, points) {
   const data = await fetchJson(`${ORS_BASE}/directions/driving-car/geojson`, {
     method: "POST",
     headers: orsHeaders(env),
-    body: JSON.stringify({ coordinates: points, instructions: true, extra_info: ["countryinfo"] }),
+    body: JSON.stringify({ coordinates: points, radiuses: snapRadii(points), instructions: true, extra_info: ["countryinfo"] }),
   }, "Routing");
   const f = data.features?.[0];
   if (!f) throw new HttpError(502, "Routing returned no route");
@@ -1068,7 +1073,7 @@ async function roughRoute(env, points) {
   const data = await fetchJson(`${ORS_BASE}/directions/driving-car/geojson`, {
     method: "POST",
     headers: orsHeaders(env),
-    body: JSON.stringify({ coordinates: points, instructions: true, geometry_simplify: true }),
+    body: JSON.stringify({ coordinates: points, radiuses: snapRadii(points), instructions: true, geometry_simplify: true }),
   }, "Routing");
   const f = data.features?.[0];
   if (!f) throw new HttpError(502, "Routing returned no route");

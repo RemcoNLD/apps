@@ -136,7 +136,7 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 
 Looked up per charger, cached 60 seconds.
 
-- **NL (NDW):** GeoJSON features in a small box around the charger, filtered on the brand (operator names, `cpo_id`, EVSE ID). Counts DC chargers only. A site whose data hasn't changed for 3 hours while full counts as *probably offline*.
+- **NL (NDW):** GeoJSON features in a small box around the charger, filtered on the brand (operator names, `cpo_id`, EVSE ID). Counts CCS entries when present (a CCS and a CHAdeMO cable on one post are one spot), otherwise DC. Also returns the brand's other NDW sites within 1.2 km (`nearby`: id, position, name, counts); the app matches Open Charge Map pins to these sites, each site once, moves a pin onto its site and hides pins left over as duplicates (`reconcileLive`). That fixes pins on the wrong side of the road and two pins for one site. A site whose data hasn't changed for 3 hours while full counts as *probably offline*.
 - **DE (MobiData BW OCPDB):** OCPI locations around the charger, filtered on the brand. Per EVSE status, deduplicated; only chargers of 50 kW or more. Sites on the other side of the motorway (e.g. "West" and "Ost") are kept apart.
 - **AT (E-Control):** search around the charger, filtered on the brand; same counting. At most 4 Austrian lookups per call.
 - **Result per charger:** `available`, `total`, `state` (`free`, `full`, `likely_offline`), `maxKw`, `source`, `checkedAt`, plus history fields:

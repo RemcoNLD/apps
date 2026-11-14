@@ -757,7 +757,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.36";
+const APP_VERSION = "2026-11-14.37";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1313,7 +1313,7 @@ document.addEventListener("click", (e) => {
 syncPower();
 
 function upcomingShown() {
-  return upcoming().filter((s) => !state.hidden.has(brandKey(s)) && powerOk(s));
+  return upcoming().filter((s) => !state.hidden.has(brandKey(s)) && powerOk(s) && !s.liveDup);
 }
 const shownBrands = () => (state.planBrands || ["ionity"]).filter((k) => !state.hidden.has(k));
 // With "Easy to reach" on, a charger only appears once its detour is known: otherwise it would
@@ -1336,13 +1336,70 @@ async function fetchStatus(stations) {
   const now = Date.now();
   let changed = false;
   const sig = (st) => (st ? `${st.state}|${st.available}|${st.total}` : "");
+  const before = new Map(state.stations.map((s) => [s.id, sig(s.status)]));
+  for (const s of state.stations) {
+    if (!(s.id in status)) continue;
+    s.status = status[s.id]; s.statusAt = now;
+  }
+  reconcileLive();
   for (const s of state.stations) {
     if (!(s.id in status)) continue;
     // A short flash only when the number or state really changed (not on the first value).
-    if (s.status && sig(s.status) !== sig(status[s.id])) { s.flashAt = now; changed = true; }
-    s.status = status[s.id]; s.statusAt = now;
+    if (before.get(s.id) && before.get(s.id) !== sig(s.status)) { s.flashAt = now; changed = true; }
   }
   if (changed) setTimeout(render, FLASH_MS + 100); // take the flash class off again
+}
+
+// Open Charge Map's pins can sit on the wrong side of the road, or two pins can describe one site.
+// The live source (NDW) knows where each site really is. Per brand and place: match pins to live
+// sites, nearest first, each site once. A matched pin moves onto its site (so side, order and
+// detour are right); a pin left without a site is a duplicate and is hidden.
+const MATCH_KM = 1.5;
+function projectPoint(lat, lon) {
+  const { coords, km, min } = state.route;
+  const p = xy([lon, lat], lat);
+  let best = null;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const r = seg(p, xy(coords[i], lat), xy(coords[i + 1], lat));
+    if (!best || r.d < best.d) best = { d: r.d, km: km[i] + r.t * (km[i + 1] - km[i]), min: min[i] + r.t * (min[i + 1] - min[i]) };
+  }
+  return best;
+}
+function reconcileLive() {
+  if (!state.route) return;
+  const withLive = state.stations.filter((s) => s.status?.nearby?.length);
+  const done = new Set();
+  let moved = false;
+  for (const s of withLive) {
+    if (done.has(s.id)) continue;
+    const group = withLive.filter((x) => brandKey(x) === brandKey(s) && distKm(x, s) <= MATCH_KM);
+    const sites = new Map();
+    for (const x of group) for (const f of x.status.nearby) if (f.id) sites.set(f.id, f);
+    const pairs = [];
+    for (const x of group) for (const f of sites.values()) pairs.push({ x, f, d: distKm(x, f) });
+    pairs.sort((a, b) => a.d - b.d);
+    const usedPin = new Set(), usedSite = new Set();
+    for (const { x, f } of pairs) {
+      if (usedPin.has(x.id) || usedSite.has(f.id)) continue;
+      usedPin.add(x.id); usedSite.add(f.id);
+      x.liveDup = false;
+      // The live source's site name (e.g. "Mastpolder"), when Open Charge Map gave both sides one name.
+      if (f.name && /[a-z]{3}/i.test(f.name)) x.name = f.name;
+      x.status = { ...x.status, available: f.available, total: f.total, maxKw: f.maxKw, state: f.state,
+        changedAt: f.changedAt, fullSince: f.fullSince, liveId: f.id };
+      if (distKm(x, f) > 0.03) {
+        const shift = distKm(x, f);
+        x.lat = f.lat; x.lon = f.lon;
+        const pr = projectPoint(x.lat, x.lon);
+        x.alongKm = Math.round(pr.km * 10) / 10; x.alongMin = Math.round(pr.min); x.offRouteKm = Math.round(pr.d * 100) / 100;
+        x._sideV = 0; // side worked out again
+        if (shift > 0.1) { delete x.detourMin; delete x.toKm; delete x.toMin; x.detourTriedAt = 0; } // ask again from the right place
+        moved = true;
+      }
+    }
+    for (const x of group) { if (!usedPin.has(x.id)) x.liveDup = true; done.add(x.id); }
+  }
+  if (moved) state.stations.sort((a, b) => a.alongKm - b.alongKm);
 }
 const FLASH_MS = 1400;
 const flashCls = (s) => (s.flashAt && Date.now() - s.flashAt < FLASH_MS ? " changed" : "");

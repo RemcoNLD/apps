@@ -759,7 +759,10 @@ function extractCounts(feature) {
   const valid = list.filter((e) => typeof e.total === "number" && typeof e.available === "number");
   if (!valid.length) return null;
   const dc = valid.filter((e) => String(e.power_type || "").toUpperCase() === "DC");
-  const use = dc.length ? dc : valid;
+  // A post often has a CCS and a CHAdeMO cable for one charging spot. Adding both counted one spot
+  // twice (Fastned Hoezaar: 9 instead of 8). Count the CCS entries when there are any.
+  const ccs = dc.filter((e) => /COMBO|CCS/i.test(String(e.connector_type || "")));
+  const use = ccs.length ? ccs : dc.length ? dc : valid;
   return {
     available: use.reduce((n, e) => n + e.available, 0),
     total: use.reduce((n, e) => n + e.total, 0),
@@ -947,6 +950,25 @@ async function liveStatus(station, env) {
         status = counts
           ? { ...counts, ...classify(counts), ...ndwTimes(counts), source: "NDW", checkedAt: new Date().toISOString() }
           : { available: null, total: null, source: "NDW", note: "found, but counts not recognised", checkedAt: new Date().toISOString() };
+        // Open Charge Map's pin can be on the wrong side of the road, or two pins can point at one site.
+        // So also send the brand's sites nearby (NDW's own positions); the app matches pins to sites,
+        // each site once, and moves a pin onto its site.
+        const here = [station.lon, station.lat];
+        status.liveId = String(features[0].id ?? "");
+        [status.liveLon, status.liveLat] = features[0].geometry.coordinates;
+        status.nearby = features
+          .filter((f) => haversineKm(f.geometry.coordinates, here) <= 1.2)
+          .slice(0, 4)
+          .map((f) => {
+            const c = extractCounts(f);
+            const pr = f.properties || {};
+            return c ? {
+              id: String(f.id ?? ""), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1],
+              name: pr.name || pr.location_name || null,
+              available: c.available, total: c.total, maxKw: c.maxKw, ...classify(c), ...ndwTimes(c),
+            } : null;
+          })
+          .filter(Boolean);
       }
     } catch (e) {
       console.log("NDW failed", station.id, e.message);

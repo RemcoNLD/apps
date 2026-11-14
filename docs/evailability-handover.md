@@ -6,6 +6,7 @@ A web app for the phone that shows the fast chargers along a driving route, with
 - **Usage page:** https://remconld.github.io/apps/admin.html
 - **Server (proxy):** https://ionity.remco-dv.workers.dev
 - **Code:** GitHub repo `RemcoNLD/apps` (branch `main`)
+- **State at the last update:** app `2026-11-14.50`, Worker deployed from commit of the same day. Open items: section 10.
 
 No passwords, keys or tokens are in this document or in the repo. Where they're needed, this document names the secret and says where to set it.
 
@@ -179,14 +180,15 @@ One file, `evailability.html`, with no libraries or build step. The version is i
 - **Splash:** shows the idea: a car display with "your navigation" on the left and the chargers coming up on the right, the timeline moving down as you drive; about 5 s, or tap. On a fresh start only (after a force close or reboot; not when coming back from the background, and not after an update reload, thanks to a sessionStorage flag). Not shown before the introduction has been seen. "Don't show again" there, and a toggle in Help.
 - **Access code:** asked once per device (section 6).
 - **Introduction:** five slides on first use; can be shown again from Help.
-- **Start:** To / From (empty means your location), a + for up to 2 via points (the screen reads bottom to top like the drive: a new via goes right under To and the earlier one moves down; the lower via is driven first), the brand picker, and "Simulate the drive". Without vias you get the route options as cards. The chosen card shows "Planning…" until the route is ready.
+- **Start:** To / From (empty means your location), a + for up to 2 via points (the screen reads bottom to top like the drive: a new via goes right under To and the earlier one moves down; the lower via is driven first), the brand picker, the charging power (Fast/Extra fast/HPC) and "Simulate the drive". Tapping an empty address field shows the last 10 places used (`evailability-recent`). New route empties the fields and the places behind them together. Without vias you get the route options as cards. The chosen card shows "Planning…" until the route is ready.
 - **Driving:** destination at the top (tap: compare routes from here), you at the bottom, chargers in route order in between. Chargers of several brands at one spot (within 200 m, same side) share one row.
-  - Each row shows the name, distance and time to it, max power, and free/total (green free, orange full, grey when older than 3 minutes or being updated).
+  - Each row shows the name, distance and time to it, max power, and free/total (green free, orange full; the numbers grey when older than 3 minutes, the dot keeps its colour and sweeps while updating).
   - Left of the row: how to reach it (exit arrow, red round trip) and extra minutes.
   - Road numbers on the line where the road changes.
   - Top bar: New route, brands (show or hide brands on this route; adding one replans), Easy to reach, and Help.
 - **Press and hold a charger:** since when it's full or when it was last full, then Apple Maps, Google Maps, Waze, Flitsmeister (on iPhone: copies coordinates; it has no public navigation link there), copy coordinates, share.
 - **Help:** manual with a legend of all symbols, version, and check for update.
+- **Bottom banner:** "You've left the route. New route planned.", "New route planned" (after picking another route) and, after planning, "Only one sensible route here" or why the route comparison failed. Hides after 6 s. The roads of the route are shown at the top, not in the banner.
 
 ### Behaviour
 
@@ -219,6 +221,7 @@ One file, `evailability.html`, with no libraries or build step. The version is i
 | `evailability-splash-off` | Splash screen switched off |
 | `evailability-power` | Minimum charging power: 50, 150 or 300 |
 | `evailability-recent` | Last 10 places used as start, via or destination (label, position, exact), offered in every address field |
+| `evailability-places` | Place names found per spot (~100 m), so rows are named at once after a replan (max 400) |
 
 On first start the app moves settings from the old `ionity-route-…` keys to these. sessionStorage `evailability-session` marks that the splash was already considered in this session.
 
@@ -253,6 +256,9 @@ The app asks for a code once per device. The Worker does the check, so the page 
 - **Free plan:** CPU, memory and the 1,000 KV writes/day are the tightest limits. If they become a problem, the Workers Paid plan ($5/month) removes most of them.
 - **Flitsmeister** can't be opened with a destination from a web page on iPhone, so it gets the coordinates copied.
 - **Access code:** light protection (section 6).
+- **Place names** depend on OpenStreetMap: a named service area, or a fuel station / charging station named "<brand> <place>" next to the charger. Where neither is mapped, the row shows the town. Public Overpass servers sometimes refuse Cloudflare's shared addresses; three mirrors are tried ("Overpass errors" on the usage page).
+- **Route options** come from via points beside the fastest route; a variant that differs only by a short road (e.g. the N3 at Dordrecht, ~9 km) can be missed or treated as the same route. A town as via point is passed on the nearest main road, which is the reliable way to force such a variant.
+- **CPU:** the free plan allows about 10 ms CPU per request. Route comparison, NDW tiles and place lookups are the heaviest; each is split or trimmed to stay under it.
 
 ---
 
@@ -264,3 +270,23 @@ The app, files, texts and device storage are renamed. The Worker still runs as `
 2. Set `name = "evailability"` in `wrangler.toml`, and `WORKER` in `evailability.html` and `admin.html` to `https://evailability.remco-dv.workers.dev`.
 3. In `.github/workflows/deploy-worker.yml`, change the path `src/ionity-route-worker.js` to `src/evailability-worker.js` and the name to "Deploy EVailability Worker". (The GitHub token used by Claude may not edit workflow files.) Until then, a Worker change deploys only when `wrangler.toml` changes too.
 4. After a week or so, delete the old `ionity` Worker. Optionally rename the KV namespace (bound by ID, so nothing breaks).
+
+---
+
+## 10. Open items (as of 14 November 2026)
+
+**To check on the next drive**
+- Row names after the stricter rules (app `.50`): service-area names (e.g. 't Hol, Keizershof, Hoezaar) instead of "Fastned" / "Shell Recharge", no host names (restaurants, hotels), no flipping back. If a row still shows only the brand, add a line in the press-and-hold sheet showing where the name came from (`place.src`, `place.ok`) to tell missing data from a bug.
+- Smoothness of the list after the keyed `patchList` and scroll anchoring.
+- "Overpass" vs "Overpass errors" on the usage page.
+
+**Waiting on the owner**
+- Section 9: move the Worker secrets to a Worker named `evailability`, then switch the app and usage page; update the workflow path (the GitHub token used so far has no `workflow` permission).
+- Decide whether all brands should be equal (Ionity is still the default brand and listed first on shared rows).
+
+**Ideas and next steps, not started**
+- Scaling (100–1,000 daily users): KV writes run out first. Cache API on a custom domain (~€10/year) for status, detours, Open Charge Map tiles and place search instead of per-copy memory; one shared NDW snapshot per minute; fewer KV writes (usage saved less often, charger history off KV); slower refresh for chargers far ahead. Next tiers: Cloudflare Workers Paid $5/month; OpenRouteService has no public paid plan, so self-host it (estimated €40–90/month) plus a geocoder.
+- Monetization (explored only): web app with own payments (Mollie/Stripe or a merchant of record for EU VAT) first, native app (Capacitor, CarPlay, background GPS) if there is traction. Before charging: data licences (Open Charge Map attribution, OpenRouteService, NDW/MobiData/E-Control terms), brand logos are trademarks, trademark check on the name.
+- Live status for Belgium (Eco-Movement token) and France; NDW-style second source for Germany (MobiData BW).
+- CarPlay / car display as a "secondary screen" beside the navigation is the main use case; a native wrapper would be needed for CarPlay.
+

@@ -1378,14 +1378,39 @@ async function placeName(env, [lon, lat]) {
 // area if a nearby place is named like one, otherwise the town. Looked up once per spot (about
 // 100 m) and kept 30 days for everyone.
 const AREA_RE = /\b(verzorgingsplaats|parkeerplaats|rasthof|raststätte|rastanlage|autohof|aire de|aire d'|service area|servicestation)\b/i;
+// Service areas are mapped in OpenStreetMap (highway=services / rest_area) with their own name
+// ("'t Hol", "Keizershof"), which the geocoder doesn't flag as such. So ask OpenStreetMap
+// (Overpass) for the nearest one within 500 m first; the geocoder gives the town.
+const OVERPASS = "https://overpass-api.de/api/interpreter";
+async function serviceAreaNear(lat, lon) {
+  const q = `[out:json][timeout:8];nwr(around:500,${lat},${lon})[highway~"^(services|rest_area)$"][name];out tags center 5;`;
+  countCall("Overpass");
+  const res = await fetch(OVERPASS, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "evailability personal app (github.com/RemcoNLD)" },
+    body: "data=" + encodeURIComponent(q),
+  });
+  if (!res.ok) throw new Error(`Overpass ${res.status}`);
+  const data = await res.json();
+  let best = null, bestD = Infinity;
+  for (const el of data.elements || []) {
+    const c = el.center || (el.lat != null ? { lat: el.lat, lon: el.lon } : null);
+    const name = el.tags?.name;
+    if (!c || !name) continue;
+    const d = haversineKm([c.lon, c.lat], [lon, lat]);
+    if (d < bestD) { bestD = d; best = name; }
+  }
+  return best ? best.replace(AREA_RE, "").replace(/^[\s:–-]+/, "").trim() || best : null;
+}
 async function placeFor(env, lat, lon) {
-  const key = `pl1:${lat.toFixed(3)},${lon.toFixed(3)}`;
+  const key = `pl2:${lat.toFixed(3)},${lon.toFixed(3)}`;
   const hit = memoGet(key);
   if (hit !== undefined) return hit;
   if (env.USAGE) {
     try { const kv = JSON.parse((await kvGet(env, key)) || "null"); if (kv) { memoSet(key, kv, 24 * 3600 * 1000); return kv; } } catch (_) {}
   }
-  let area = null, town = null;
+  let area = null, town = null, ok = true;
+  try { area = await serviceAreaNear(lat, lon); } catch (e) { ok = false; console.log("Overpass failed", e.message); }
   try {
     const url = `${PELIAS_BASE}/reverse?point.lat=${lat}&point.lon=${lon}&size=10&layers=venue&boundary.circle.radius=0.4`;
     const data = await fetchJson(url, { headers: orsHeaders(env) }, "Geocoder");
@@ -1396,9 +1421,10 @@ async function placeFor(env, lat, lon) {
     }
   } catch (_) {}
   if (!town) town = await placeName(env, [lon, lat]);
-  const out = { area, town };
-  memoSet(key, out, 24 * 3600 * 1000);
-  if (env.USAGE && (area || town)) {
+  const out = { area, town, v: 2 };
+  memoSet(key, out, (ok ? 24 : 1) * 3600 * 1000);
+  // Kept 30 days for everyone, but not when the service-area lookup failed (try again later).
+  if (env.USAGE && ok && (area || town)) {
     try { await env.USAGE.put(key, JSON.stringify(out), { expirationTtl: 30 * 24 * 3600 }); countCall("KV writes"); } catch (_) {}
   }
   return out;
@@ -1406,7 +1432,7 @@ async function placeFor(env, lat, lon) {
 async function handlePlaces(request, env) {
   const body = await request.json().catch(() => ({}));
   const pts = (Array.isArray(body.points) ? body.points : [])
-    .filter((x) => x && typeof x.id === "string" && Number.isFinite(x.lat) && Number.isFinite(x.lon)).slice(0, 8);
+    .filter((x) => x && typeof x.id === "string" && Number.isFinite(x.lat) && Number.isFinite(x.lon)).slice(0, 5);
   const places = {};
   for (const x of pts) places[x.id] = await placeFor(env, x.lat, x.lon);
   return json(request, { places });

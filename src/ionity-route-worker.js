@@ -440,6 +440,14 @@ async function ndwFeaturesNear(lat, lon, dLat = 0.004, dLon = 0.006) {
 
 // ---------------------------------------------------------------- live status (AT)
 
+// "Ohligser Heide West" vs "... Ost": names that point to different sides of the road.
+const SIDE_WORDS = /\b(nord|north|süd|sued|south|ost|east|west|richtung\s+\S+)\b/gi;
+function oppositeSides(a, b) {
+  const wa = (String(a).match(SIDE_WORDS) || []).map((w) => w.toLowerCase()).sort().join("|");
+  const wb = (String(b).match(SIDE_WORDS) || []).map((w) => w.toLowerCase()).sort().join("|");
+  return wa !== wb && (wa || wb) !== "";
+}
+
 // E-Control: a search returns sites around a point, each with points[] and a status per charger.
 async function atStatus(station, env) {
   if (!env.ECONTROL_API_KEY) return null;
@@ -453,7 +461,12 @@ async function atStatus(station, env) {
     .filter((e) => Number.isFinite(e.d) && e.d < 1)
     .sort((a, b) => a.d - b.d);
   if (!ionity.length) return null;
-  const points = (ionity[0].x.points || []).filter((p) => !["REMOVED", "PLANNED"].includes(p.status));
+  // Some places have two Ionity sites side by side (e.g. Nassereith). Count those together,
+  // but not a site whose name says it is on the other side of the road (Nord/Süd, Ost/West).
+  const nearest = ionity[0];
+  const nearby = ionity.filter((e) => e === nearest ||
+    (e.d <= nearest.d + 0.3 && !oppositeSides(`${nearest.x.label} ${nearest.x.name || ""}`, `${e.x.label} ${e.x.name || ""}`)));
+  const points = nearby.flatMap((e) => e.x.points || []).filter((p) => !["REMOVED", "PLANNED"].includes(p.status));
   if (!points.length) return null;
   const count = (...st) => points.filter((p) => st.includes(p.status)).length;
   const available = count("AVAILABLE");

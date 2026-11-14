@@ -257,6 +257,7 @@ const APP_VERSION = "2026-11-14.8";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
+const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
 const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
 // Every charging stop costs a little time to pull in and out (exit lane, slow road through the
@@ -479,9 +480,16 @@ async function refreshStatus() {
   const ahead = upcoming();
   if (!ahead.length) return;
   try {
-    const { status } = await api("/status", {
-      stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, country: s.country })),
-    });
+    // Ask in small batches: each Worker call may only make a limited number of lookups,
+    // so one big request left the far-away stations without status.
+    const list = ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, country: s.country }));
+    const batches = [];
+    for (let i = 0; i < list.length; i += STATUS_BATCH) batches.push(list.slice(i, i + STATUS_BATCH));
+    const status = {};
+    for (let i = 0; i < batches.length; i += 3) { // 3 batches at a time
+      const res = await Promise.all(batches.slice(i, i + 3).map((b) => api("/status", { stations: b })));
+      for (const r of res) Object.assign(status, r.status);
+    }
     for (const s of state.stations) if (s.id in status) s.status = status[s.id];
     state.statusAt = Date.now();
     save();

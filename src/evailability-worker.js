@@ -1381,17 +1381,33 @@ const AREA_RE = /\b(verzorgingsplaats|parkeerplaats|rasthof|raststätte|rastanla
 // Service areas are mapped in OpenStreetMap (highway=services / rest_area) with their own name
 // ("'t Hol", "Keizershof"), which the geocoder doesn't flag as such. So ask OpenStreetMap
 // (Overpass) for the nearest one within 500 m first; the geocoder gives the town.
-const OVERPASS = "https://overpass-api.de/api/interpreter";
+// Public Overpass servers limit requests per address, and Cloudflare's outgoing addresses are
+// shared by many Workers, so one server may refuse ("429"). Try a few mirrors in turn.
+const OVERPASS_MIRRORS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+];
 async function serviceAreaNear(lat, lon) {
-  const q = `[out:json][timeout:8];nwr(around:500,${lat},${lon})[highway~"^(services|rest_area)$"][name];out tags center 5;`;
-  countCall("Overpass");
-  const res = await fetch(OVERPASS, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "evailability personal app (github.com/RemcoNLD)" },
-    body: "data=" + encodeURIComponent(q),
-  });
-  if (!res.ok) throw new Error(`Overpass ${res.status}`);
-  const data = await res.json();
+  const q = `[out:json][timeout:8];nwr[highway~"^(services|rest_area)$"][name](around:800,${lat},${lon});out tags center 5;`;
+  let data = null, lastErr = null;
+  for (const url of OVERPASS_MIRRORS) {
+    countCall("Overpass");
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "evailability personal app (github.com/RemcoNLD)", Accept: "application/json" },
+        body: "data=" + encodeURIComponent(q),
+      });
+      if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
+      data = await res.json();
+      break;
+    } catch (e) {
+      lastErr = e;
+      countCall("Overpass errors"); // shows on the usage page: if this grows, the mirrors refuse us
+    }
+  }
+  if (!data) throw lastErr || new Error("Overpass unavailable");
   let best = null, bestD = Infinity;
   for (const el of data.elements || []) {
     const c = el.center || (el.lat != null ? { lat: el.lat, lon: el.lon } : null);
@@ -1403,7 +1419,7 @@ async function serviceAreaNear(lat, lon) {
   return best ? best.replace(AREA_RE, "").replace(/^[\s:–-]+/, "").trim() || best : null;
 }
 async function placeFor(env, lat, lon) {
-  const key = `pl2:${lat.toFixed(3)},${lon.toFixed(3)}`;
+  const key = `pl3:${lat.toFixed(3)},${lon.toFixed(3)}`;
   const hit = memoGet(key);
   if (hit !== undefined) return hit;
   if (env.USAGE) {
@@ -1421,7 +1437,7 @@ async function placeFor(env, lat, lon) {
     }
   } catch (_) {}
   if (!town) town = await placeName(env, [lon, lat]);
-  const out = { area, town, v: 2 };
+  const out = { area, town, v: 3, ok };
   memoSet(key, out, (ok ? 24 : 1) * 3600 * 1000);
   // Kept 30 days for everyone, but not when the service-area lookup failed (try again later).
   if (env.USAGE && ok && (area || town)) {

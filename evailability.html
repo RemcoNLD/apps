@@ -838,7 +838,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.44";
+const APP_VERSION = "2026-11-14.45";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2160,15 +2160,18 @@ let placesBusy = false;
 async function fetchPlaces(stations) {
   if (placesBusy) return;
   // v2: with the service-area name from OpenStreetMap (older answers had the town only).
-  const todo = stations.filter((s) => s._needsPlace && s.place?.v !== 2 && s.placeTried !== 2).slice(0, 5);
+  // An answer whose service-area lookup failed (ok: false) is asked again after 10 minutes.
+  const now = Date.now();
+  const stale = (s) => s.place?.v !== 3 || (s.place.ok === false && now - (s.placeAt || 0) > 10 * 60 * 1000);
+  const todo = stations.filter((s) => s._needsPlace && stale(s) && !(s.placeTriedAt && now - s.placeTriedAt < 10 * 60 * 1000)).slice(0, 5);
   if (!todo.length) return;
   placesBusy = true;
-  for (const s of todo) s.placeTried = 2;
+  for (const s of todo) s.placeTriedAt = now;
   try {
     const { places } = await api("/places", { points: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon })) });
-    for (const s of todo) if (places?.[s.id]) s.place = places[s.id];
+    for (const s of todo) if (places?.[s.id]) { s.place = places[s.id]; s.placeAt = now; }
     save(); render();
-  } catch (_) { for (const s of todo) s.placeTried = false; }
+  } catch (_) { /* tried again in 10 minutes */ }
   finally { placesBusy = false; }
 }
 

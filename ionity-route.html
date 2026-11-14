@@ -198,7 +198,7 @@
   }
   .banner.ok { border-left-color: var(--free); }
   .sub.roads { color: var(--muted); font-weight: 600; font-size: 1rem; }
-  /* Road numbers styled like little road signs: motorways red, E-roads green, national roads yellow */
+  /* Road numbers styled like that country's road signs (see roadBadge) */
   .rb {
     display: inline-block; flex-shrink: 0; padding: 2px 6px 0; border-radius: 4px;
     font-size: .85rem; font-weight: 800; line-height: 1.25; letter-spacing: .02em;
@@ -206,6 +206,7 @@
   }
   .rb.e { background: #0f7a3f; }
   .rb.n { background: #f2c200; color: #1b1b1b; box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.35); }
+  .rb.blue { background: #1d4fa3; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.7); }
   .sub.roads .rb { font-size: .9rem; margin-right: 2px; }
   .sub.roads .sep { color: var(--muted); margin: 0 3px; }
   .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
@@ -593,14 +594,36 @@ function showBanner(text, { ok = false, retry = false, hideAfter = 0 } = {}) {
   if (hideAfter) state.bannerTimer = setTimeout(() => { $("offRoute").hidden = true; }, hideAfter);
 }
 
-function roadBadge(ref) {
-  const kind = /^E/.test(ref) ? "e" : /^[BN]/.test(ref) ? "n" : "m";
-  return `<span class="rb ${kind}">${esc(ref)}</span>`;
+// Road numbers look like that country's signs: motorways white on blue in Germany, Austria and
+// Belgium, white on red in the Netherlands and France; national roads yellow (Austria: blue).
+function roadBadge(ref, country) {
+  const kind = /^E/.test(ref) ? "e" : /^[BND]\d/.test(ref) ? "n" : "m";
+  const blue = (kind === "m" && ["DE", "AT", "BE", "LU", "CH"].includes(country)) || (kind === "n" && country === "AT");
+  return `<span class="rb ${kind}${blue ? " blue" : ""}">${esc(ref)}</span>`;
 }
+const roadPartBadge = (r) => roadBadge(r.ref, countryAt(r.fromKm ?? r.toKm, r.toKm));
 
 function roadsAhead(limit = 4) {
-  const refs = (state.route?.roads || []).filter((r) => r.toKm > state.user.km + 1).map((r) => r.ref);
-  return refs.filter((r, i) => r !== refs[i - 1]).slice(0, limit);
+  const parts = (state.route?.roads || []).filter((r) => r.toKm > state.user.km + 1);
+  return parts.filter((r, i) => r.ref !== parts[i - 1]?.ref).slice(0, limit);
+}
+
+// Which country a stretch of road is in, judged from the chargers on or near it.
+function countryAt(fromKm, toKm) {
+  const st = (state.stations || []).filter((s) => s.country);
+  const inside = st.filter((s) => s.alongKm >= fromKm && s.alongKm <= toKm);
+  if (inside.length) {
+    const n = {};
+    for (const s of inside) n[s.country] = (n[s.country] || 0) + 1;
+    return Object.entries(n).sort((a, b) => b[1] - a[1])[0][0];
+  }
+  const mid = (fromKm + toKm) / 2;
+  let best = null, gap = 60; // only trust a charger within 60 km
+  for (const s of st) {
+    const d = Math.min(Math.abs(s.alongKm - fromKm), Math.abs(s.alongKm - toKm), Math.abs(s.alongKm - mid));
+    if (d < gap) { gap = d; best = s.country; }
+  }
+  return best;
 }
 
 // You've left the route: plan a new one from where you are, and say so.
@@ -613,7 +636,7 @@ async function reroute() {
     await plan(from);
     state.stickToBottom = true;
     const roads = roadsAhead();
-    showBanner(roads.length ? `New route via ${roads.join(" › ")}` : "New route planned", { ok: true, hideAfter: 8000 });
+    showBanner(roads.length ? `New route via ${roads.map((r) => r.ref).join(" › ")}` : "New route planned", { ok: true, hideAfter: 8000 });
   } catch (e) {
     showBanner(`Couldn’t reroute: ${e.message}`, { retry: true });
   } finally {
@@ -672,7 +695,7 @@ function stationRow(s) {
   const dm = detourOf(s);
   const detour = dm != null && dm >= SHOW_DETOUR_FROM
     ? `<span class="detour" title="${dm} minutes extra">+${dm}</span>` : "";
-  const country = s.road ? roadBadge(s.road)
+  const country = s.road ? roadBadge(s.road, s.country)
     : s.country && s.country !== "NL" ? `<span class="country">${esc(s.country)}</span>` : "";
   const sd = sideOf(s);
   const side = sd === "right" ? `<span class="side right" title="On your side of the road">Right</span>`
@@ -693,7 +716,7 @@ function render() {
 
   $("destRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
     <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
-      <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead().length ? `<div class="sub roads">via ${roadsAhead().map(roadBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
+      <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead().length ? `<div class="sub roads">via ${roadsAhead().map(roadPartBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
     <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`;
 
   const gps = u.at == null ? "Waiting for your location…"

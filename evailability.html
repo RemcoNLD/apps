@@ -396,13 +396,16 @@
     clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
   }
   /* Road badge sitting on the timeline where the road changes */
-  .tl-road { position: absolute; left: 24px; transform: translate(-50%, 50%); z-index: 2; line-height: 1; }
+  .tl-road { position: absolute; left: 26px; /* = the line's centre: 16 px strip padding + 26 = 42 */ transform: translate(-50%, 50%); z-index: 2; line-height: 1; }
   .tl-road.below { bottom: 0; }
   .tl-road.under-fab { visibility: hidden; }
   .tl-road.above { top: 0; transform: translate(-50%, -50%); }
   .tl-road { border-radius: 8px; padding: 3px; background: var(--asphalt); }
   .tl-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
   .tl-road .rb.shield, .sticky-road .rb.shield { padding: 1.5px; }
+  /* All badges on the line the same width (wide enough for "A100", "E314"), so one taking the
+     place of another doesn't shift sideways. */
+  .tl-road .rb, .sticky-road .rb { min-width: 3.6em; box-sizing: border-box; text-align: center; }
   .tl-road .rb.shield > span, .sticky-road .rb.shield > span { padding: 1px 5px 0; }
   .rb.blue { background: #1d4fa3; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.7); }
   .sub.roads .rb { font-size: .9rem; margin-right: 2px; }
@@ -841,7 +844,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.56";
+const APP_VERSION = "2026-11-14.57";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".

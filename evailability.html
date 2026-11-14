@@ -314,6 +314,23 @@
   .navsheet .cancel { margin-top: 10px; width: 100%; padding: 13px; border-radius: 12px; border: 0; background: var(--asphalt); font-weight: 800; font-size: 1.05rem; }
   .row.st:active { opacity: .7; }
   .st.nodata .marker { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
+  /* The dot keeps the charger's colour, also when its numbers are old (only the numbers go grey). */
+  .row.st .marker.dot-free, .row.st .marker.dot-full, .row.st .marker.dot-offline {
+    width: 30px; height: 30px; border: 5px solid var(--asphalt);
+  }
+  .row.st .marker.dot-free { background: var(--free); }
+  .row.st .marker.dot-full { background: var(--full); }
+  .row.st .marker.dot-offline { background: var(--offline); }
+  .row.st .marker.dot-nodata { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
+  /* Updating: a radar sweep turning inside the dot */
+  .row.st .marker { position: relative; overflow: hidden; }
+  .row.st .marker.scanning::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent 0deg 250deg, rgba(255,255,255,.4) 350deg, rgba(255,255,255,.95) 356deg 360deg);
+    animation: radar 1.1s linear infinite;
+  }
+  @keyframes radar { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .marker.scanning::after { animation-duration: 3s; } }
 
   .dest .marker {
     width: 36px; height: 36px; border-radius: 8px; background: var(--line);
@@ -740,7 +757,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.34";
+const APP_VERSION = "2026-11-14.35";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2030,6 +2047,10 @@ function stationRow(site, change, after) {
   const s = site.primary, members = site.members;
   const infos = members.map(shownStatus);
   const cls = CLS_ORDER.find((c) => infos.some((i) => i.cls === c)) || "nodata";
+  // The dot shows the charger's state even when the numbers are old; it sweeps while updating.
+  const base = members.map(statusInfo);
+  const dot = CLS_ORDER.find((c) => base.some((i) => i.cls === c)) || "nodata";
+  const scanning = members.some((m) => m.loadingAt && Date.now() - m.loadingAt < 20000);
   const kw = Math.max(0, ...members.map((m) => m.status?.maxKw || m.maxKw || 0)) || null;
   // The quickest one to reach decides the detour shown.
   const withDetour = members.filter((m) => detourOf(m) != null);
@@ -2057,7 +2078,7 @@ function stationRow(site, change, after) {
   const title = members.length > 1 ? `${members.map((m) => (BRAND[brandKey(m)] || {}).name).join(", ")}. Tap to update` : "Tap to update this charger";
   return `<div class="row st ${cls}" data-ids="${esc(members.map((m) => m.id).join(" "))}" role="button" title="${esc(title)}">
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
-    <span class="marker" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
+    <span class="marker dot-${dot}${scanning ? " scanning" : ""}" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
     <div><div class="name">${nameLogo}<span class="label">${esc(shortName(s.name))}</span></div>
       <div class="sub meta"><span class="when"><b>${fmtKm(km)}</b>&nbsp;km&ensp;${fmtClock(min)}</span>${s.road ? "" : country}${kw && cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
     ${avail}
@@ -2320,7 +2341,7 @@ function helpHtml() {
     <div class="k">${dot("free")}</div><div class="v"><b class="kv" style="color:var(--free)">3/6</b>&ensp;3 of 6 chargers free right now.</div>
     <div class="k">${dot("full")}</div><div class="v"><b class="kv" style="color:var(--full)">0/4</b>&ensp;All in use.</div>
     <div class="k">${dot("offline")}</div><div class="v"><b>Offline</b>: reported out of order, or nothing has changed for hours.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old. A number that changes pops briefly.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old; the dot keeps its colour. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>

@@ -175,7 +175,7 @@ One file, `evailability.html`, with no libraries or build step. The version is i
 
 ### Screens
 
-- **Splash:** on a fresh start only (after a force close or reboot; not when coming back from the background, and not after an update reload, thanks to a sessionStorage flag). Not shown before the introduction has been seen. "Don't show again" there, and a toggle in Help.
+- **Splash:** shows the idea: a car display with "your navigation" on the left and the chargers coming up on the right, the timeline moving down as you drive; about 5 s, or tap. On a fresh start only (after a force close or reboot; not when coming back from the background, and not after an update reload, thanks to a sessionStorage flag). Not shown before the introduction has been seen. "Don't show again" there, and a toggle in Help.
 - **Access code:** asked once per device (section 6).
 - **Introduction:** five slides on first use; can be shown again from Help.
 - **Start:** To / From (empty means your location), a + for up to 2 via points, the brand picker, and "Simulate the drive". Without vias you get the route options as cards. The chosen card shows "Planning…" until the route is ready.
@@ -195,6 +195,7 @@ One file, `evailability.html`, with no libraries or build step. The version is i
 - **Detours:** fetched for the rows on screen. With "Easy to reach" on, also for all chargers within 150 km ahead (and 50 km beyond the furthest row you scrolled to); a charger then only appears once its detour is known.
 - **Distance on a row:** for a charger next to the road (within 250 m: a service area) it's where the route passes it. For one further away it's the route up to point A (3 km before the closest point) plus the drive A→charger from `/detours` (`wayTo()`). Before that answer is in, the closest point on the route is used, which makes chargers around one junction all show the same distance.
 - **Charging power:** Fast (50 kW+), Extra fast (150 kW+) or HPC (300 kW+), on the start screen and in the brand sheet (`evailability-power`). A filter on the device: the live `maxKw` wins over Open Charge Map's (so an AC charger listed as fast drops out); unknown power shows only with Fast, except Ionity. Above Fast, the brands button shows e.g. "150+".
+- **Row names:** `siteName()`: brand words are dropped; when nothing useful is left (e.g. every Shell site is called "Shell Recharge"), the live source's site name, a service-area name in the address, or the town is used.
 - **Order and the other side:** at a service area your side comes first (`orderSites`: the other side counts 600 m later). A charger on the other side shows the real distance and time including the turn-around (route to point A + the drive A→charger from `/detours`).
 - **"Easy to reach":** on your side of the road, or a detour of at most 6 minutes, and no round trips.
 - **Screen:** kept on while driving with the Screen Wake Lock, asked again whenever iOS releases it, on every tap and every 30 s, plus a tiny silent muted looping video (`NOSLEEP_MP4`, no sound track, so music and CarPlay aren't interrupted) as a fallback for home-screen apps. Help shows which is active. Released on arrival and on New route.

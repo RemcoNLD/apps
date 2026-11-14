@@ -543,56 +543,100 @@
   .legend .kv { font-weight: 800; font-size: 1.15rem; }
   .help-actions { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
   .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
-  /* Splash screen on a fresh start (not when the app comes back from the background) */
+  /* Splash screen on a fresh start (not when the app comes back from the background).
+     It shows the idea: your navigation on the left, the chargers coming up on the right. */
   .splash {
     position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    padding: calc(env(safe-area-inset-top, 0px) + 24px) 24px calc(env(safe-area-inset-bottom, 0px) + 24px);
+    padding: calc(env(safe-area-inset-top, 0px) + 20px) 18px calc(env(safe-area-inset-bottom, 0px) + 110px);
     background: radial-gradient(120% 80% at 50% 30%, #26323b 0%, #1d2429 55%, #151b1f 100%); color: #f3f1ea;
     text-align: center; transition: opacity .45s ease, transform .45s ease; -webkit-tap-highlight-color: transparent;
   }
   .splash.gone { opacity: 0; transform: scale(1.04); pointer-events: none; }
-  .splash .mark { width: 132px; height: 132px; filter: drop-shadow(0 14px 30px rgba(0,0,0,.45)); animation: pop .6s cubic-bezier(.2,1.4,.4,1) both; }
-  .splash .mark .dash { stroke-dasharray: 7 9; animation: drive .9s linear infinite; }
-  .splash .mark .bolt { transform-origin: 60px 44px; animation: glow 1.6s ease-in-out infinite; }
-  .splash .sp-name { margin: 26px 0 6px; font-size: 2.5rem; font-weight: 800; letter-spacing: -.01em; animation: rise .6s .15s ease both; }
+  .splash .head { display: flex; align-items: center; gap: 12px; animation: rise .6s ease both; }
+  .splash .head svg { width: 46px; height: 46px; }
+  .splash .sp-name { font-size: 2.2rem; font-weight: 800; letter-spacing: -.01em; }
   .splash .sp-name b { color: #43b96d; }
-  .splash .tag { margin: 0; color: #93a0a8; font-size: 1.1rem; animation: rise .6s .3s ease both; }
-  .splash .chips { display: flex; gap: 10px; margin-top: 26px; }
-  .splash .chips span {
-    font-weight: 800; font-size: 1.15rem; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.06);
-    animation: rise .5s ease both;
+  .splash .tag { margin: 10px 0 22px; color: #93a0a8; font-size: 1.08rem; line-height: 1.35; animation: rise .6s .15s ease both; }
+  /* The car display */
+  .splash .screen {
+    width: min(92vw, 400px); aspect-ratio: 16 / 10; display: grid; grid-template-columns: 52% 48%;
+    border-radius: 18px; overflow: hidden; background: #0f1417; box-shadow: 0 0 0 6px #0b0f11, 0 18px 40px rgba(0,0,0,.5);
+    animation: pop .6s .1s cubic-bezier(.2,1.3,.4,1) both; text-align: left;
   }
-  .splash .chips span:nth-child(1) { color: #43b96d; animation-delay: .45s; }
-  .splash .chips span:nth-child(2) { color: #43b96d; animation-delay: .6s; }
-  .splash .chips span:nth-child(3) { color: #f0a43a; animation-delay: .75s; }
+  .splash .nav { position: relative; background: #2a3238; overflow: hidden; }
+  .splash .nav svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .splash .nav .lbl, .splash .ev .lbl {
+    position: absolute; left: 8px; bottom: 6px; font-size: .62rem; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: rgba(255,255,255,.55);
+  }
+  .splash .nav .road { stroke-dasharray: 6 8; animation: drive .7s linear infinite; }
+  .splash .ev { position: relative; background: #1d2429; overflow: hidden; }
+  .splash .ev .line { position: absolute; left: 17px; top: 18px; bottom: 22px; width: 4px; background: #2f63b8; border-radius: 2px; }
+  .splash .ev .dest { position: absolute; left: 11px; top: 9px; width: 16px; height: 16px; border-radius: 4px; background: #f3f1ea; }
+  .splash .ev .destt { position: absolute; left: 34px; top: 8px; right: 8px; font-size: .72rem; font-weight: 800; color: #f3f1ea; white-space: nowrap; overflow: hidden; }
+  .splash .ev .you { position: absolute; left: 10px; bottom: 6px; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 15px solid #f3f1ea; }
+  .splash .rows { position: absolute; left: 0; right: 0; top: 30px; bottom: 26px; overflow: hidden; }
+  .splash .r {
+    position: absolute; left: 0; right: 6px; height: 30px; display: grid; grid-template-columns: 38px 1fr auto; align-items: center;
+    transition: transform .9s cubic-bezier(.4,0,.2,1), opacity .9s;
+  }
+  .splash .r i { justify-self: center; width: 13px; height: 13px; border-radius: 50%; border: 3px solid #1d2429; background: #43b96d; }
+  .splash .r.full i { background: #f0a43a; }
+  .splash .r span { font-size: .72rem; font-weight: 800; color: #f3f1ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .splash .r span small { display: block; font-weight: 600; color: #93a0a8; font-size: .62rem; }
+  .splash .r em { font-style: normal; font-weight: 800; font-size: .95rem; color: #43b96d; }
+  .splash .r.full em { color: #f0a43a; }
+  .splash .r em sub { font-size: .6rem; vertical-align: baseline; }
+  .splash .r.out { opacity: 0; }
+  .splash .points { display: flex; gap: 14px; margin-top: 20px; font-size: .92rem; color: #c3cbd0; animation: rise .6s .45s ease both; flex-wrap: wrap; justify-content: center; }
+  .splash .points b { color: #43b96d; }
   .splash .foot { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); display: flex; flex-direction: column; align-items: center; gap: 12px; }
   .splash .foot label { display: inline-flex; align-items: center; gap: 10px; font-size: 1.05rem; color: #d7dde1; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.06); }
   .splash .foot input { width: 22px; height: 22px; accent-color: #43b96d; margin: 0; }
   .splash .foot small { color: #93a0a8; font-size: .9rem; }
-  @keyframes pop { from { opacity: 0; transform: scale(.7); } }
+  @keyframes pop { from { opacity: 0; transform: scale(.85); } }
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
-  @keyframes drive { to { stroke-dashoffset: -16; } }
-  @keyframes glow { 50% { transform: scale(1.08); filter: drop-shadow(0 0 8px rgba(67,185,109,.8)); } }
+  @keyframes drive { to { stroke-dashoffset: 14; } }
   @media (prefers-reduced-motion: reduce) {
-    .splash .mark, .splash .sp-name, .splash .tag, .splash .chips span, .splash .mark .dash, .splash .mark .bolt { animation: none; }
+    .splash .head, .splash .tag, .splash .screen, .splash .points, .splash .nav .road { animation: none; }
+    .splash .r { transition: none; }
   }
 </style>
 </head>
 <body>
 <div class="splash" id="splash" role="dialog" aria-label="EVailability">
-  <svg class="mark" viewBox="0 0 120 120" aria-hidden="true">
-    <defs>
-      <linearGradient id="spRoad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c3740"/><stop offset="1" stop-color="#46535d"/></linearGradient>
-    </defs>
-    <rect x="2" y="2" width="116" height="116" rx="30" fill="#263038" stroke="rgba(255,255,255,.08)"/>
-    <path d="M30 118 L56 66 H64 L90 118 Z" fill="url(#spRoad)"/>
-    <path class="dash" d="M60 116 V68" stroke="#f3f1ea" stroke-width="3" stroke-linecap="round" fill="none"/>
-    <circle cx="60" cy="44" r="25" fill="none" stroke="#43b96d" stroke-width="3.5" stroke-dasharray="118 40" stroke-linecap="round" transform="rotate(-210 60 44)"/>
-    <path class="bolt" d="M64 26 L49 48 H59 L55 62 L71 39 H61 Z" fill="#43b96d"/>
-  </svg>
-  <div class="sp-name"><b>EV</b>ailability</div>
-  <p class="tag">Free chargers along your way</p>
-  <div class="chips" aria-hidden="true"><span>4/4</span><span>2/8</span><span>0/6</span></div>
+  <div class="head">
+    <svg viewBox="0 0 120 120" aria-hidden="true">
+      <rect x="2" y="2" width="116" height="116" rx="30" fill="#263038"/>
+      <path d="M30 118 L56 66 H64 L90 118 Z" fill="#46535d"/>
+      <circle cx="60" cy="44" r="25" fill="none" stroke="#43b96d" stroke-width="5" stroke-dasharray="118 40" stroke-linecap="round" transform="rotate(-210 60 44)"/>
+      <path d="M64 26 L49 48 H59 L55 62 L71 39 H61 Z" fill="#43b96d"/>
+    </svg>
+    <div class="sp-name"><b>EV</b>ailability</div>
+  </div>
+  <p class="tag">The fast chargers coming up,<br>right beside your navigation.</p>
+  <div class="screen" aria-hidden="true">
+    <div class="nav">
+      <svg viewBox="0 0 100 125" preserveAspectRatio="xMidYMid slice">
+        <path d="M-10 38 Q30 48 55 30 T120 22" stroke="#38424a" stroke-width="6" fill="none"/>
+        <path d="M-10 92 Q40 98 70 80 T120 84" stroke="#353f46" stroke-width="5" fill="none"/>
+        <path d="M30 140 Q22 100 50 78 T78 -10" stroke="#3d4850" stroke-width="15" fill="none" stroke-linecap="round"/>
+        <path d="M30 140 Q22 100 50 78 T78 -10" stroke="#3a8bff" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <path class="road" d="M30 140 Q22 100 50 78 T78 -10" stroke="#e8f1ff" stroke-width="1.2" fill="none" opacity=".7"/>
+        <path d="M32 104 l8 -18 l8 18 l-8 -5 z" fill="#fff" stroke="#3a8bff" stroke-width="1.6" transform="rotate(12 40 95)"/>
+        <rect x="6" y="6" width="50" height="18" rx="4" fill="#22844a"/>
+        <text x="31" y="19" text-anchor="middle" font-size="10" font-weight="700" fill="#fff" font-family="system-ui, sans-serif">↱ 800 m</text>
+      </svg>
+      <span class="lbl">Your navigation</span>
+    </div>
+    <div class="ev">
+      <div class="line"></div>
+      <div class="dest"></div><div class="destt">Destination · 108 km</div>
+      <div class="rows" id="spRows"></div>
+      <div class="you"></div>
+    </div>
+  </div>
+  <div class="points"><span><b>4/6</b> free now</span><span><b>↰ +4</b> min detour</span><span>in route order</span></div>
   <div class="foot">
     <label><input type="checkbox" id="splashOff"> Don’t show again</label>
     <small>Tap to continue</small>
@@ -611,8 +655,41 @@
     show = fresh && !!seenIntro && !localStorage.getItem("evailability-splash-off");
   } catch (_) { show = false; }
   if (!show) { el.remove(); return; }
-  let timer = setTimeout(close, 2600);
-  function close() { clearTimeout(timer); el.classList.add("gone"); setTimeout(() => el.remove(), 500); }
+  // The timeline drives: the nearest charger passes and drops off, the next one appears at the top.
+  const names = ["De Kroon", "Hoezaar", "Mastpolder", "Galder", "Hazeldonk", "Zonzeel", "Princeville", "Bavel"];
+  const rows = document.getElementById("spRows");
+  const ROW = 30;
+  let next = 0, farKm = 0;
+  const make = (pos) => {
+    farKm += 7 + (next * 5) % 7; // further and further ahead
+    const n = names[next % names.length], full = next % 4 === 1;
+    const t = [6, 8, 4, 8, 6][next % 5], a = full ? 0 : 1 + (next * 3) % t;
+    next++;
+    const r = document.createElement("div");
+    r.className = `r${full ? " full" : ""}`;
+    r.innerHTML = `<i></i><span>${n}<small>${farKm} km · ${Math.round(farKm * 0.72)} min</small></span><em>${a}<sub>/${t}</sub></em>`;
+    r.style.transform = `translateY(${pos * ROW}px)`;
+    rows.appendChild(r);
+    return r;
+  };
+  const visible = Math.max(2, Math.floor((rows.clientHeight || 90) / ROW));
+  for (let k = 0; k < visible; k++) make(visible - 1 - k); // nearest at the bottom
+  let list = [...rows.children].reverse(); // top to bottom
+  const step = () => {
+    // everything moves down one row; the bottom one fades out, a new one comes in at the top
+    const bottom = list.pop();
+    bottom.classList.add("out");
+    bottom.style.transform = `translateY(${visible * ROW}px)`;
+    setTimeout(() => bottom.remove(), 900);
+    list.forEach((r, k) => { r.style.transform = `translateY(${(k + 1) * ROW}px)`; });
+    const top = make(-1);
+    top.classList.add("out");
+    requestAnimationFrame(() => requestAnimationFrame(() => { top.classList.remove("out"); top.style.transform = "translateY(0px)"; }));
+    list.unshift(top);
+  };
+  const drive = matchMedia("(prefers-reduced-motion: reduce)").matches ? null : setInterval(step, 1400);
+  let timer = setTimeout(close, 5200);
+  function close() { clearTimeout(timer); clearInterval(drive); el.classList.add("gone"); setTimeout(() => el.remove(), 500); }
   const box = document.getElementById("splashOff");
   box.addEventListener("click", (e) => e.stopPropagation());
   box.closest("label").addEventListener("click", (e) => e.stopPropagation());
@@ -757,7 +834,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.38";
+const APP_VERSION = "2026-11-14.39";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1419,7 +1496,7 @@ function reconcileLive() {
       usedPin.add(x.id); usedSite.add(f.id);
       x.liveDup = false;
       // The live source's site name (e.g. "Mastpolder"), when Open Charge Map gave both sides one name.
-      if (f.name && /[a-z]{3}/i.test(f.name)) x.name = f.name;
+      if (f.name && /[a-z]{3}/i.test(f.name)) { x.liveName = f.name; if (!BRAND_WORDS.test(f.name)) x.name = f.name; }
       x.status = { ...x.status, available: f.available, total: f.total, maxKw: f.maxKw, state: f.state,
         changedAt: f.changedAt, fullSince: f.fullSince, liveId: f.id };
       if (distKm(x, f) > 0.03) {
@@ -1748,7 +1825,7 @@ function openNavSheet(ids) {
   const members = state.stations.filter((s) => ids.includes(s.id));
   if (!members.length) return;
   const s = members.find((m) => brandKey(m) === "ionity") || members[0];
-  navTarget = { lat: +s.lat.toFixed(5), lon: +s.lon.toFixed(5), name: shortName(s.name), full: s.name };
+  navTarget = { lat: +s.lat.toFixed(5), lon: +s.lon.toFixed(5), name: siteName(s), full: s.name };
   const km = Math.min(...members.map((m) => m.alongKm)) - state.user.km;
   $("navTitle").textContent = navTarget.name;
   $("navSub").textContent = `${fmtKm(km)} km ahead · ${members.map((m) => (BRAND[brandKey(m)] || BRAND.ionity).name).join(", ")}`;
@@ -1983,6 +2060,23 @@ function shortName(n) {
   const out = String(n || "").replace(BRAND_WORDS, "").replace(/^(Raststätte|Rastanlage|Rasthof|Autohof)\s+/i, "").trim();
   return out || String(n || "Charger");
 }
+// The name shown on a row. Some brands give every site the same title ("Shell Recharge"):
+// then the place says more. In order: the live source's site name, a service-area name in the
+// address, the street (when it's a road name rather than a house address), the town.
+const GENERIC_NAME = /^(charger|charging( station| point)?|laadpunt|laadstation|snellader|recharge|hpc|dc)?$/i;
+const AREA_WORDS = /\b(verzorgingsplaats|vzp|parkeerplaats|rasthof|raststätte|rastanlage|autohof|aire de|service area|tankstation)\b/i;
+function siteName(s) {
+  const own = shortName(s.name);
+  const brandOnly = !String(s.name || "").replace(BRAND_WORDS, "").trim();
+  if (!brandOnly && !GENERIC_NAME.test(own)) return own;
+  if (s.liveName && /[a-z]{3}/i.test(s.liveName) && !BRAND_WORDS.test(s.liveName)) return s.liveName;
+  const parts = String(s.address || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const area = parts.find((x) => AREA_WORDS.test(x));
+  if (area) return area.replace(AREA_WORDS, "").replace(/^[\s:–-]+/, "").trim() || area;
+  const road = parts.find((x) => /\b[AN]\d{1,3}\b/.test(x) && !/\d+[a-z]?$/i.test(x.replace(/\b[AN]\d{1,3}\b/, "")));
+  const town = parts.length > 1 ? parts[parts.length - 1] : null;
+  return town || road || parts[0] || own;
+}
 
 function statusInfo(s) {
   const st = s.status;
@@ -2181,7 +2275,7 @@ function stationRow(site, change, after) {
   return `<div class="row st ${cls}" data-ids="${esc(members.map((m) => m.id).join(" "))}" role="button" title="${esc(title)}">
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
     <span class="marker dot-${dot}${scanning ? " scanning" : ""}" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
-    <div><div class="name">${nameLogo}<span class="label">${esc(shortName(s.name))}</span></div>
+    <div><div class="name">${nameLogo}<span class="label">${esc(siteName(s))}</span></div>
       <div class="sub meta"><span class="when"><b>${fmtKm(km)}</b>&nbsp;km&ensp;${fmtClock(min)}</span>${s.road ? "" : country}${kw && cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
     ${avail}
   </div>`;

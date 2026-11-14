@@ -11,6 +11,7 @@
 //   GET  /debug/ocm-operator    shows which Open Charge Map operator ID is used for Ionity
 //   GET  /debug/ocm-ionity      Ionity sites Open Charge Map knows in a box (default: NL)
 //   GET  /debug/at?lat=&lon=    raw answer from the Austrian charging register (E-Control)
+//   GET  /debug/de?lat=&lon=    raw German answer (MobiData BW OCPDB, AFIR data) plus what we parse from it
 //
 // Secrets (Cloudflare > Worker > Settings > Variables and Secrets)
 //   ORS_API_KEY   OpenRouteService / HeiGIT key
@@ -24,6 +25,9 @@ const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
 const NDW_BBOX = "https://dotnl.ndw.nu/api/rest/geojson/dynamic-road-status/charge-point-data/v1/features";
 const ECONTROL_BASE = "https://api.e-control.at/charge/1.0";
+// Germany: Open ChargePoint DataBase run by MobiData BW (NVBW). It bundles the AFIR reports
+// of operators Germany-wide (Ionity via Eco-Movement), CC0, no key needed.
+const OCPDB_LOCATIONS = "https://api.mobidata-bw.de/ocpdb/api/public/v1/locations";
 // The E-Control API key is tied to the domains registered with it, checked via the Referer header.
 const ECONTROL_REFERER = "https://remconld.github.io/";
 
@@ -37,7 +41,8 @@ const ALLOWED_ORIGINS = [
 ];
 
 const STATUS_TTL_MS = 60 * 1000;
-const LIVE_COUNTRIES = new Set(["NL", "AT"]);
+const LIVE_COUNTRIES = new Set(["NL", "AT", "DE"]);
+const MAX_DE_LOOKUPS = 12; // Germany: the next 12 sites on the route
 const MAX_AT_LOOKUPS = 4; // each Austrian search returns a lot of data; only the next few sites
 const MAX_STATUS_LOOKUPS = 30; // stays well under the free plan's outgoing-request limit
 
@@ -470,8 +475,78 @@ async function atStatus(station, env) {
   };
 }
 
+// ---------------------------------------------------------------- live status (DE)
+
+const isIonityEvse = (e) => /^DE\*?IO[NY]\*?/i.test(String(e.evse_id || e.uid || "").replace(/\s/g, ""));
+const isIonityLoc = (l) =>
+  /ionity/i.test(`${l.operator?.name || ""} ${l.owner?.name || ""} ${l.suboperator?.name || ""} ${l.name || ""}`) ||
+  (l.evses || []).some(isIonityEvse);
+
+async function deLocationsNear(lat, lon, radius = 400) {
+  const url = `${OCPDB_LOCATIONS}?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&radius=${radius}&limit=50`;
+  const data = await fetchJson(url, { headers: { Accept: "application/json" } }, "MobiData BW");
+  return Array.isArray(data) ? data : (data.items || []);
+}
+
+// Summarise the Ionity chargers around one site. The same charger can be reported twice
+// (operator feed and the federal register); merge by EVSE ID and prefer a live status.
+function summariseDe(locations, station) {
+  const ion = locations.filter(isIonityLoc);
+  const byId = new Map();
+  for (const l of ion) {
+    const lon = l.coordinates?.longitude ?? l.coordinates?.lon, lat = l.coordinates?.latitude ?? l.coordinates?.lat;
+    if (haversineKm([Number(lon), Number(lat)], [station.lon, station.lat]) > 0.6) continue;
+    for (const e of l.evses || []) {
+      if (["REMOVED", "PLANNED"].includes(e.status)) continue;
+      const id = String(e.evse_id || e.uid || `${l.id}-${byId.size}`).replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      const live = e.status && !["STATIC", "UNKNOWN"].includes(e.status);
+      const prev = byId.get(id);
+      if (prev && prev.live) continue;
+      const kw = Math.max(0, ...(e.connectors || []).map((c) => (c.max_electric_power || 0) / 1000));
+      byId.set(id, { status: e.status, live, kw, at: e.last_updated || l.last_updated || null });
+    }
+  }
+  let points = [...byId.values()];
+  if (!points.length) return null;
+  const fast = points.filter((p) => p.kw >= 50);
+  if (fast.length) points = fast; // count the fast chargers only, if the site has any
+  const withLive = points.filter((p) => p.live);
+  if (withLive.length) points = withLive; // register-only duplicates would inflate the total
+  const count = (...st) => points.filter((p) => p.live && st.includes(p.status)).length;
+  const available = count("AVAILABLE");
+  const offline = count("OUTOFORDER", "INOPERATIVE");
+  const inUse = count("CHARGING", "BLOCKED", "RESERVED");
+  const known = available + offline + inUse;
+  const state = known === 0 ? null
+    : available > 0 ? "free"
+    : offline === known ? "likely_offline"
+    : "full";
+  return {
+    available: known ? available : null,
+    total: points.length,
+    offline,
+    maxKw: Math.round(Math.max(...points.map((p) => p.kw))) || null,
+    state,
+    source: "MobiData BW (AFIR)",
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+async function deStatus(station) {
+  return summariseDe(await deLocationsNear(station.lat, station.lon), station);
+}
+
 async function liveStatus(station, env) {
   if (!LIVE_COUNTRIES.has(station.country)) return null;
+  if (station.country === "DE") {
+    const key = `status:${station.id}`;
+    const cached = memoGet(key);
+    if (cached !== undefined) return cached;
+    let status = null;
+    try { status = await deStatus(station); } catch (e) { console.log("MobiData BW failed", station.id, e.message); }
+    memoSet(key, status, STATUS_TTL_MS);
+    return status;
+  }
   if (station.country === "AT") {
     const key = `status:${station.id}`;
     const cached = memoGet(key);
@@ -508,7 +583,8 @@ async function statusForMany(stations, env) {
   // Stations arrive in route order, so these are the ones you reach first.
   const nl = stations.filter((s) => s.country === "NL").slice(0, MAX_STATUS_LOOKUPS);
   const at = stations.filter((s) => s.country === "AT").slice(0, MAX_AT_LOOKUPS);
-  const list = [...nl, ...at];
+  const de = stations.filter((s) => s.country === "DE").slice(0, MAX_DE_LOOKUPS);
+  const list = [...nl, ...de, ...at];
   for (let i = 0; i < list.length; i += 5) { // max 5 at a time (NDW allows 10 per second)
     const batch = list.slice(i, i + 5);
     const res = await Promise.all(batch.map((s) => liveStatus(s, env)));
@@ -660,6 +736,30 @@ async function route(request, env) {
       }
     }
     return json(request, { works: null, tried }, 502);
+  }
+  if (path === "/debug/de" && request.method === "GET") {
+    const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+    if (!url.searchParams.has("lat")) {
+      // No point given: test the Ionity sites Open Charge Map knows around Cologne and the Ruhr.
+      const pois = (await ionityInBox(env, [6.4, 50.6, 7.6, 51.6])).slice(0, 6);
+      const out = [];
+      for (const p of pois) {
+        const st = { lat: p.AddressInfo.Latitude, lon: p.AddressInfo.Longitude };
+        let parsed = null, error = null;
+        try { parsed = await deStatus(st); } catch (e) { error = e.message; }
+        out.push({ name: p.AddressInfo.Title, ...st, parsed, error });
+      }
+      return json(request, { tested: out.length, withLive: out.filter((o) => o.parsed?.state).length, sites: out });
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new HttpError(400, "Add ?lat=..&lon=..");
+    const radius = Math.min(Number(url.searchParams.get("radius")) || 400, 5000);
+    const locs = await deLocationsNear(lat, lon, radius);
+    return json(request, {
+      count: locs.length,
+      parsed: summariseDe(locs, { lat, lon }),
+      ionity: locs.filter(isIonityLoc),
+      others: locs.filter((l) => !isIonityLoc(l)).map((l) => ({ name: l.name, operator: l.operator?.name, source: l.source })),
+    });
   }
   if (path === "/debug/ocm-operator" && request.method === "GET") {
     return json(request, { ionityOperatorId: await ionityOperatorId(env) });

@@ -1,0 +1,7 @@
+# Cloudflare Worker "ionity" (proxy for ionity-route.html).
+# Deployed by .github/workflows/deploy-worker.yml. Secrets (API keys) live in Cloudflare only.
+name = "ionity"
+main = "src/ionity-route-worker.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+keep_vars = true

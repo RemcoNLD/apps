@@ -544,7 +544,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.25";
+const APP_VERSION = "2026-11-14.26";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -959,9 +959,11 @@ function upcomingShown() {
   return upcoming().filter((s) => !state.hidden.has(brandKey(s)));
 }
 const shownBrands = () => (state.planBrands || ["ionity"]).filter((k) => !state.hidden.has(k));
+// With "Easy to reach" on, a charger only appears once its detour is known: otherwise it would
+// show up first and vanish a moment later.
 function visibleAhead() {
   const all = upcomingShown();
-  return state.mySideOnly ? all.filter(onMySide) : all;
+  return state.mySideOnly ? all.filter((s) => !detourPending(s) && onMySide(s)) : all;
 }
 
 // Ask in small batches: each Worker call may only make a limited number of lookups.
@@ -991,24 +993,42 @@ async function refreshOne(ids) {
 
 // Detour minutes are worked out only for chargers you actually see (the matrix quota is small).
 // The app sends the route points 3 km before and after each charger.
-let detourBusy = false;
+let detourBusy = false, detourAgain = false;
+// Not known yet, and either never asked or being asked right now. (Asked and failed counts as
+// known-unknown: the charger is shown, so a failing lookup can't hide it for good.)
+const detourPending = (s) => !("detourMin" in s) && (!s.detourTriedAt || s.detourLoading);
+// With "Easy to reach" on, the filter needs the detours of the chargers ahead, not just those on screen.
+const FILTER_AHEAD = 60; // at most 3 matrix calls per route
+function detourCandidates(inView = []) {
+  const ahead = state.mySideOnly ? upcomingShown().slice(0, FILTER_AHEAD) : [];
+  return [...new Set([...inView, ...ahead])];
+}
 async function fetchDetours(stations) {
+  if (detourBusy) { detourAgain = true; return; }
   const now = Date.now();
-  const todo = stations.filter((s) => !("detourMin" in s) && !(s.detourTriedAt && now - s.detourTriedAt < DETOUR_RETRY_MS));
-  if (!todo.length || detourBusy) return;
+  const todo = stations.filter((s) => !("detourMin" in s) && !s.detourLoading && !(s.detourTriedAt && now - s.detourTriedAt < DETOUR_RETRY_MS))
+    .sort((a, b) => a.alongKm - b.alongKm);
+  if (!todo.length) return;
   detourBusy = true;
-  for (const s of todo) s.detourTriedAt = now;
+  for (const s of todo) { s.detourTriedAt = now; s.detourLoading = true; }
   try {
     for (let i = 0; i < todo.length; i += 20) {
       const chunk = todo.slice(i, i + 20);
       const items = chunk.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, a: pointAtKm(Math.max(0, s.alongKm - 3)), b: pointAtKm(Math.min(state.route.distanceKm, s.alongKm + 3)) }));
-      const { detours } = await api("/detours", { items });
-      for (const s of chunk) if (detours && s.id in detours) s.detourMin = detours[s.id];
+      try {
+        const { detours } = await api("/detours", { items });
+        for (const s of chunk) if (detours && s.id in detours) s.detourMin = detours[s.id];
+      } catch (_) { /* try again in a few minutes */ }
+      for (const s of chunk) s.detourLoading = false;
+      // Show each batch as it arrives (nearest first), then look up the status of what came into view.
+      render();
+      refreshWhenSettled();
     }
-  } catch (_) { /* try again in a few minutes */ }
-  finally {
+  } finally {
+    for (const s of todo) s.detourLoading = false;
     detourBusy = false;
     save(); render();
+    if (detourAgain) { detourAgain = false; fetchDetours(detourCandidates(stationsInView())); }
   }
 }
 
@@ -1034,7 +1054,7 @@ async function refreshStatus(force = true) {
   const now = Date.now();
   const busy = (s) => s.loadingAt && now - s.loadingAt < 20000;
   const inView = stationsInView();
-  fetchDetours(inView);
+  fetchDetours(detourCandidates(inView));
   const todo = inView.filter((s) => !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
   if (!todo.length) return;
   for (const s of todo) s.loadingAt = now;
@@ -1136,6 +1156,7 @@ $("mySide").addEventListener("click", () => {
   try { localStorage.setItem(MY_SIDE_KEY, state.mySideOnly ? "1" : "0"); } catch (_) {}
   syncMySide();
   state.stickToBottom = true;
+  if (state.mySideOnly) fetchDetours(detourCandidates()); // before showing anything new
   render();
   refreshWhenSettled(); // other chargers may have come into view
 });
@@ -1488,13 +1509,16 @@ function render() {
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcomingShown();
   const ahead = sitesOf(visibleAhead());
-  const hiddenCount = sitesOf(all).length - ahead.length;
+  const checking = state.mySideOnly && all.some(detourPending);
+  const hiddenCount = sitesOf(all.filter((s) => !detourPending(s))).length - ahead.length;
   const list = $("list");
   const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  const note = checking ? `<div class="empty">Checking detours${ahead.length ? " further ahead" : ""}…</div>` : "";
   list.innerHTML = ahead.length
-    ? ahead.map((s, i) => stationRow(s,
+    ? note + ahead.map((s, i) => stationRow(s,
         roadChange(i ? ahead[i - 1].alongKm : -Infinity, s.alongKm),
         i === ahead.length - 1 ? roadChange(s.alongKm, Infinity) : null)).reverse().join("")
+    : checking ? note
     : hiddenCount
       ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
       : `<div class="empty">No more chargers within 5 km of your route.</div>`;

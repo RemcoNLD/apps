@@ -405,6 +405,15 @@
   .ml.stale .stat, .ml.stale .stat strong { color: var(--muted); font-weight: 700; }
   /* Brand picker on the start screen */
   .brands { display: flex; flex-wrap: wrap; gap: 8px; }
+  /* Minimum charging power: Fast / Extra fast / HPC */
+  .power { display: flex; border-radius: 999px; background: var(--asphalt-raised); padding: 4px; gap: 4px; }
+  .power button {
+    flex: 1; font: inherit; font-weight: 800; font-size: .98rem; line-height: 1.15; padding: 8px 6px; border: 0; border-radius: 999px;
+    background: transparent; color: var(--muted); -webkit-tap-highlight-color: transparent;
+  }
+  .power button small { display: block; font-weight: 600; font-size: .8rem; opacity: .85; }
+  .power button[aria-pressed="true"] { background: var(--sign-blue); color: #fff; }
+  .brands-btn .kwmin { margin-left: 6px; font-size: .85rem; font-weight: 800; }
   .brand-btn {
     display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px; border-radius: 999px;
     background: var(--asphalt-raised); border: 2px solid transparent; font-weight: 700; font-size: 1rem; color: var(--muted);
@@ -622,6 +631,12 @@
 
   <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT</span></div>
   <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
+  <div class="brands-head" style="margin-top:14px"><span>Charging power</span><span class="hint">Change any time</span></div>
+  <div class="power" role="group" aria-label="Minimum charging power" data-power>
+    <button type="button" data-kw="50">Fast<small>50 kW+</small></button>
+    <button type="button" data-kw="150">Extra fast<small>150 kW+</small></button>
+    <button type="button" data-kw="300">HPC<small>300 kW+</small></button>
+  </div>
 
   <label class="check"><input id="sim" type="checkbox"> Simulate the drive</label>
 
@@ -641,6 +656,12 @@
   <div class="sheet-head">
     <h2 id="brandSheetTitle">Brands</h2>
     <button type="button" class="link" id="brandSheetClose">Done</button>
+  </div>
+  <div class="group-title">Charging power</div>
+  <div class="power" role="group" aria-label="Minimum charging power" data-power>
+    <button type="button" data-kw="50">Fast<small>50 kW+</small></button>
+    <button type="button" data-kw="150">Extra fast<small>150 kW+</small></button>
+    <button type="button" data-kw="300">HPC<small>300 kW+</small></button>
   </div>
   <div class="group-title">On this route: tap to show or hide</div>
   <div class="brands" id="brandsShown"></div>
@@ -711,7 +732,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.32";
+const APP_VERSION = "2026-11-14.33";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1099,7 +1120,9 @@ function minAtKm(k) {
 // would show the same distance: that of the junction, not of the charger.
 function wayTo(s) {
   const passKm = s.alongKm - state.user.km, passMin = s.alongMin - state.user.min;
-  if (s.toKm == null || s.toMin == null || (s.offRouteKm ?? 0) <= SERVICE_AREA_KM) return { km: passKm, min: passMin };
+  // On the other side of the road you have to turn around to get there: that drive counts too.
+  const otherSide = sideOf(s) === "left";
+  if (s.toKm == null || s.toMin == null || ((s.offRouteKm ?? 0) <= SERVICE_AREA_KM && !otherSide)) return { km: passKm, min: passMin };
   const aKm = Math.max(0, s.alongKm - 3);
   const km = aKm + s.toKm - state.user.km;
   const min = minAtKm(aKm) + s.toMin - state.user.min;
@@ -1236,8 +1259,36 @@ function celebrateArrival() {
 }
 
 // Chargers ahead of the brands you're showing right now.
+// Minimum charging power, a filter on the device (no replanning). The live maximum wins over
+// Open Charge Map's, so a "fast" listing that is really an AC charger (13 kW) drops out too.
+const POWER_KEY = "evailability-power";
+const POWER_LEVELS = [50, 150, 300];
+function minKw() {
+  try { const v = Number(localStorage.getItem(POWER_KEY)); return POWER_LEVELS.includes(v) ? v : 50; } catch (_) { return 50; }
+}
+function kwOf(s) { return s.status?.maxKw || s.maxKw || null; }
+function powerOk(s) {
+  const kw = kwOf(s);
+  // Unknown power: Ionity builds only high-power sites, others show only with the widest setting.
+  if (kw == null) return brandKey(s) === "ionity" || minKw() === 50;
+  return kw >= minKw();
+}
+function syncPower() {
+  for (const g of document.querySelectorAll("[data-power]")) {
+    for (const b of g.querySelectorAll("button")) b.setAttribute("aria-pressed", String(Number(b.dataset.kw) === minKw()));
+  }
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-power] button");
+  if (!b) return;
+  try { localStorage.setItem(POWER_KEY, b.dataset.kw); } catch (_) {}
+  syncPower();
+  if (state.route) { state.stickToBottom = true; render(); refreshWhenSettled(); }
+});
+syncPower();
+
 function upcomingShown() {
-  return upcoming().filter((s) => !state.hidden.has(brandKey(s)));
+  return upcoming().filter((s) => !state.hidden.has(brandKey(s)) && powerOk(s));
 }
 const shownBrands = () => (state.planBrands || ["ionity"]).filter((k) => !state.hidden.has(k));
 // With "Easy to reach" on, a charger only appears once its detour is known: otherwise it would
@@ -1920,6 +1971,13 @@ function distKm(a, b) {
   const x = rad(b.lon - a.lon) * Math.cos(rad((a.lat + b.lat) / 2)), y = rad(b.lat - a.lat);
   return Math.sqrt(x * x + y * y) * R;
 }
+// Route order, but at a service area your side comes first: the other side is behind a
+// turn-around, even if its pin is a few hundred metres earlier along the road.
+const OTHER_SIDE_LATER_KM = 0.6;
+function orderSites(sites) {
+  const key = (site) => site.alongKm + ((sideOf(site.primary) || site.primary._exitSide) === "left" ? OTHER_SIDE_LATER_KM : 0);
+  return sites.slice().sort((a, b) => key(a) - key(b));
+}
 function sitesOf(stations) {
   const sites = [];
   for (const s of stations) {
@@ -1991,7 +2049,8 @@ function stationRow(site, change, after) {
 function renderBrandsBtn() {
   const shown = shownBrands();
   const logos = shown.slice(0, 3).map(logoHtml).join("");
-  setHtml($("brandsBtn"), `${logos}${shown.length > 3 ? `<span class="n">+${shown.length - 3}</span>` : ""}`);
+  const kwMin = minKw();
+  setHtml($("brandsBtn"), `${logos}${shown.length > 3 ? `<span class="n">+${shown.length - 3}</span>` : ""}${kwMin > 50 ? `<span class="kwmin">${kwMin}+</span>` : ""}`);
   $("brandsBtn").title = `Showing ${shown.map((k) => BRAND[k].name).join(", ")}`;
 }
 
@@ -2042,7 +2101,7 @@ function render() {
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcomingShown();
-  const ahead = sitesOf(visibleAhead());
+  const ahead = orderSites(sitesOf(visibleAhead()));
   const checking = state.mySideOnly && all.some(detourPending);
   const hiddenCount = sitesOf(all.filter((s) => !detourPending(s))).length - ahead.length;
   const list = $("list");
@@ -2235,7 +2294,7 @@ function helpHtml() {
   </ul>
 
   <h3>The screen while driving</h3>
-  <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit, including the drive from the motorway to it), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
+  <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>Road numbers on the line show where you change roads, styled like that country's signs.</p>
 
   <h3>Free or not</h3>
@@ -2257,6 +2316,10 @@ function helpHtml() {
   </div>
   <p>A charger right next to the motorway on your side has no mark: you just pull in. Detours appear a moment after a charger comes on screen.</p>
   <p><b>Easy to reach</b> hides the round trips and keeps chargers on your side plus those with a short detour.</p>
+
+  <h3>Charging power</h3>
+  <p>Choose <b>Fast</b> (50 kW and up), <b>Extra fast</b> (150 kW and up) or <b>HPC</b> (300 kW and up) on the start screen or under the brand logos. It filters straight away, without planning again. Where live data reports a lower maximum than the charger's listing, the live value counts. Set above Fast, the brands button shows the minimum (e.g. <b>150+</b>).</p>
+  <p>At a service area, the chargers on your side come first; those on the other side follow, with the distance including the turn-around.</p>
 
   <h3>Brands</h3>
   <p>Places with several brands share one row, with a line per brand on the right. Tap the <b>logos</b> at the top to hide or show the brands on your route straight away. Adding a brand that wasn't on the route plans the route again from where you are.</p>

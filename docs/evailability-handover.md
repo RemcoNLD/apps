@@ -191,6 +191,8 @@ One file, `evailability.html`, with no libraries or build step. The version is i
 - **No blinking:** rows are only redrawn when their content changed (`patchList`, `setHtml`). While updating, a row keeps its numbers and turns grey.
 - **Detours:** fetched for the rows on screen. With "Easy to reach" on, also for the next 60 chargers; a charger then only appears once its detour is known.
 - **Distance on a row:** for a charger next to the road (within 250 m: a service area) it's where the route passes it. For one further away it's the route up to point A (3 km before the closest point) plus the drive A→charger from `/detours` (`wayTo()`). Before that answer is in, the closest point on the route is used, which makes chargers around one junction all show the same distance.
+- **Charging power:** Fast (50 kW+), Extra fast (150 kW+) or HPC (300 kW+), on the start screen and in the brand sheet (`evailability-power`). A filter on the device: the live `maxKw` wins over Open Charge Map's (so an AC charger listed as fast drops out); unknown power shows only with Fast, except Ionity. Above Fast, the brands button shows e.g. "150+".
+- **Order and the other side:** at a service area your side comes first (`orderSites`: the other side counts 600 m later). A charger on the other side shows the real distance and time including the turn-around (route to point A + the drive A→charger from `/detours`).
 - **"Easy to reach":** on your side of the road, or a detour of at most 6 minutes, and no round trips.
 - **Screen:** kept on while driving with the Screen Wake Lock, asked again whenever iOS releases it, on every tap and every 30 s, plus a tiny silent muted looping video (`NOSLEEP_MP4`, no sound track, so music and CarPlay aren't interrupted) as a fallback for home-screen apps. Help shows which is active. Released on arrival and on New route.
 - **Status updating:** while any charger is being looked up, the status bottom right shows a turning ring and a pulsing "Updating".
@@ -208,6 +210,7 @@ One file, `evailability.html`, with no libraries or build step. The version is i
 | `evailability-nav` | Navigation app used last |
 | `evailability-intro-seen` | Introduction shown |
 | `evailability-splash-off` | Splash screen switched off |
+| `evailability-power` | Minimum charging power: 50, 150 or 300 |
 
 On first start the app moves settings from the old `ionity-route-…` keys to these. sessionStorage `evailability-session` marks that the splash was already considered in this session.
 

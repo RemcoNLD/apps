@@ -187,6 +187,7 @@
   }
   .sticky-road > span { border-radius: 6px; box-shadow: 0 0 0 3px var(--asphalt); }
   .sticky-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
+  .tl-road:has(.shield), .sticky-road > span:has(.shield) { box-shadow: none; }
   .fab:active { transform: scale(.95); }
   .you .marker {
     width: 38px; height: 38px; background: var(--line);
@@ -212,13 +213,25 @@
     color: #fff; background: #c4262e; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.55);
   }
   .rb.e { background: #0f7a3f; }
-  .rb.n { background: #f2c200; color: #1b1b1b; box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.35); }
+  .rb.red { background: #c4262e; }
+  .rb.yellow { background: #f2c200; color: #1b1b1b; box-shadow: inset 0 0 0 1.5px #1b1b1b; }
+  /* German Autobahn: blue with a white rim and cut corners (Zeichen 405) */
+  .rb.shield {
+    padding: 1.5px; background: #fff; box-shadow: none; border-radius: 0;
+    clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
+  }
+  .rb.shield > span {
+    display: block; padding: 1px 6px 0; background: #1d4fa3; color: #fff;
+    clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
+  }
   /* Road badge sitting on the timeline where the road changes */
   .tl-road { position: absolute; left: 24px; transform: translate(-50%, 50%); z-index: 2; line-height: 1; }
   .tl-road.below { bottom: 0; }
   .tl-road.above { top: 0; transform: translate(-50%, -50%); }
   .tl-road { border-radius: 6px; box-shadow: 0 0 0 3px var(--asphalt); }
   .tl-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
+  .tl-road .rb.shield, .sticky-road .rb.shield { padding: 1.5px; }
+  .tl-road .rb.shield > span, .sticky-road .rb.shield > span { padding: 1px 5px 0; }
   .rb.blue { background: #1d4fa3; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.7); }
   .sub.roads .rb { font-size: .9rem; margin-right: 2px; }
   .sub.roads .sep { color: var(--muted); margin: 0 3px; }
@@ -629,10 +642,25 @@ function showBanner(text, { ok = false, retry = false, hideAfter = 0 } = {}) {
 
 // Road numbers look like that country's signs: motorways white on blue in Germany, Austria and
 // Belgium, white on red in the Netherlands and France; national roads yellow (Austria: blue).
+//   Germany   A: blue shield with cut corners      B: yellow, black number
+//   Austria   A/S: blue                           B: blue
+//   Netherl.  A: red                              N: yellow, black number
+//   Belgium   A: blue                             N: blue
+//   Luxemb.   A: blue                             N: yellow
+//   France    A: red                              N: red,  D: yellow
+//   Switzerl. A: red                              main roads: blue
+//   E-roads everywhere: green
 function roadBadge(ref, country) {
-  const kind = /^E/.test(ref) ? "e" : /^[BND]\d/.test(ref) ? "n" : "m";
-  const blue = (kind === "m" && ["DE", "AT", "BE", "LU", "CH"].includes(country)) || (kind === "n" && country === "AT");
-  return `<span class="rb ${kind}${blue ? " blue" : ""}">${esc(ref)}</span>`;
+  const letter = ref[0];
+  if (letter === "E") return `<span class="rb e">${esc(ref)}</span>`;
+  const motorway = letter === "A" || letter === "S";
+  let style;
+  if (motorway) style = ["DE", "AT", "BE", "LU"].includes(country) ? "blue" : "red";
+  else if (country === "AT" || country === "BE" || country === "CH") style = "blue";
+  else if (country === "FR" && letter === "N") style = "red";
+  else style = "yellow";
+  if (motorway && country === "DE") return `<span class="rb shield"><span>${esc(ref)}</span></span>`;
+  return `<span class="rb ${style}">${esc(ref)}</span>`;
 }
 const roadPartBadge = (r) => roadBadge(r.ref, r.country || countryAt(r.fromKm ?? r.toKm, r.toKm));
 
@@ -723,7 +751,8 @@ function roadParts() {
 }
 function roadNow() {
   const k = state.user.km;
-  return roadParts().filter((r) => r.fromKm <= k + 0.5).at(-1) || null;
+  const parts = roadParts();
+  return parts.filter((r) => r.fromKm <= k + 0.5).at(-1) || parts[0] || null;
 }
 // The last road that starts after fromKm and at or before toKm (only what's ahead of you).
 function roadChange(fromKm, toKm) {

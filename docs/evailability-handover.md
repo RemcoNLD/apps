@@ -80,7 +80,7 @@ Not (yet) live: Belgium (waiting for an Eco-Movement data token) and France. Cha
    - optional `OCM_IONITY_OPERATOR_ID`: only to force Ionity's Open Charge Map operator ID.
 
    `keep_vars = true` in `wrangler.toml` makes sure a deploy doesn't remove these.
-6. **Deploy pipeline.** Create a Cloudflare API token with the template *Edit Cloudflare Workers* (plus KV edit), then add repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub (Settings → Secrets and variables → Actions). Every push that changes `src/evailability-worker.js` or `wrangler.toml` deploys through `cloudflare/wrangler-action@v3`. It can also be started by hand (Actions → Deploy EVailability Worker → Run workflow).
+6. **Deploy pipeline.** Create a Cloudflare API token with the template *Edit Cloudflare Workers* (plus KV edit), then add repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub (Settings → Secrets and variables → Actions). Every push that changes `wrangler.toml` (and, once the workflow is updated, `src/evailability-worker.js`) or `wrangler.toml` deploys through `cloudflare/wrangler-action@v3`. It can also be started by hand (Actions → Deploy Ionity Worker → Run workflow).
 7. **Point the app at the Worker.** In `evailability.html` (and `admin.html`), `const WORKER = "https://ionity.<subdomain>.workers.dev"`. In the Worker, add the app's origin to `ALLOWED_ORIGINS` and set `ECONTROL_REFERER`.
 8. **Check.** Open `https://ionity.<subdomain>.workers.dev/`: it should answer `ok: true` and show which keys are set. Then open the app and enter an access code (section 6).
 
@@ -251,4 +251,5 @@ The app, files, texts and device storage are renamed. The Worker still runs as `
 
 1. Create the secrets on a Worker named `evailability` (or rename the Worker in the Cloudflare dashboard, if offered, which keeps them): `ORS_API_KEY`, `OCM_API_KEY`, `ECONTROL_API_KEY`, `ADMIN_TOKEN`, and `ACCESS_SECRET` if used. Same values keep existing access tokens valid.
 2. Set `name = "evailability"` in `wrangler.toml`, and `WORKER` in `evailability.html` and `admin.html` to `https://evailability.remco-dv.workers.dev`.
-3. After a week or so, delete the old `ionity` Worker. Optionally rename the KV namespace (bound by ID, so nothing breaks).
+3. In `.github/workflows/deploy-worker.yml`, change the path `src/ionity-route-worker.js` to `src/evailability-worker.js` and the name to "Deploy EVailability Worker". (The GitHub token used by Claude may not edit workflow files.) Until then, a Worker change deploys only when `wrangler.toml` changes too.
+4. After a week or so, delete the old `ionity` Worker. Optionally rename the KV namespace (bound by ID, so nothing breaks).

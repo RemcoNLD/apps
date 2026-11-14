@@ -840,7 +840,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.51";
+const APP_VERSION = "2026-11-14.52";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -933,18 +933,22 @@ const state = {
 // If the server is busy, a second try usually works.
 const ACCESS_KEY = "evailability-access";
 const accessToken = () => { try { return localStorage.getItem(ACCESS_KEY) || ""; } catch (_) { return ""; } };
-async function api(path, body) {
+async function api(path, body, timeoutMs) {
   const headers = { "X-Access": accessToken() };
   const opts = body
     ? { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) }
     : { headers };
   let res;
   for (let attempt = 0; ; attempt++) {
-    try { res = await fetch(WORKER + path, opts); break; }
+    // With a timeout, a request that hangs (network switch, app in the background) is given up.
+    const ctl = timeoutMs ? new AbortController() : null;
+    const timer = ctl && setTimeout(() => ctl.abort(), timeoutMs);
+    try { res = await fetch(WORKER + path, ctl ? { ...opts, signal: ctl.signal } : opts); break; }
     catch (e) {
       if (attempt >= 1) throw new Error("Couldn’t reach the server. Please try again in a moment.");
       await new Promise((r) => setTimeout(r, 2000));
     }
+    finally { if (timer) clearTimeout(timer); }
   }
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) { // code no longer valid: ask again
@@ -1914,7 +1918,9 @@ function openNavSheet(ids) {
   $("navSub").textContent = `${fmtKm(km)} km ahead · ${members.map((m) => (BRAND[brandKey(m)] || BRAND.ionity).name).join(", ")}`;
   $("navHist").innerHTML = historyHtml(members);
   $("navHist").hidden = !$("navHist").innerHTML;
+  navTarget.ids = ids;
   $("navSrc").innerHTML = nameSourceHtml(members, label);
+  fetchPlaces(members); // this charger first, if it still needs a name
   const appBtn = (a) => `<button type="button" class="navbtn" data-nav="${a.key}"><span class="ico" style="background:${a.color}">${a.ico}</span>${esc(a.name)}${a.note ? `<small>${esc(a.note)}</small>` : ""}</button>`;
   $("navList").innerHTML = navOrder().map(appBtn).join("") +
     `<button type="button" class="navbtn" data-nav="copy"><span class="ico" style="background:var(--muted)">⧉</span>Copy coordinates<small>${navTarget.lat}, ${navTarget.lon}</small></button>` +
@@ -2178,6 +2184,15 @@ function siteName(s) {
   return from("brand (no place found)", own);
 }
 
+function updateNavSrc() {
+  if ($("navSheet").hidden || !navTarget?.ids) return;
+  const members = state.stations.filter((s) => navTarget.ids.includes(s.id));
+  if (!members.length) return;
+  const label = siteLabel(members);
+  $("navTitle").textContent = label; navTarget.name = label;
+  $("navSrc").innerHTML = nameSourceHtml(members, label);
+}
+
 // Press-and-hold sheet: where the row's name came from, and what the place lookup returned, so a
 // row that shows only a brand tells missing map data apart from a bug.
 function nameSourceHtml(members, label) {
@@ -2188,7 +2203,11 @@ function nameSourceHtml(members, label) {
     const m = needing.includes(s) ? s : needing[0];
     const pl = placeOf(m);
     let look;
-    if (!pl || pl.v !== PLACE_V) look = m.placeTriedAt ? "lookup sent, no answer yet" : "not looked up yet";
+    const busyFor = placesBusy ? Math.round((Date.now() - placesBusy) / 1000) : 0;
+    if (!pl || pl.v !== PLACE_V) look = (m.placeTriedAt && placesBusy === m.placeTriedAt) ? `asking now (${busyFor} s)`
+      : m.placeFailAt ? `no answer at ${new Date(m.placeFailAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}, asked again soon`
+      : m.placeTriedAt ? `asked at ${new Date(m.placeTriedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}, nothing returned`
+      : placesBusy ? `waiting: another lookup running (${busyFor} s)` : "not looked up yet";
     else {
       const bits = [];
       if (pl.area) bits.push(`${pl.src || "area"} “${esc(pl.area)}”${BRAND_WORDS.test(pl.area) ? " (skipped: brand name)" : ""}`);
@@ -2225,9 +2244,12 @@ function placeOf(s) {
 }
 
 // Service area or town for chargers named only by their brand: asked once per charger, a few at a time.
-let placesBusy = false;
+// placesBusy: when the running lookup started (0 = none). A call that comes in while one runs is
+// not dropped: it runs again for the whole route once the running one is done.
+let placesBusy = 0, placesAgain = false;
+const PLACES_TIMEOUT_MS = 25000;
 async function fetchPlaces(stations) {
-  if (placesBusy) return;
+  if (placesBusy && Date.now() - placesBusy < PLACES_TIMEOUT_MS + 5000) { placesAgain = true; return; }
   // v2: with the service-area name from OpenStreetMap (older answers had the town only).
   // An answer whose service-area lookup failed (ok: false) is asked again after 10 minutes.
   const now = Date.now();
@@ -2236,20 +2258,25 @@ async function fetchPlaces(stations) {
   const ahead = (s) => !(s.alongKm < (state.user?.km || 0) - 1); // not for chargers already passed
   const todo = stations.filter((s) => ahead(s) && needs(s) && stale(s) && !(s.placeTriedAt && now - s.placeTriedAt < 10 * 60 * 1000)).slice(0, 8);
   if (!todo.length) return;
-  placesBusy = true;
+  placesBusy = now; placesAgain = false;
   for (const s of todo) s.placeTriedAt = now;
+  let more = stations === state.stations || stations._all; // right after planning: carry on, 8 per call
   try {
-    const { places } = await api("/places", { points: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon })) });
+    const { places } = await api("/places", { points: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon })) }, PLACES_TIMEOUT_MS);
     for (const s of todo) if (places?.[s.id]) {
       s.place = places[s.id]; s.placeAt = now;
       if (s.place.ok !== false) placeCache[placeKey(s)] = s.place;
     }
     savePlaceCache();
     save(); render();
-  } catch (_) { /* tried again in 10 minutes */ }
-  finally { placesBusy = false; }
-  // Right after planning, carry on until every charger within reach has its name (8 per call).
-  if (stations === state.stations || stations._all) setTimeout(() => fetchPlaces(stations), 300);
+  } catch (_) {
+    // No answer (timeout, no network): asked again in a minute rather than after 10.
+    for (const s of todo) { s.placeTriedAt = now - 9 * 60 * 1000; s.placeFailAt = now; }
+  }
+  finally { if (placesBusy === now) placesBusy = 0; }
+  if (placesAgain) { placesAgain = false; more = true; stations = state.stations; }
+  if (more) setTimeout(() => fetchPlaces(stations), 300);
+  updateNavSrc();
 }
 
 function statusInfo(s) {
@@ -2588,6 +2615,7 @@ function restore() {
     $("sim").checked = !!saved.sim;
     startDriving();
     refreshStatus();
+    fetchPlaces(state.stations); // names still missing after a reload, nearest first
   } catch (_) { localStorage.removeItem(STORE_KEY); }
 }
 

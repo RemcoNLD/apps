@@ -5,3 +5,8 @@ main = "src/ionity-route-worker.js"
 compatibility_date = "2025-09-01"
 workers_dev = true
 keep_vars = true
+
+# Usage counts for admin.html (KV namespace "ionity-usage")
+[[kv_namespaces]]
+binding = "USAGE"
+id = "b52b6fe114a244a3a87f3a5cb5db3c73"

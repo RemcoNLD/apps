@@ -180,6 +180,13 @@
     box-shadow: 0 0 0 5px var(--asphalt), 0 6px 16px rgba(0, 0, 0, .35);
   }
   .fab svg { width: 26px; height: 26px; }
+  /* While scrolled up: the road at the bottom of the view, until the next change scrolls in */
+  .sticky-road {
+    position: absolute; z-index: 3; left: 18px; width: 48px; display: flex; justify-content: center;
+    bottom: calc(var(--row-h) + 18px + 48px + 14px); pointer-events: none;
+  }
+  .sticky-road > span { border-radius: 6px; box-shadow: 0 0 0 3px var(--asphalt); }
+  .sticky-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
   .fab:active { transform: scale(.95); }
   .you .marker {
     width: 38px; height: 38px; background: var(--line);
@@ -253,6 +260,7 @@
   </div>
   <div class="strip">
     <div class="row dest" id="destRow"></div>
+    <div class="sticky-road" id="stickyRoad" hidden aria-hidden="true"></div>
     <button type="button" class="fab" id="more" hidden aria-label="Back to the next chargers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <div class="list" id="list"></div>
     <div class="row you" id="youRow"></div>
@@ -559,6 +567,25 @@ function updateScrollUi() {
   state.stickToBottom = fromBottom < 24;
   $("more").hidden = state.stickToBottom;
   list.classList.toggle("more-above", list.scrollTop > 4);
+  updateStickyRoad();
+}
+
+// Keeps the road in view above the down button while you scroll through the list.
+function updateStickyRoad() {
+  const el = $("stickyRoad");
+  const hide = () => { el.hidden = true; };
+  if (state.stickToBottom || !state.route) return hide();
+  const y = $("more").getBoundingClientRect().top - 24; // where the badge sits
+  const rows = [...$("list").querySelectorAll(".row.st[data-id]")];
+  const row = rows.find((r) => r.getBoundingClientRect().bottom >= y);
+  if (!row) return hide();
+  // The row's own change badge is right there: let that one show instead.
+  if (row.querySelector(".tl-road.below") && Math.abs(row.getBoundingClientRect().bottom - y) < 28) return hide();
+  const s = state.stations.find((x) => x.id === row.dataset.id);
+  const road = s && roadParts().filter((r) => r.fromKm <= s.alongKm).at(-1);
+  if (!road) return hide();
+  el.innerHTML = `<span>${roadPartBadge(road)}</span>`;
+  el.hidden = false;
 }
 $("list").addEventListener("scroll", updateScrollUi, { passive: true });
 $("list").addEventListener("click", (e) => {

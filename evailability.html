@@ -838,7 +838,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.49";
+const APP_VERSION = "2026-11-14.50";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1116,6 +1116,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.offCount = 0;
   save();
   addNdwSites(data.ndwTiles || [], state.planBrands); // in the background: the route shows straight away
+  fetchPlaces(state.stations); // names for chargers called only by their brand, nearest first
 }
 
 // Second source of chargers in the Netherlands (NDW), for sites Open Charge Map doesn't have
@@ -1148,7 +1149,7 @@ async function addNdwSites(tiles, brands) {
       });
       added++;
     }
-    if (added) { state.stations.sort((a, b) => a.alongKm - b.alongKm); save(); render(); refreshWhenSettled(); }
+    if (added) { state.stations.sort((a, b) => a.alongKm - b.alongKm); save(); render(); refreshWhenSettled(); fetchPlaces(state.stations); }
   }
 }
 
@@ -2159,12 +2160,36 @@ function siteName(s) {
   const parts = String(s.address || "").split(",").map((x) => x.trim()).filter(Boolean);
   const area = [s.liveName, ...parts].find((x) => x && AREA_WORDS.test(x));
   if (area) return area.replace(AREA_WORDS, "").replace(/^[\s:–-]+/, "").trim() || area;
-  if (s.place?.area && !BRAND_WORDS.test(s.place.area)) return s.place.area;
+  const pl = placeOf(s);
+  if (pl?.area && !BRAND_WORDS.test(pl.area)) return pl.area;
   // NDW's name, if it reads like a place and not a street address ("Mastpolder A58" yes, "Drebbelstraat 42" no).
   const live = String(s.liveName || "").replace(BRAND_WORDS, "").replace(/\b[AEN]\d{1,3}\b/g, "").replace(/\s+/g, " ").trim();
   if (live.length >= 4 && !/\d/.test(live) && !/(straat|weg|laan|baan|dijk|plein|kade|singel|pad|steeg|gracht|\b[ZNOW]{2}\b)/i.test(live)) return live;
   const town = parts.length > 1 ? parts[parts.length - 1] : null;
-  return town || s.place?.town || (fromLive ? (BRAND[brandKey(s)] || {}).name : null) || own;
+  return town || pl?.town || (fromLive ? (BRAND[brandKey(s)] || {}).name : null) || own;
+}
+
+// The name of a row with several chargers: the first member with a real name, so the row doesn't
+// switch between "Nieuwegein" and "Shell Recharge" when its members change order.
+function siteLabel(members) {
+  const names = members.map(siteName);
+  return names.find((n) => String(n).replace(BRAND_WORDS, "").trim()) || names[0];
+}
+
+// Place names found before, kept on the device by position (about 100 m), so a new plan or a
+// reroute shows them straight away instead of "Shell Recharge" until they're asked again.
+const PLACES_KEY = "evailability-places";
+const PLACE_V = 7; // answers of an older lookup are asked again
+const placeKey = (s) => `${(+s.lat).toFixed(3)},${(+s.lon).toFixed(3)}`;
+let placeCache = (() => { try { return JSON.parse(localStorage.getItem(PLACES_KEY) || "{}"); } catch (_) { return {}; } })();
+function savePlaceCache() {
+  const keys = Object.keys(placeCache);
+  if (keys.length > 400) for (const k of keys.slice(0, keys.length - 400)) delete placeCache[k];
+  try { localStorage.setItem(PLACES_KEY, JSON.stringify(placeCache)); } catch (_) {}
+}
+function placeOf(s) {
+  if (!s.place || s.place.v !== PLACE_V) { const c = placeCache[placeKey(s)]; if (c && c.v === PLACE_V) s.place = c; }
+  return s.place;
 }
 
 // Service area or town for chargers named only by their brand: asked once per charger, a few at a time.
@@ -2174,17 +2199,25 @@ async function fetchPlaces(stations) {
   // v2: with the service-area name from OpenStreetMap (older answers had the town only).
   // An answer whose service-area lookup failed (ok: false) is asked again after 10 minutes.
   const now = Date.now();
-  const stale = (s) => s.place?.v !== 6 || (s.place.ok === false && now - (s.placeAt || 0) > 10 * 60 * 1000);
-  const todo = stations.filter((s) => s._needsPlace && stale(s) && !(s.placeTriedAt && now - s.placeTriedAt < 10 * 60 * 1000)).slice(0, 8);
+  const stale = (s) => placeOf(s)?.v !== PLACE_V || (s.place.ok === false && now - (s.placeAt || 0) > 10 * 60 * 1000);
+  const needs = (s) => { siteName(s); return s._needsPlace; }; // works it out also for rows not drawn yet
+  const ahead = (s) => !(s.alongKm < (state.user?.km || 0) - 1); // not for chargers already passed
+  const todo = stations.filter((s) => ahead(s) && needs(s) && stale(s) && !(s.placeTriedAt && now - s.placeTriedAt < 10 * 60 * 1000)).slice(0, 8);
   if (!todo.length) return;
   placesBusy = true;
   for (const s of todo) s.placeTriedAt = now;
   try {
     const { places } = await api("/places", { points: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon })) });
-    for (const s of todo) if (places?.[s.id]) { s.place = places[s.id]; s.placeAt = now; }
+    for (const s of todo) if (places?.[s.id]) {
+      s.place = places[s.id]; s.placeAt = now;
+      if (s.place.ok !== false) placeCache[placeKey(s)] = s.place;
+    }
+    savePlaceCache();
     save(); render();
   } catch (_) { /* tried again in 10 minutes */ }
   finally { placesBusy = false; }
+  // Right after planning, carry on until every charger within reach has its name (8 per call).
+  if (stations === state.stations || stations._all) setTimeout(() => fetchPlaces(stations), 300);
 }
 
 function statusInfo(s) {
@@ -2384,7 +2417,7 @@ function stationRow(site, change, after) {
   return `<div class="row st ${cls}" data-ids="${esc(members.map((m) => m.id).join(" "))}" role="button" title="${esc(title)}">
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
     <span class="marker dot-${dot}${scanning ? " scanning" : ""}" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
-    <div><div class="name">${nameLogo}<span class="label">${esc(siteName(s))}</span></div>
+    <div><div class="name">${nameLogo}<span class="label">${esc(siteLabel(members))}</span></div>
       <div class="sub meta"><span class="when"><b>${fmtKm(km)}</b>&nbsp;km&ensp;${fmtClock(min)}</span>${s.road ? "" : country}${kw && cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
     ${avail}
   </div>`;
@@ -2405,24 +2438,33 @@ function setHtml(el, html) {
   el.innerHTML = html;
   htmlOf.set(el, html);
 }
+// Rows are matched by key: an unchanged row stays the same element (no redraw, its logo isn't
+// reloaded), a changed one is replaced on its own, new ones are inserted and gone ones removed.
+// Before, any added, removed or reordered row rebuilt the whole list, which made it flicker.
 function patchList(list, parts) {
-  const kids = [...list.children];
-  const same = kids.length === parts.length && kids.every((el, i) => el.dataset.k === parts[i].key);
-  if (!same) {
-    list.innerHTML = parts.map((p) => p.html).join("");
-    [...list.children].forEach((el, i) => { el.dataset.k = parts[i].key; htmlOf.set(el, parts[i].html); });
-    return;
-  }
-  parts.forEach((p, i) => {
-    const el = kids[i];
-    if (htmlOf.get(el) === p.html) return;
+  const byKey = new Map([...list.children].map((el) => [el.dataset.k, el]));
+  const make = (p) => {
     const t = document.createElement("template");
     t.innerHTML = p.html;
     const n = t.content.firstElementChild;
     n.dataset.k = p.key;
     htmlOf.set(n, p.html);
-    el.replaceWith(n);
-  });
+    return n;
+  };
+  let prev = null;
+  for (const p of parts) {
+    let el = byKey.get(p.key);
+    if (el) {
+      byKey.delete(p.key);
+      if (htmlOf.get(el) !== p.html) { const n = make(p); el.replaceWith(n); el = n; }
+    } else {
+      el = make(p);
+    }
+    const want = prev ? prev.nextSibling : list.firstChild;
+    if (el !== want) list.insertBefore(el, want);
+    prev = el;
+  }
+  for (const el of byKey.values()) el.remove();
 }
 
 function render() {
@@ -2450,6 +2492,15 @@ function render() {
   const hiddenCount = sitesOf(all.filter((s) => !detourPending(s))).length - ahead.length;
   const list = $("list");
   const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  // When you've scrolled up, keep the row you're looking at in its place while rows above or below
+  // it come, go or change size (detours and names arriving), instead of the list jumping.
+  let anchor = null;
+  if (!state.stickToBottom) {
+    const top = list.scrollTop;
+    for (const el of list.children) {
+      if (el.offsetTop + el.offsetHeight > top + 1) { anchor = { k: el.dataset.k, off: el.offsetTop - top }; break; }
+    }
+  }
   const note = checking ? `<div class="empty">Checking detours${ahead.length ? " further ahead" : ""}…</div>` : "";
   const parts = ahead.length
     ? [...(note ? [{ key: "note", html: note }] : []), ...ahead.map((site, i) => ({
@@ -2464,7 +2515,10 @@ function render() {
         : `<div class="empty">No more chargers within 5 km of your route.</div>` }];
   patchList(list, parts);
   // Stay at the bottom, or keep your place if you've scrolled up.
-  list.scrollTop = state.stickToBottom ? list.scrollHeight : list.scrollHeight - list.clientHeight - fromBottom;
+  const anchorEl = anchor && [...list.children].find((el) => el.dataset.k === anchor.k);
+  list.scrollTop = state.stickToBottom ? list.scrollHeight
+    : anchorEl ? anchorEl.offsetTop - anchor.off
+    : list.scrollHeight - list.clientHeight - fromBottom;
   updateScrollUi();
 
   const busy = statusBusy();

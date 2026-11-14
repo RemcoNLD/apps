@@ -1396,13 +1396,16 @@ async function fetchWithTimeout(url, init, ms) {
   try { return await fetch(url, { ...init, signal: ctl.signal }); } finally { clearTimeout(t); }
 }
 let overpassGood = 0;
+const CHARGE_BRAND_START = /^(fastned|ionity|tesla|enbw|aral|shell( recharge)?|total(energies)?|electra|izivia|powerdot|allego|bp pulse)\b/i;
+// Names of hosts rather than places, never used as a place even at a fuel station.
+const HOST_WORDS = /\b(mc ?donald'?s|burger king|kfc|van der valk|hotel|motel|restaurant|ikea|lidl|aldi|albert heijn|jumbo|parking|parkeergarage|p\+r)\b/i;
 // "Shell 't Hol" -> "'t Hol"; "Fastned Keizershof" -> "Keizershof"; "Shell" or "Tango" -> nothing.
 const FUEL_BRANDS = /\b(shell( recharge)?|bp( pulse)?|esso|total(energies)?|tango|texaco|tinq|avia|q8|gulf|argos|tamoil|firezone|makro|lukoil|aral( pulse)?|omv|jet|agip|eni|fastned|ionity|tesla( supercharger)?|allego|enbw|electra|powerdot|izivia|ev[- ]?box|vattenfall|eneco|greenflux|laadpunt|charging station|snellaadstation|laadstation|tankstation|express|station)\b/gi;
 function placeFromStationName(name, tags = {}) {
   let n = String(name).replace(FUEL_BRANDS, " ");
   for (const k of ["brand", "operator", "network"]) if (tags[k]) n = n.replace(new RegExp(tags[k].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), " ");
   n = n.replace(AREA_RE, " ").replace(/\b[AN]\d{1,3}\b/g, " ").replace(/[()]/g, " ").replace(/^[\s:–\-,]+|[\s:–\-,]+$/g, "").replace(/\s+/g, " ").trim();
-  if (n.length < 3 || !/[a-z]{2}/i.test(n) || /\d{2,}/.test(n)) return null;
+  if (n.length < 3 || !/[a-z]{2}/i.test(n) || /\d{2,}/.test(n) || HOST_WORDS.test(n)) return null;
   return n;
 }
 async function serviceAreasNear(points) {
@@ -1447,6 +1450,11 @@ async function serviceAreasNear(points) {
       if (!name) continue;
       const d = distanceToElement(el, x.lat, x.lon);
       if (el.tags.highway) { if (d <= areaD) { areaD = d; area = name; } continue; }
+      // Fuel stations at a service area carry its name ("Shell 't Hol", "BP Hoezaar"). Charging
+      // stations only when the name starts with a charging brand ("Fastned Keizershof"): others are
+      // named after their host ("Mc Donalds Nieuwegein", "Van der Valk Hotel"), which isn't a place.
+      const isFuel = el.tags.amenity === "fuel";
+      if (!isFuel && !CHARGE_BRAND_START.test(String(name).replace(/^\s*[AN]\d{1,3}\s+/i, ""))) continue;
       const place = placeFromStationName(name, el.tags);
       if (place && d <= stationD) { stationD = d; station = place; }
     }
@@ -1485,7 +1493,7 @@ function distanceToElement(el, lat, lon) {
 
 // A place name for chargers named only by their brand: the service area (OpenStreetMap), else
 // the town (geocoder). Kept 30 days per spot (about 100 m) for everyone.
-const placeKey = (x) => `pl6:${x.lat.toFixed(3)},${x.lon.toFixed(3)}`;
+const placeKey = (x) => `pl7:${x.lat.toFixed(3)},${x.lon.toFixed(3)}`;
 async function handlePlaces(request, env) {
   const body = await request.json().catch(() => ({}));
   const pts = (Array.isArray(body.points) ? body.points : [])
@@ -1505,7 +1513,7 @@ async function handlePlaces(request, env) {
     const towns = await Promise.all(misses.map((x) => placeName(env, [x.lon, x.lat]).catch(() => null)));
     for (let i = 0; i < misses.length; i++) {
       const x = misses[i];
-      const res = { area: areas[x.id]?.name || null, src: areas[x.id]?.src || null, town: towns[i] || null, v: 6, ok };
+      const res = { area: areas[x.id]?.name || null, src: areas[x.id]?.src || null, town: towns[i] || null, v: 7, ok };
       places[x.id] = res;
       memoSet(placeKey(x), res, (ok ? 24 : 0.25) * 3600 * 1000);
       // Not kept when the service-area lookup failed: tried again later.

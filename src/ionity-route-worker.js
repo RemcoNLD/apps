@@ -7,6 +7,7 @@
 //                               -> route + Ionity stations along it, with detour minutes
 //   POST /status                {stations:[{id, lat, lon, country}]}
 //                               -> live availability per station (NL only in phase 1)
+//   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /debug/ndw?lat=&lon=   raw Dutch (NDW) data around a point, to tune the parser
 //   GET  /debug/ocm-operator    shows which Open Charge Map operator ID is used for Ionity
 //   GET  /debug/ocm-ionity      Ionity sites Open Charge Map knows in a box (default: NL)
@@ -774,6 +775,157 @@ async function handlePlan(request, env) {
   });
 }
 
+// ---------------------------------------------------------------- route options
+
+// The routing service only gives alternatives below 100 km, so we make our own: plan through
+// points left and right of the fastest route, keep the ones that use different main roads.
+const ALT_DEFAULTS = { fractions: [0.33, 0.66], offsetKm: 40, maxSlower: 1.25, mainRoadKm: 30 };
+
+// A cheap route (simplified geometry, no country info) only to discover a corridor.
+async function roughRoute(env, points) {
+  const data = await fetchJson(`${ORS_BASE}/directions/driving-car/geojson`, {
+    method: "POST",
+    headers: orsHeaders(env),
+    body: JSON.stringify({ coordinates: points, instructions: true, geometry_simplify: true }),
+  }, "Routing");
+  const f = data.features?.[0];
+  if (!f) throw new HttpError(502, "Routing returned no route");
+  const steps = (f.properties?.segments || []).flatMap((x) => x.steps || []);
+  return {
+    coords: f.geometry.coordinates, steps,
+    distanceKm: (f.properties?.summary?.distance || 0) / 1000,
+    durationMin: (f.properties?.summary?.duration || 0) / 60,
+  };
+}
+
+// The main roads of a route in order (driven at least mainRoadKm), e.g. "A12>A3>A5".
+function mainRoads(steps, mainRoadKm) {
+  const km = new Map(), order = [];
+  for (const st of steps) {
+    const ref = roadRef(st.name);
+    if (!ref || ref[0] === "E") continue; // E-numbers run alongside national numbers; skip them here
+    if (!km.has(ref)) { km.set(ref, 0); order.push(ref); }
+    km.set(ref, km.get(ref) + (st.distance || 0) / 1000);
+  }
+  return order.filter((r) => km.get(r) >= mainRoadKm).join(">");
+}
+
+// A point offKm to the left (+) or right (-) of the route, fraction f of the way along.
+function offsetPoint(route, f, offKm) {
+  const at = route.distanceKm * f;
+  const [lon, lat] = pointAtKm(route, at);
+  const a = pointAtKm(route, at - 10), b = pointAtKm(route, at + 10);
+  const kx = 111 * Math.cos(toRad(lat)), ky = 111;
+  const dx = (b[0] - a[0]) * kx, dy = (b[1] - a[1]) * ky;
+  const len = Math.hypot(dx, dy) || 1;
+  // left normal of the driving direction
+  return [lon + (-dy / len) * offKm / kx, lat + (dx / len) * offKm / ky];
+}
+
+// Where the detour route runs on a numbered main road closest to the help point: plan through
+// that spot instead, so the chosen route has no side trip to a field somewhere.
+function snapToMainRoad(rough, p) {
+  let best = null, bestD = Infinity;
+  for (const st of rough.steps) {
+    const ref = roadRef(st.name);
+    if (!ref || !/^[AESBN]/.test(ref)) continue;
+    const [a, b] = st.way_points || [];
+    for (let i = a; i <= b && i < rough.coords.length; i++) {
+      const d = haversineKm(rough.coords[i], p);
+      if (d < bestD) { bestD = d; best = rough.coords[i]; }
+    }
+  }
+  return best;
+}
+
+async function placeName(env, [lon, lat]) {
+  const key = `place:${lon.toFixed(2)},${lat.toFixed(2)}`;
+  const cached = memoGet(key);
+  if (cached !== undefined) return cached;
+  let name = null;
+  try {
+    const url = `${PELIAS_BASE}/reverse?point.lat=${lat}&point.lon=${lon}&size=1&layers=locality,localadmin`;
+    const data = await fetchJson(url, { headers: orsHeaders(env) }, "Geocoder");
+    const p = data.features?.[0]?.properties;
+    name = p?.locality || p?.localadmin || p?.name || null;
+  } catch (_) { /* a card without a town name is fine */ }
+  memoSet(key, name, 24 * 3600 * 1000);
+  return name;
+}
+
+async function describeOption(env, route, via, pois, maxCities = 4) {
+  learnCountries(route, pois.map((p) => ({
+    index: projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).index,
+    iso: p.AddressInfo?.Country?.ISOCode,
+  })));
+  const parts = roadsAlong(route).filter((r, i, a) => r.ref !== a[i - 1]?.ref);
+  // Name a town where you join each main road (not the first one: that's where you start).
+  const major = parts.map((r, i) => ({ r, i })).filter(({ r, i }) => i > 0 && r.toKm - r.fromKm >= 25).slice(0, maxCities);
+  const names = await Promise.all(major.map(({ r }) => placeName(env, pointAtKm(route, r.fromKm + 1))));
+  major.forEach(({ i }, k) => { parts[i].city = names[k]; });
+  const ionity = pois.filter((p) =>
+    projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).offRouteKm <= 5).length;
+  return {
+    via, ionity,
+    distanceKm: Math.round(route.distanceKm),
+    durationMin: Math.round(route.durationMin),
+    roads: parts.map((r) => ({ ref: r.ref, country: r.country, city: r.city || null })),
+    signature: mainRoads(route.steps, ALT_DEFAULTS.mainRoadKm),
+  };
+}
+
+async function handleAlternatives(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const { from, to } = body;
+  const valid = (p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
+  if (!valid(from) || !valid(to)) throw new HttpError(400, "Send from and to as [lon, lat]");
+  const t = { ...ALT_DEFAULTS, ...(body.tune || {}) };
+
+  const fastest = await getRoute(env, [from, to]);
+  const baseSig = mainRoads(fastest.steps, t.mainRoadKm);
+
+  // Try points left and right of the fastest route.
+  const tries = [];
+  for (const f of t.fractions) for (const side of [1, -1]) tries.push(offsetPoint(fastest, f, side * t.offsetKm));
+  const rough = await Promise.all(tries.map((p) => roughRoute(env, [from, p, to]).then((r) => ({ r, p })).catch(() => null)));
+
+  // Keep corridors that use different main roads and aren't much slower; best first.
+  const seen = new Set([baseSig]);
+  const picks = [];
+  for (const x of rough.filter(Boolean).sort((a, b) => a.r.durationMin - b.r.durationMin)) {
+    if (x.r.durationMin > fastest.durationMin * t.maxSlower) continue;
+    const sig = mainRoads(x.r.steps, t.mainRoadKm);
+    if (!sig || seen.has(sig)) continue;
+    const via = snapToMainRoad(x.r, x.p);
+    if (!via) continue;
+    seen.add(sig);
+    picks.push(via);
+    if (picks.length >= 2) break;
+  }
+
+  // Plan the kept ones properly through the snapped point.
+  const routes = await Promise.all(picks.map((v) => getRoute(env, [from, v, to]).then((r) => ({ r, v })).catch(() => null)));
+
+  // One Ionity lookup for all of them (the area around the fastest route plus a margin).
+  const all = [{ r: fastest, v: null }, ...routes.filter(Boolean)];
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+  for (const { r } of all) for (const [lon, lat] of r.coords) {
+    minLon = Math.min(minLon, lon); maxLon = Math.max(maxLon, lon);
+    minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+  }
+  let pois = [];
+  try { pois = await ionityInBox(env, [minLon - 0.1, minLat - 0.07, maxLon + 0.1, maxLat + 0.07]); } catch (_) {}
+
+  const options = [];
+  for (const { r, v } of all) {
+    if (v && r.durationMin > fastest.durationMin * t.maxSlower) continue;
+    const o = await describeOption(env, r, v, pois);
+    if (v && options.some((x) => x.signature === o.signature)) continue; // snapping made it the same road after all
+    options.push(o);
+  }
+  return json(request, { options, tried: tries.length, generatedAt: new Date().toISOString() });
+}
+
 async function handleStatus(request, env) {
   const body = await request.json().catch(() => ({}));
   const stations = Array.isArray(body.stations) ? body.stations : [];
@@ -800,6 +952,7 @@ async function route(request, env) {
   }
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
+  if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
 
   if (path === "/debug/ndw" && request.method === "GET") {
     const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));

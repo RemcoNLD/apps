@@ -83,6 +83,33 @@
     background: var(--sign-blue); color: #fff; border: 0; border-radius: 10px;
   }
   .primary:disabled { opacity: .45; cursor: default; }
+
+  /* Route options */
+  .sheet {
+    position: fixed; inset: 0; z-index: 20; overflow-y: auto; background: var(--asphalt);
+    padding: calc(env(safe-area-inset-top, 0px) + 16px) 18px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  }
+  .sheet-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+  .sheet-head h2 { margin: 0; font-size: 1.5rem; }
+  .sheet .hint { margin: 0 0 14px; }
+  .opt {
+    display: block; width: 100%; text-align: left; margin: 0 0 12px; padding: 14px 16px; cursor: pointer;
+    background: var(--asphalt-raised); color: var(--line); border: 2px solid transparent; border-radius: 12px; font: inherit;
+  }
+  .opt.current { border-color: var(--sign-blue); }
+  .opt:active { opacity: .8; }
+  .opt-top { display: flex; align-items: baseline; gap: 10px; font-size: 1.35rem; font-weight: 800; }
+  .opt-top .km { color: var(--muted); font-weight: 600; font-size: 1.05rem; }
+  .opt-top .tag { margin-left: auto; font-size: .95rem; font-weight: 800; }
+  .opt-top .tag.fast { color: var(--free); }
+  .opt-top .tag.slow { color: var(--full); }
+  .opt-top .tag.cur { color: var(--sign-blue); }
+  .opt-roads { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; line-height: 1.6; }
+  .opt-roads .pair { white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+  .opt-roads .city { color: var(--muted); font-weight: 600; margin-right: 2px; }
+  .opt-roads .sep { color: var(--muted); margin: 0 2px; }
+  .opt-meta { margin-top: 8px; color: var(--muted); font-size: 1rem; }
+  .dest { cursor: pointer; }
   .version { margin-top: 36px; }
   .link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; font-size: inherit; }
   .error { color: var(--danger); margin-top: 14px; line-height: 1.45; }
@@ -266,6 +293,14 @@
   <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
 </section>
 
+<div class="sheet" id="options" hidden role="dialog" aria-modal="true" aria-labelledby="optionsTitle">
+  <div class="sheet-head">
+    <h2 id="optionsTitle">Choose a route</h2>
+    <button type="button" class="link" id="optionsClose">Close</button>
+  </div>
+  <div id="optionsBody"></div>
+</div>
+
 <section id="drive" hidden>
   <div class="bar">
     <button id="newRoute">New route</button>
@@ -286,7 +321,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.8";
+const APP_VERSION = "2026-11-14.9";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -399,11 +434,101 @@ async function plan(fromLonLat) {
   save();
 }
 
+// ---------------------------------------------------------------- route options
+// Main roads of the current route ahead, in the same form as an option's signature ("A12>A3>A5").
+function currentSignature() {
+  const km = new Map(), order = [];
+  for (const r of (state.route?.roads || []).filter((r) => r.toKm > state.user.km + 1)) {
+    if (r.ref[0] === "E") continue;
+    if (!km.has(r.ref)) { km.set(r.ref, 0); order.push(r.ref); }
+    km.set(r.ref, km.get(r.ref) + (r.toKm - Math.max(r.fromKm, state.user.km)));
+  }
+  return order.filter((r) => km.get(r) >= 30).join(">");
+}
+
+function optionCard(o, i, fastestMin, isCurrent) {
+  const diff = o.durationMin - fastestMin;
+  const tag = isCurrent ? `<span class="tag cur">Current</span>`
+    : diff <= 1 ? `<span class="tag fast">Fastest</span>` : `<span class="tag slow">+${fmtMin(diff)}</span>`;
+  const roads = o.roads.map((r) =>
+    `<span class="pair">${roadBadge(r.ref, r.country)}${r.city ? ` <span class="city">${esc(r.city)}</span>` : ""}</span>`).join('<span class="sep">›</span>');
+  return `<button type="button" class="opt${isCurrent ? " current" : ""}" data-i="${i}">
+    <div class="opt-top">${fmtMin(o.durationMin)} <span class="km">${o.distanceKm} km</span>${tag}</div>
+    <div class="opt-roads">${roads || '<span class="city">No numbered roads</span>'}</div>
+    <div class="opt-meta">${o.ionity} Ionity site${o.ionity === 1 ? "" : "s"} along the way</div>
+  </button>`;
+}
+
+// Shows the options and resolves with the chosen one (or null when closed).
+function chooseRoute(options, { title, hint, current } = {}) {
+  return new Promise((resolve) => {
+    const fastestMin = Math.min(...options.map((o) => o.durationMin));
+    $("optionsTitle").textContent = title || "Choose a route";
+    $("optionsBody").innerHTML = (hint ? `<p class="hint">${hint}</p>` : "") +
+      options.map((o, i) => optionCard(o, i, fastestMin, current && o.signature === current)).join("");
+    $("options").hidden = false;
+    const done = (v) => { $("options").hidden = true; $("optionsBody").onclick = null; $("optionsClose").onclick = null; resolve(v); };
+    $("optionsBody").onclick = (e) => { const b = e.target.closest(".opt"); if (b) done(options[+b.dataset.i]); };
+    $("optionsClose").onclick = () => done(null);
+  });
+}
+
+function showOptionsLoading(title) {
+  $("optionsTitle").textContent = title;
+  $("optionsBody").innerHTML = `<p class="hint">Looking for other routes… this takes a few seconds.</p>`;
+  $("optionsClose").onclick = () => { $("options").hidden = true; };
+  $("options").hidden = false;
+}
+
+function useOption(o) {
+  state.via = o.via ? { label: "Chosen route", lon: o.via[0], lat: o.via[1], auto: true } : null;
+}
+
+// While driving: tap the destination to compare routes from where you are now.
+$("destRow").addEventListener("click", async () => {
+  if (!state.route || state.rerouting) return;
+  showOptionsLoading("Routes from here");
+  try {
+    const from = state.user.lonlat || await currentPosition();
+    const { options } = await api("/alternatives", { from, to: [state.to.lon, state.to.lat] });
+    if ($("options").hidden) return; // closed while loading
+    const cur = currentSignature();
+    const pick = await chooseRoute(options, {
+      title: "Routes from here",
+      hint: options.length > 1 ? "Your current route is outlined. Tap another to switch." : "No other sensible route found from here.",
+      current: cur,
+    });
+    if (!pick || pick.signature === cur) return;
+    useOption(pick);
+    showBanner("Switching route…");
+    await plan(from);
+    state.stickToBottom = true;
+    showBanner(`New route via ${roadsAhead().map((r) => r.ref).join(" › ")}`, { ok: true, hideAfter: 8000 });
+    render();
+  } catch (e) {
+    $("optionsBody").innerHTML = `<p class="error">Couldn’t find routes: ${esc(e.message)}</p>`;
+  }
+});
+
 $("planBtn").addEventListener("click", async () => {
   const btn = $("planBtn");
   btn.disabled = true; btn.textContent = "Planning…"; showStartError("");
   try {
     const from = state.from ? [state.from.lon, state.from.lat] : await currentPosition();
+    // With your own via point, plan that; otherwise offer the options found.
+    if (!state.via || state.via.auto) {
+      state.via = null;
+      btn.textContent = "Finding routes…";
+      let options = [];
+      try { options = (await api("/alternatives", { from, to: [state.to.lon, state.to.lat] })).options || []; }
+      catch (_) { /* no options: just plan the fastest */ }
+      if (options.length > 1) {
+        const pick = await chooseRoute(options, { hint: "Tap the route you want to drive." });
+        if (!pick) return;
+        useOption(pick);
+      }
+      btn.textContent = "Planning…";
+    }
     await plan(from);
     startDriving();
   } catch (e) {

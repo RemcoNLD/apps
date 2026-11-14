@@ -102,7 +102,7 @@ function corsHeaders(request) {
   return {
     "Access-Control-Allow-Origin": allowed ? origin : ALLOWED_ORIGINS[0],
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Access",
     "Vary": "Origin",
   };
 }
@@ -756,6 +756,11 @@ function extractCounts(feature) {
     lastUpdated: feature.properties?.last_updated || null,
   };
 }
+// When things last changed, as far as the source tells: NDW only knows when the site last changed.
+function ndwTimes(counts) {
+  const at = counts.lastUpdated || null;
+  return { changedAt: at, fullSince: counts.available === 0 ? at : null };
+}
 
 // In OCPI, a location's last_updated changes whenever one of its chargers changes status.
 // Chargers in use change status regularly; chargers that are out of order stay put.
@@ -818,12 +823,18 @@ async function atStatus(station, env, brand = BRAND.ionity) {
     : known === 0 ? null                       // every charger "UNKNOWN"
     : offline === known ? "likely_offline"     // reported broken, not guessed
     : "full";
+  const ts = (p) => Date.parse(p.lastUpdated || p.last_updated || p.statusTimestamp || p.timestamp || "");
+  const changedMs = points.map(ts).filter(Number.isFinite).reduce((a, b) => Math.max(a, b), 0) || null;
+  const takenMs = points.filter((p) => ["CHARGING", "BLOCKED", "RESERVED"].includes(p.status)).map(ts)
+    .filter(Number.isFinite).reduce((a, b) => Math.max(a, b), 0) || null;
   return {
     available: known ? available : null,
     total: points.length,
     offline,
     maxKw: Math.max(...points.map((p) => p.capacityKw || 0)) || null,
     state,
+    changedAt: changedMs ? new Date(changedMs).toISOString() : null,
+    fullSince: state === "full" && takenMs ? new Date(takenMs).toISOString() : null,
     source: "E-Control",
     checkedAt: new Date().toISOString(),
   };
@@ -882,12 +893,18 @@ function summariseDe(locations, station, brand = BRAND.ionity) {
     : available > 0 ? "free"
     : offline === known ? "likely_offline"
     : "full";
+  // Per charger: when its status last changed. Full since = the last one that got taken.
+  const latest = (list) => list.map((p) => Date.parse(p.at || "")).filter(Number.isFinite).reduce((a, b) => Math.max(a, b), 0) || null;
+  const changed = latest(points.filter((p) => p.live));
+  const takenAt = latest(points.filter((p) => p.live && ["CHARGING", "BLOCKED", "RESERVED"].includes(p.status)));
   return {
     available: known ? available : null,
     total: points.length,
     offline,
     maxKw: Math.round(Math.max(...points.map((p) => p.kw))) || null,
     state,
+    changedAt: changed ? new Date(changed).toISOString() : null,
+    fullSince: state === "full" && takenAt ? new Date(takenAt).toISOString() : null,
     source: "MobiData BW (AFIR)",
     checkedAt: new Date().toISOString(),
   };
@@ -917,15 +934,42 @@ async function liveStatus(station, env) {
           haversineKm(b.geometry.coordinates, [station.lon, station.lat]));
         const counts = extractCounts(features[0]);
         status = counts
-          ? { ...counts, ...classify(counts), source: "NDW", checkedAt: new Date().toISOString() }
+          ? { ...counts, ...classify(counts), ...ndwTimes(counts), source: "NDW", checkedAt: new Date().toISOString() }
           : { available: null, total: null, source: "NDW", note: "found, but counts not recognised", checkedAt: new Date().toISOString() };
       }
     } catch (e) {
       console.log("NDW failed", station.id, e.message);
     }
   }
+  if (status && status.state) {
+    try { status = { ...status, ...(await observe(env, station.id, status.state)) }; } catch (_) {}
+  }
   memoSet(key, status, STATUS_TTL_MS);
   return status;
+}
+
+// What this app has seen itself: since when the current state holds, and when it was last full.
+// Only written to KV when the state changes (a few times an hour at most per charger).
+async function observe(env, id, nowState) {
+  const key = `hist:${id}`;
+  let h = memoGet(key);
+  if (h === undefined && env.USAGE) {
+    try { h = JSON.parse((await env.USAGE.get(key)) || "null"); } catch { h = null; }
+  }
+  const now = new Date().toISOString();
+  if (!h || h.state !== nowState) {
+    const next = {
+      state: nowState,
+      since: h ? now : null, // first sighting: we don't know since when
+      lastFullAt: h?.state === "full" ? now : h?.lastFullAt || null,
+    };
+    h = next;
+    if (env.USAGE) {
+      try { await env.USAGE.put(key, JSON.stringify(h), { expirationTtl: 2 * 24 * 3600 }); countCall("KV writes"); } catch (_) {}
+    }
+  }
+  memoSet(key, h, 24 * 3600 * 1000);
+  return { seenSince: h.since, lastFullAt: nowState === "full" ? now : h.lastFullAt };
 }
 
 async function statusForMany(stations, env) {
@@ -1337,11 +1381,66 @@ async function handleStatus(request, env) {
   return json(request, { status: await statusForMany(stations, env), checkedAt: new Date().toISOString() });
 }
 
+// ---------------------------------------------------------------- access
+// The app asks for an access code once. The check happens here, so the page source shows nothing
+// about it: a 9-digit number that passes the "11-proef" (like a Dutch BSN). A right code gets a token
+// (HMAC of a fixed text with a server-side secret); the app keeps it and sends it as X-Access.
+// Changing ACCESS_SECRET (or, without it, OCM_API_KEY) signs everyone out.
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/brands", "/admin/usage"]);
+function elfProef(code) {
+  const d = String(code || "").replace(/[\s.\-]/g, "");
+  if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
+  let sum = 0;
+  for (let i = 0; i < 8; i++) sum += Number(d[i]) * (9 - i);
+  sum -= Number(d[8]);
+  return sum % 11 === 0;
+}
+async function accessToken(env) {
+  const cached = memoGet("access-token");
+  if (cached) return cached;
+  const secret = env.ACCESS_SECRET || env.OCM_API_KEY || "";
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode("ionity-route-access-v1"));
+  const token = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  memoSet("access-token", token, 24 * 3600 * 1000);
+  return token;
+}
+function sameText(a, b) { // compare without stopping at the first difference
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let x = 0;
+  for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return x === 0;
+}
+async function hasAccess(request, env, url) {
+  const given = request.headers.get("X-Access") || url.searchParams.get("access") || "";
+  if (sameText(given, await accessToken(env))) return true;
+  // The admin password works too (handy for opening /debug/… pages in a browser: ?access=<password>).
+  return !!env.ADMIN_TOKEN && sameText(given, env.ADMIN_TOKEN);
+}
+async function handleUnlock(request, env) {
+  // Max 5 tries per 10 minutes per address, so guessing takes a while.
+  const ip = request.headers.get("CF-Connecting-IP") || "?";
+  const key = `unlock:${ip}`;
+  const tries = memoGet(key) || 0;
+  if (tries >= 5) throw new HttpError(429, "Too many tries. Wait 10 minutes.");
+  memoSet(key, tries + 1, 10 * 60 * 1000);
+  const body = await request.json().catch(() => ({}));
+  if (!elfProef(body.code)) {
+    await sleep(800);
+    throw new HttpError(403, "That code isn’t right.");
+  }
+  return json(request, { token: await accessToken(env) });
+}
+
 async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
 
   if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders(request) });
+  if (path === "/unlock" && request.method === "POST") return handleUnlock(request, env);
+  if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/") && !(await hasAccess(request, env, url))) {
+    throw new HttpError(401, "Access code needed");
+  }
 
   if (path === "/" && request.method === "GET") {
     return json(request, {

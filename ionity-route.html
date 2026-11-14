@@ -201,6 +201,9 @@
   .st .sub.meta .flag { font-size: 1rem; }
   .when b { color: var(--line); font-weight: 800; }
   .stat strong { font-weight: 800; }
+  /* "24/40": free count full size, the total smaller and tucked under the slash */
+  .stat .sl { margin-right: -.16em; }
+  .stat .tot { font-size: .6em; letter-spacing: 0; }
   .sub.meta { display: flex; align-items: center; gap: 10px; }
   .sub.meta > * { flex-shrink: 0; }
   .sub.meta .side { margin-right: 0; }
@@ -210,7 +213,7 @@
   /* Reachability symbol with the extra minutes underneath, just right of the dot */
   .reach {
     position: absolute; left: 40px; top: 50%; transform: translateY(-50%); z-index: 2;
-    display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 20px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 20px;
   }
   .reach .sidemark { position: static; transform: none; }
   .reach .dmin { margin: 0; font-size: .82rem; line-height: 1; }
@@ -440,6 +443,20 @@
   .dots span.on { opacity: 1; background: var(--sign-blue); }
   .intro-foot .primary { margin: 0; width: auto; padding: 14px 26px; }
 
+  .lock { z-index: 50; justify-content: center; }
+  .lock-box { width: 100%; max-width: 420px; margin: 0 auto; padding: 24px; }
+  .lock-box h2 { font-size: 1.8rem; margin: 0 0 8px; }
+  .lock-box p { color: var(--muted); margin: 0 0 18px; line-height: 1.45; }
+  .lock-box .input { font-size: 1.3rem; letter-spacing: .08em; }
+  .lock-box .primary { margin-top: 14px; }
+  .lock-box .error { margin-top: 12px; }
+  /* Availability history in the press-and-hold sheet */
+  .navsheet .hist { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--asphalt); }
+  .navsheet .hist div { display: flex; gap: 8px; align-items: baseline; line-height: 1.4; }
+  .navsheet .hist .logo { width: 18px; height: 18px; align-self: center; }
+  .navsheet .hist b { color: var(--line); }
+  .navsheet .hist .muted { color: var(--muted); font-size: .9rem; }
+  .navsheet .hist .tip { color: var(--free); font-size: .9rem; font-weight: 700; }
   /* Demo strip: real row styles on a small piece of road */
   .demo { position: relative; padding: 4px 0; }
   .demo::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 8px; background: var(--sign-blue); border-radius: 4px; }
@@ -551,10 +568,21 @@
 <div class="navsheet" id="navSheet" hidden role="dialog" aria-modal="true" aria-labelledby="navTitle">
   <h2 id="navTitle"></h2>
   <div class="sub" id="navSub"></div>
+  <div class="hist" id="navHist" hidden></div>
   <div id="navList"></div>
   <button type="button" class="cancel" id="navCancel">Cancel</button>
 </div>
 <div class="toast" id="toast" hidden role="status" aria-live="polite"></div>
+
+<div class="intro lock" id="lock" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+  <div class="lock-box">
+    <h2 id="lockTitle">Ionity route</h2>
+    <p>Enter your access code. You only need to do this once on this device.</p>
+    <input id="lockCode" class="input" type="text" inputmode="numeric" autocomplete="off" placeholder="Access code" aria-label="Access code">
+    <button type="button" class="primary" id="lockBtn">Open</button>
+    <p class="error" id="lockError" hidden></p>
+  </div>
+</div>
 
 <section id="drive" hidden>
   <div class="bar">
@@ -577,7 +605,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.28";
+const APP_VERSION = "2026-11-14.29";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -656,10 +684,13 @@ const state = {
 
 // A dropped connection (Safari: "Load failed") gets one more try after a short pause.
 // If the server is busy, a second try usually works.
+const ACCESS_KEY = "ionity-route-access";
+const accessToken = () => { try { return localStorage.getItem(ACCESS_KEY) || ""; } catch (_) { return ""; } };
 async function api(path, body) {
+  const headers = { "X-Access": accessToken() };
   const opts = body
-    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-    : {};
+    ? { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : { headers };
   let res;
   for (let attempt = 0; ; attempt++) {
     try { res = await fetch(WORKER + path, opts); break; }
@@ -669,8 +700,36 @@ async function api(path, body) {
     }
   }
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) { // code no longer valid: ask again
+    try { localStorage.removeItem(ACCESS_KEY); } catch (_) {}
+    showLock();
+  }
   if (!res.ok) throw new Error(data.error || `The server answered ${res.status}`);
   return data;
+}
+
+// ---- access code: asked once, checked by the server; the token it returns is kept on this device
+function showLock() { $("lock").hidden = false; setTimeout(() => $("lockCode").focus(), 50); }
+async function unlock() {
+  const code = $("lockCode").value.replace(/\D/g, "");
+  $("lockError").hidden = true;
+  $("lockBtn").disabled = true;
+  try {
+    const res = await fetch(`${WORKER}/unlock`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.token) throw new Error(data.error || "That code isn’t right.");
+    localStorage.setItem(ACCESS_KEY, data.token);
+    $("lock").hidden = true;
+    $("lockCode").value = "";
+    if (!booted) boot();
+  } catch (e) {
+    $("lockError").textContent = /fetch|load failed|network/i.test(e.message) ? "Couldn’t reach the server. Try again." : e.message;
+    $("lockError").hidden = false;
+  } finally {
+    $("lockBtn").disabled = false;
+  }
 }
 
 // ------------------------------------------------------------- start screen
@@ -1275,12 +1334,45 @@ function openNavSheet(ids) {
   const km = Math.min(...members.map((m) => m.alongKm)) - state.user.km;
   $("navTitle").textContent = navTarget.name;
   $("navSub").textContent = `${fmtKm(km)} km ahead · ${members.map((m) => (BRAND[brandKey(m)] || BRAND.ionity).name).join(", ")}`;
+  $("navHist").innerHTML = historyHtml(members);
+  $("navHist").hidden = !$("navHist").innerHTML;
   const appBtn = (a) => `<button type="button" class="navbtn" data-nav="${a.key}"><span class="ico" style="background:${a.color}">${a.ico}</span>${esc(a.name)}${a.note ? `<small>${esc(a.note)}</small>` : ""}</button>`;
   $("navList").innerHTML = navOrder().map(appBtn).join("") +
     `<button type="button" class="navbtn" data-nav="copy"><span class="ico" style="background:var(--muted)">⧉</span>Copy coordinates<small>${navTarget.lat}, ${navTarget.lon}</small></button>` +
     (navigator.share ? `<button type="button" class="navbtn" data-nav="share"><span class="ico" style="background:var(--muted)">↗</span>Share…</button>` : "");
   $("navBackdrop").hidden = false;
   $("navSheet").hidden = false;
+}
+// How likely you can charge on arrival: since when it's full, or when it was last full.
+// "since" times come from the operator's data where it has them, otherwise from what this app saw.
+function clockAndAgo(iso) {
+  const t = Date.parse(iso || "");
+  if (!Number.isFinite(t)) return null;
+  const min = Math.max(0, Math.round((Date.now() - t) / 60000));
+  const clock = new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const ago = min < 1 ? "just now" : min < 90 ? `${min} min ago` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} ago`;
+  return { clock, ago, min };
+}
+function historyHtml(members) {
+  const lines = members.map((m) => {
+    const st = m.status;
+    if (!st || st.available == null) return null;
+    const logo = members.length > 1 ? logoHtml(brandKey(m)) : "";
+    if (st.state === "full") {
+      const t = clockAndAgo(st.fullSince || st.seenSince);
+      return `<div>${logo}<span>${t ? `<b>All in use since ${t.clock}</b> (${t.ago})` : "<b>All in use</b>, since when unknown"}</span></div>` +
+        (t && t.min >= 20 ? `<div><span class="tip">In use for a while: a charger often frees up soon.</span></div>` : "");
+    }
+    if (st.state === "likely_offline") {
+      const t = clockAndAgo(st.changedAt);
+      return `<div>${logo}<span><b>Offline</b>${t ? `, no change since ${t.clock} (${t.ago})` : ""}</span></div>`;
+    }
+    const full = clockAndAgo(st.lastFullAt);
+    const changed = clockAndAgo(st.changedAt);
+    return `<div>${logo}<span><b>${st.available} of ${st.total} free.</b> ${full ? `Last full at ${full.clock} (${full.ago}).` : "Not seen full by this app recently."}</span></div>` +
+      (changed ? `<div><span class="muted">Last change at the site: ${changed.clock} (${changed.ago})</span></div>` : "");
+  }).filter(Boolean);
+  return lines.join("");
 }
 function closeNavSheet() { $("navSheet").hidden = true; $("navBackdrop").hidden = true; }
 $("navCancel").addEventListener("click", closeNavSheet);
@@ -1477,9 +1569,10 @@ function statusInfo(s) {
   // Kept short: the station name gets the room. Colour says free (green) or full (orange).
   if (!st) return { cls: "nodata", text: `<span title="${s.country === "NL" ? "Status not found" : "No live data"}">–</span>` };
   if (st.available == null) return { cls: "nodata", text: `<span title="Status unknown">?</span>` };
-  if (st.state === "free") return { cls: "free", text: `<strong title="${st.available} of ${st.total} free">${st.available}/${st.total}</strong>` };
+  const frac = (a, t) => `${a}<span class="sl">/</span><span class="tot">${t}</span>`;
+  if (st.state === "free") return { cls: "free", text: `<strong title="${st.available} of ${st.total} free">${frac(st.available, st.total)}</strong>` };
   if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Offline</strong>` };
-  return { cls: "full", text: `<strong title="All in use">0/${st.total}</strong>` };
+  return { cls: "full", text: `<strong title="All in use">${frac(0, st.total)}</strong>` };
 }
 
 // Road changes drawn on the timeline: the road you'll be on from a point between two chargers.
@@ -1618,7 +1711,8 @@ function shownStatus(s) {
   let info = statusInfo(s);
   const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
   const stale = !s.statusAt || Date.now() - s.statusAt > STALE_MS;
-  if (loading) info = { cls: "stale", text: `<span title="Updating">…</span>` };
+  // While updating: keep what's there, just grey. It changes only when the answer differs.
+  if (loading) info = { cls: "stale", text: s.status ? info.text : `<span title="Updating">↻</span>` };
   else if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="Tap to check">↻</span>` };
   return info;
 }
@@ -1666,8 +1760,35 @@ function stationRow(site, change, after) {
 function renderBrandsBtn() {
   const shown = shownBrands();
   const logos = shown.slice(0, 3).map(logoHtml).join("");
-  $("brandsBtn").innerHTML = `${logos}${shown.length > 3 ? `<span class="n">+${shown.length - 3}</span>` : ""}`;
+  setHtml($("brandsBtn"), `${logos}${shown.length > 3 ? `<span class="n">+${shown.length - 3}</span>` : ""}`);
   $("brandsBtn").title = `Showing ${shown.map((k) => BRAND[k].name).join(", ")}`;
+}
+
+// Only touch what changed, so nothing blinks (logos are not reloaded, rows not rebuilt).
+const htmlOf = new WeakMap();
+function setHtml(el, html) {
+  if (htmlOf.get(el) === html) return;
+  el.innerHTML = html;
+  htmlOf.set(el, html);
+}
+function patchList(list, parts) {
+  const kids = [...list.children];
+  const same = kids.length === parts.length && kids.every((el, i) => el.dataset.k === parts[i].key);
+  if (!same) {
+    list.innerHTML = parts.map((p) => p.html).join("");
+    [...list.children].forEach((el, i) => { el.dataset.k = parts[i].key; htmlOf.set(el, parts[i].html); });
+    return;
+  }
+  parts.forEach((p, i) => {
+    const el = kids[i];
+    if (htmlOf.get(el) === p.html) return;
+    const t = document.createElement("template");
+    t.innerHTML = p.html;
+    const n = t.content.firstElementChild;
+    n.dataset.k = p.key;
+    htmlOf.set(n, p.html);
+    el.replaceWith(n);
+  });
 }
 
 function render() {
@@ -1677,16 +1798,16 @@ function render() {
   const leftKm = r.distanceKm - u.km;
   const leftMin = r.min[r.min.length - 1] - u.min;
 
-  $("destRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
+  setHtml($("destRow"), `<span class="marker" aria-hidden="true"></span>
     <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
       <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead(8).length ? `<div class="sub roads"><span>via&nbsp;</span>${roadsAhead(8).map(roadPartBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
-    <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`;
+    <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`);
   fitRoads($("destRow").querySelector(".sub.roads"));
 
   const gps = u.at == null ? "Waiting for your location…"
     : u.acc != null && u.acc > 100 ? `Location rough (±${Math.round(u.acc)} m)` : "On route";
-  $("youRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
-    <div><div class="name">You</div><div class="sub">${gps}${roadNow() ? `&ensp;${roadPartBadge(roadNow())}` : ""}</div></div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`;
+  setHtml($("youRow"), `<span class="marker" aria-hidden="true"></span>
+    <div><div class="name">You</div><div class="sub">${gps}${roadNow() ? `&ensp;${roadPartBadge(roadNow())}` : ""}</div></div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`);
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcomingShown();
@@ -1696,23 +1817,27 @@ function render() {
   const list = $("list");
   const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
   const note = checking ? `<div class="empty">Checking detours${ahead.length ? " further ahead" : ""}…</div>` : "";
-  list.innerHTML = ahead.length
-    ? note + ahead.map((s, i) => stationRow(s,
-        roadChange(i ? ahead[i - 1].alongKm : -Infinity, s.alongKm),
-        i === ahead.length - 1 ? roadChange(s.alongKm, Infinity) : null)).reverse().join("")
-    : checking ? note
-    : hiddenCount
-      ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
-      : `<div class="empty">No more chargers within 5 km of your route.</div>`;
+  const parts = ahead.length
+    ? [...(note ? [{ key: "note", html: note }] : []), ...ahead.map((site, i) => ({
+        key: site.members.map((m) => m.id).join(" "),
+        html: stationRow(site,
+          roadChange(i ? ahead[i - 1].alongKm : -Infinity, site.alongKm),
+          i === ahead.length - 1 ? roadChange(site.alongKm, Infinity) : null).trim(),
+      })).reverse()]
+    : [{ key: "empty", html: checking ? note
+      : hiddenCount
+        ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
+        : `<div class="empty">No more chargers within 5 km of your route.</div>` }];
+  patchList(list, parts);
   // Stay at the bottom, or keep your place if you've scrolled up.
   list.scrollTop = state.stickToBottom ? list.scrollHeight : list.scrollHeight - list.clientHeight - fromBottom;
   updateScrollUi();
 
   if (state.statusError) {
-    $("age").textContent = "Couldn’t update status";
+    setHtml($("age"), "Couldn’t update status");
   } else if (state.statusAt) {
     const ago = Math.round((Date.now() - state.statusAt) / 60000);
-    $("age").innerHTML = ago < 1 ? "Status<br>now" : `Status<br>${ago} min old`;
+    setHtml($("age"), ago < 1 ? "Status<br>now" : `Status<br>${ago} min old`);
   }
 }
 
@@ -1905,7 +2030,7 @@ function helpHtml() {
   <ul>
     <li><b>Scroll up</b> to see chargers further ahead. The blue arrow brings you back to the next ones.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
-    <li><b>Tap a charger</b> to update its status (at most once a minute). <b>Press and hold</b> a charger to navigate there with Apple Maps, Google Maps, Waze or Flitsmeister, or to copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
+    <li><b>Tap a charger</b> to update its status (at most once a minute). <b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to navigate there with Apple Maps, Google Maps, Waze or Flitsmeister, or to copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while the app is open.</li>
     <li><b>New route</b> takes you back to the start screen.</li>
@@ -2038,8 +2163,15 @@ for (const n of [1, 2]) {
     syncAddVia(); updatePlanBtn();
   }, true);
 }
-restore();
-if (!localStorage.getItem(INTRO_KEY)) showIntro();
+let booted = false;
+function boot() {
+  booted = true;
+  restore();
+  if (!localStorage.getItem(INTRO_KEY)) showIntro();
+}
+$("lockBtn").addEventListener("click", unlock);
+$("lockCode").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
+if (accessToken()) boot(); else showLock();
 </script>
 </body>
 </html>

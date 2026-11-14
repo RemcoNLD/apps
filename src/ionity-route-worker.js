@@ -62,7 +62,9 @@ const BRANDS = [
   { key: "enbw", name: "EnBW", color: "#000099", ocm: /\benbw\b/i, live: /\benbw\b/i, evse: /^DE\*?EBW\*?/i, site: "enbw.com" },
   { key: "aral", name: "Aral pulse", color: "#0064aa", ocm: /\baral\b/i, live: /\baral\b/i, evse: /^DE\*?(ARL|ARP)\*?/i, site: "aral.de" },
   { key: "shell", name: "Shell Recharge", color: "#dd1d21", ocm: /shell|newmotion/i, live: /shell|newmotion/i, evse: /^[A-Z]{2}\*?(TNM|SHL|SRS)\*?/i, site: "shell.com" },
-  { key: "total", name: "TotalEnergies", color: "#ed0000", ocm: /\btotal(energies)?\b/i, live: /\btotal(energies)?\b/i, evse: /^[A-Z]{2}\*?(TCB|TOT)\*?/i, site: "totalenergies.com" },
+  // TotalEnergies in every country: NL/BE/DE/FR run as "TotalEnergies Charging Services", "Total EV Charge",
+  // "TotalEnergies (FR)", "TotalEnergies Marketing Deutschland" etc. EVSE IDs: xx*TCB (Benelux, FR, DE), FR*HPC (French HPC).
+  { key: "total", name: "TotalEnergies", color: "#ed0000", ocm: /\btotal\s*(energies|ev\s*charge)?\b/i, live: /\btotal\s*(energies|ev\s*charge)?\b/i, evse: /^(?:[A-Z]{2}\*?(?:TCB|TOT)|FR\*?HPC)\*?/i, site: "totalenergies.com" },
   { key: "electra", name: "Electra", color: "#00a6a0", ocm: /\belectra\b/i, live: /\belectra\b/i, evse: /^FR\*?ELC\*?/i, site: "go-electra.com" },
   { key: "izivia", name: "Izivia", color: "#00a0dc", ocm: /izivia|corri.?door/i, live: /izivia|corri.?door/i, evse: /^FR\*?(IZI|CDO)\*?/i, site: "izivia.com" },
   { key: "powerdot", name: "Powerdot", color: "#6a2c91", ocm: /power ?dot/i, live: /power ?dot/i, evse: /^[A-Z]{2}\*?PWD\*?/i, site: "powerdot.eu" },

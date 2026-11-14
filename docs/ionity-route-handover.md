@@ -117,7 +117,7 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 
 ### Chargers along the route
 
-- **Brands:** `BRANDS` lists the 11 brands. Per brand: a pattern to find its operators in Open Charge Map (`ocm`), one to recognise it in the live sources (`live`), one for EVSE IDs (`evse`, e.g. `NL*FLA*…`), its colour and its website (for the logo).
+- **Brands:** `BRANDS` lists the 11 brands. Per brand: a pattern to find its operators in Open Charge Map (`ocm`), one to recognise it in the live sources (`live`), one for EVSE IDs (`evse`, e.g. `NL*FLA*…`; TotalEnergies: `xx*TCB`, `xx*TOT`, `FR*HPC`), its colour and its website (for the logo).
 - **Operator IDs:** read once a day from Open Charge Map's reference data (`/v3/referencedata`). The trimmed list of operators and countries is kept 7 days in KV (`ocm-ref-v2`).
 - **Finding chargers:** the route is cut into pieces of about 150–250 km. Per piece, one Open Charge Map call fetches the box around it for all chosen operators (`operatorid=1,2,3`, `compact=true`). The box is rounded to 0.05° so nearby lookups reuse it. Calls are spaced out and retried on 429.
 - **Fast only:** for brands other than Ionity, only sites with a charger of 50 kW or more (`FAST_KW`).
@@ -190,7 +190,9 @@ One file, `ionity-route.html`, with no libraries or build step. The version is i
 - **Detours:** fetched for the rows on screen. With "Easy to reach" on, also for the next 60 chargers; a charger then only appears once its detour is known.
 - **Distance on a row:** for a charger next to the road (within 250 m: a service area) it's where the route passes it. For one further away it's the route up to point A (3 km before the closest point) plus the drive A→charger from `/detours` (`wayTo()`). Before that answer is in, the closest point on the route is used, which makes chargers around one junction all show the same distance.
 - **"Easy to reach":** on your side of the road, or a detour of at most 6 minutes, and no round trips.
-- **Screen:** a Wake Lock keeps it on while driving.
+- **Screen:** kept on while driving with the Screen Wake Lock, asked again whenever iOS releases it, on every tap and every 30 s, plus a tiny silent muted looping video (`NOSLEEP_MP4`, no sound track, so music and CarPlay aren't interrupted) as a fallback for home-screen apps. Help shows which is active. Released on arrival and on New route.
+- **Status updating:** while any charger is being looked up, the status bottom right shows a turning ring and a pulsing "Updating".
+- **Arrival:** within 150 m of the end of the route (after having been more than 500 m away), a short confetti shower and a "You've arrived" card; no rerouting after that. Stored with the route, so a reload doesn't celebrate again.
 
 ### Stored on the device (localStorage)
 

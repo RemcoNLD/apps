@@ -244,7 +244,7 @@ async function getRoute(env, points) {
   const data = await fetchJson(`${ORS_BASE}/directions/driving-car/geojson`, {
     method: "POST",
     headers: orsHeaders(env),
-    body: JSON.stringify({ coordinates: points, instructions: true }),
+    body: JSON.stringify({ coordinates: points, instructions: true, extra_info: ["countryinfo"] }),
   }, "Routing");
   const f = data.features?.[0];
   if (!f) throw new HttpError(502, "Routing returned no route");
@@ -254,8 +254,10 @@ async function getRoute(env, points) {
   const steps = segments.flatMap((s) => s.steps || []);
   // With a via point there are two segments; the via is where the first one ends.
   const firstEnd = segments.length > 1 ? segments[0].steps?.at(-1)?.way_points?.[1] : null;
+  // Which country each part of the route is in (routing service's own country IDs).
+  const countrySegs = f.properties?.extras?.countryinfo?.values || [];
   return {
-    coords, km, min, steps,
+    coords, km, min, steps, countrySegs, idIso: {},
     viaKm: firstEnd != null ? km[firstEnd] : null,
     distanceKm: (f.properties?.summary?.distance || 0) / 1000,
     durationMin: (f.properties?.summary?.duration || 0) / 60,
@@ -266,6 +268,88 @@ async function getRoute(env, points) {
 
 // Pulls a road number out of a street name, e.g. "A 2" -> "A2", "E 19;A 1" -> "E19", "B 179" -> "B179".
 // Takes the first one in the name, which usually follows local signage.
+// Motorways that change number at a border: "NL:A12" continues as "DE:A3", and so on.
+const BORDER_CONTINUATIONS = [
+  ["NL:A1", "DE:A30"], ["NL:A12", "DE:A3"], ["NL:A67", "DE:A40"], ["NL:A74", "DE:A61"], ["NL:A76", "DE:A4"],
+  ["NL:A77", "DE:A57"], ["NL:A7", "DE:A280"], ["NL:A16", "BE:E19"], ["NL:A58", "BE:E34"], ["NL:A4", "BE:A12"],
+  ["NL:A2", "BE:E25"], ["NL:A67", "BE:E34"], ["BE:E40", "DE:A44"], ["BE:A3", "DE:A44"], ["BE:E42", "DE:A60"],
+  ["BE:E411", "LU:A6"], ["BE:A4", "LU:A6"], ["BE:E19", "FR:A2"], ["BE:A7", "FR:A2"], ["BE:E17", "FR:A22"],
+  ["BE:A14", "FR:A22"], ["BE:E40", "FR:A16"], ["BE:A18", "FR:A16"], ["LU:A3", "FR:A31"], ["LU:A13", "DE:A8"],
+  ["LU:A1", "DE:A64"], ["DE:A6", "FR:A320"], ["DE:A5", "FR:A36"], ["DE:A5", "CH:A2"], ["DE:A8", "AT:A1"],
+  ["DE:A3", "AT:A8"], ["DE:A93", "AT:A12"], ["DE:A7", "AT:B179"], ["DE:A96", "AT:A14"],
+];
+const CONTINUES = new Map();
+for (const [a, b] of BORDER_CONTINUATIONS) {
+  for (const [x, y] of [[a, b], [b, a]]) {
+    const [cx, rx] = x.split(":"), [cy, ry] = y.split(":");
+    CONTINUES.set(`${cx}:${rx}>${cy}`, ry);
+  }
+}
+// Very rough [minLon, minLat, maxLon, maxLat] per country, only to choose between candidates.
+const BOXES = {
+  NL: [3.3, 50.75, 7.25, 53.6], BE: [2.5, 49.5, 6.4, 51.5], LU: [5.7, 49.45, 6.55, 50.2], DE: [5.8, 47.2, 15.1, 55.1],
+  AT: [9.5, 46.4, 17.2, 49.05], CH: [5.9, 45.8, 10.5, 47.8], FR: [-5, 42, 8.25, 51.1],
+};
+function inBox(iso, [lon, lat]) {
+  const b = BOXES[iso];
+  return !!b && lon >= b[0] && lon <= b[2] && lat >= b[1] && lat <= b[3];
+}
+function countryIdAt(route, index) {
+  for (const [a, b, id] of route.countrySegs || []) if (index >= a && index <= b) return id;
+  return null;
+}
+const isoAt = (route, index) => route.idIso?.[countryIdAt(route, index)] || null;
+// The routing service keeps a road's name past a border (NL A12 carries on as "A12" in Germany).
+// Give the number the road has in the country at this index, or nothing if unknown.
+function refAt(route, ref, fromIndex, toIndex) {
+  const fromId = countryIdAt(route, fromIndex), toId = countryIdAt(route, toIndex);
+  if (!ref || fromId === toId || fromId == null || toId == null) return ref;
+  const fromIso = route.idIso[fromId], toIso = route.idIso[toId];
+  if (!toIso) return null;                       // other country, unknown which: show nothing rather than a wrong number
+  if (fromIso) return CONTINUES.get(`${fromIso}:${ref}>${toIso}`) || null;
+  // Start country unknown (no charger there): any known continuation into this country.
+  for (const [k, v] of CONTINUES) if (k.endsWith(`:${ref}>${toIso}`) && !k.startsWith(`${toIso}:`)) return v;
+  return null;
+}
+// Learn which routing-country ID is which ISO country from the chargers (they carry ISO codes).
+function learnCountries(route, points) {
+  const votes = {};
+  for (const { index, iso } of points) {
+    const id = countryIdAt(route, index);
+    if (id == null || !iso) continue;
+    votes[id] = votes[id] || {};
+    votes[id][iso] = (votes[id][iso] || 0) + 1;
+  }
+  for (const [id, v] of Object.entries(votes)) route.idIso[id] = Object.entries(v).sort((a, b) => b[1] - a[1])[0][0];
+  // A country without chargers on the route: a road crossing the border tells which it is
+  // ("A12" running into Germany can only have come from the Netherlands).
+  for (const st of route.steps || []) {
+    const [a, b] = st.way_points || [];
+    const ref = roadRef(st.name);
+    if (a == null || b == null || !ref) continue;
+    const ia = countryIdAt(route, Math.min(a + 1, b)), ib = countryIdAt(route, Math.max(b - 1, a));
+    if (ia == null || ib == null || ia === ib) continue;
+    const [known, unknown, dir] = route.idIso[ia] && !route.idIso[ib] ? [route.idIso[ia], ib, "from"]
+      : !route.idIso[ia] && route.idIso[ib] ? [route.idIso[ib], ia, "to"] : [null];
+    if (!known) continue;
+    const cands = new Set();
+    for (const k of CONTINUES.keys()) {
+      const [x, rest] = k.split(":"), [r, y] = rest.split(">");
+      if (r !== ref) continue;
+      if (dir === "to" && y === known) cands.add(x);   // unknown -> known
+      if (dir === "from" && x === known) cands.add(y); // known -> unknown
+    }
+    let pick = [...cands];
+    if (pick.length > 1) {
+      // Same number from two directions (A12 into Germany: from NL or AT). Rough boxes settle it.
+      const seg = (route.countrySegs || []).find(([, , id]) => id === unknown);
+      const c = seg && route.coords?.[Math.round((seg[0] + seg[1]) / 2)];
+      if (c) pick = pick.filter((iso) => inBox(iso, c));
+    }
+    if (pick.length === 1) route.idIso[unknown] = pick[0];
+  }
+}
+
 function roadRef(name) {
   if (!name || name === "-") return null;
   const m = String(name).match(/\b([AERSMBN])\s?(\d{1,3}[a-z]?)\b/);
@@ -280,16 +364,30 @@ function roadsAlong(route) {
   for (const st of route.steps) {
     const [a, b] = st.way_points || [];
     if (a == null || b == null) continue;
-    const ref = roadRef(st.name);
-    if (!ref) continue;
-    const from = route.km[a], to = route.km[b];
-    const last = parts[parts.length - 1];
-    if (last && last.ref === ref && from - last.toKm < 3) last.toKm = to; // same road, short gap (junction)
-    else parts.push({ ref, fromKm: from, toKm: to });
+    const ref0 = roadRef(st.name);
+    if (!ref0) continue;
+    // Split the step where it crosses a border.
+    const pieces = [];
+    for (const [sa, sb] of route.countrySegs || []) {
+      if (sb <= a || sa >= b) continue;
+      const from = Math.max(a, sa), to = Math.min(b, sb);
+      if (to > from) pieces.push([from, to]);
+    }
+    if (!pieces.length) pieces.push([a, b]);
+    for (const [x, y] of pieces) {
+      const mid = Math.round((x + y) / 2); // border indices belong to both sides; look in the middle
+      const iso = isoAt(route, mid);
+      const ref = refAt(route, ref0, Math.min(a + 1, b), mid);
+      if (!ref) continue;
+      const from = route.km[x], to = route.km[y];
+      const last = parts[parts.length - 1];
+      if (last && last.ref === ref && from - last.toKm < 3) last.toKm = to; // same road, short gap (junction)
+      else parts.push({ ref, country: iso, fromKm: from, toKm: to });
+    }
   }
   return parts
     .filter((p) => p.toKm - p.fromKm >= 5) // skip short connectors
-    .map((p) => ({ ref: p.ref, fromKm: Math.round(p.fromKm * 10) / 10, toKm: Math.round(p.toKm * 10) / 10 }));
+    .map((p) => ({ ref: p.ref, country: p.country, fromKm: Math.round(p.fromKm * 10) / 10, toKm: Math.round(p.toKm * 10) / 10 }));
 }
 
 // The numbered road the route is on at a given coordinate index.
@@ -301,7 +399,7 @@ function roadAtIndex(route, index) {
   for (const st of route.steps) {
     const [a, b] = st.way_points || [];
     if (a == null || b == null) continue;
-    const ref = roadRef(st.name);
+    const ref = refAt(route, roadRef(st.name), Math.min(a + 1, b), index);
     if (!ref) continue;
     const gap = index >= a && index <= b ? 0 : Math.min(Math.abs(route.km[a] - at), Math.abs(route.km[b] - at));
     if (gap < bestGap) { bestGap = gap; best = ref; }
@@ -625,6 +723,10 @@ async function handlePlan(request, env) {
 
   const route = await getRoute(env, via ? [from, via, to] : [from, to]);
   const pois = await ionityAlongRoute(env, route, corridorKm);
+  learnCountries(route, pois.map((p) => ({
+    index: projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).index,
+    iso: p.AddressInfo?.Country?.ISOCode,
+  })));
 
   let stations = pois.map((p) => {
     const a = p.AddressInfo || {};
@@ -661,6 +763,7 @@ async function handlePlan(request, env) {
       viaKm: route.viaKm != null ? Math.round(route.viaKm * 10) / 10 : null,
       roads: roadsAlong(route),
       // A sample of the raw street names, to check the road numbers come through in each country
+      borders: (route.countrySegs || []).map(([a, b, id]) => ({ fromKm: Math.round(route.km[a]), toKm: Math.round(route.km[b]), id, iso: route.idIso[id] || null })),
       debugNames: [...new Set(route.steps.filter((s) => s.distance > 2000).map((s) => s.name))].slice(0, 25),
       coords: keep.map((i) => [+route.coords[i][0].toFixed(5), +route.coords[i][1].toFixed(5)]),
       km: keep.map((i) => Math.round(route.km[i] * 100) / 100),

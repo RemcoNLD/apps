@@ -601,7 +601,7 @@ function roadBadge(ref, country) {
   const blue = (kind === "m" && ["DE", "AT", "BE", "LU", "CH"].includes(country)) || (kind === "n" && country === "AT");
   return `<span class="rb ${kind}${blue ? " blue" : ""}">${esc(ref)}</span>`;
 }
-const roadPartBadge = (r) => roadBadge(r.ref, countryAt(r.fromKm ?? r.toKm, r.toKm));
+const roadPartBadge = (r) => roadBadge(r.ref, r.country || countryAt(r.fromKm ?? r.toKm, r.toKm));
 
 function roadsAhead(limit = 4) {
   const parts = (state.route?.roads || []).filter((r) => r.toKm > state.user.km + 1);

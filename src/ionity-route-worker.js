@@ -781,6 +781,77 @@ async function handlePlan(request, env) {
 // points left and right of the fastest route, keep the ones that use different main roads.
 const ALT_DEFAULTS = { fractions: [0.33, 0.66], offsetKm: 40, maxSlower: 1.25, mainRoadKm: 30 };
 
+// Big cities, so a card says "Frankfurt" rather than the village at the junction.
+const MAJOR_CITIES = [ // [tier (1 = largest), name, lat, lon]
+  [1,'Amsterdam',52.37,4.90], [1,'Rotterdam',51.92,4.48], [1,'Den Haag',52.08,4.30], [2,'Utrecht',52.09,5.12],
+  [2,'Eindhoven',51.44,5.47], [2,'Groningen',53.22,6.57], [2,'Tilburg',51.56,5.09], [2,'Almere',52.37,5.21],
+  [2,'Breda',51.59,4.78], [2,'Nijmegen',51.84,5.86], [2,'Arnhem',51.98,5.91], [3,'Enschede',52.22,6.89],
+  [3,'Zwolle',52.51,6.09], [3,'Amersfoort',52.16,5.39], [3,'Apeldoorn',52.21,5.97], [3,"'s-Hertogenbosch",51.69,5.30],
+  [3,'Maastricht',50.85,5.69], [3,'Venlo',51.37,6.17], [3,'Heerlen',50.89,5.98], [1,'Brussels',50.85,4.35],
+  [1,'Antwerp',51.22,4.40], [2,'Ghent',51.05,3.72], [2,'Liège',50.63,5.57], [2,'Charleroi',50.41,4.44],
+  [3,'Namur',50.47,4.87], [3,'Leuven',50.88,4.70], [3,'Hasselt',50.93,5.34], [3,'Bruges',51.21,3.22],
+  [3,'Mons',50.45,3.95], [3,'Arlon',49.68,5.81], [2,'Luxembourg',49.61,6.13], [1,'Berlin',52.52,13.40],
+  [1,'Hamburg',53.55,9.99], [1,'Munich',48.14,11.58], [1,'Cologne',50.94,6.96], [1,'Frankfurt',50.11,8.68],
+  [1,'Stuttgart',48.78,9.18], [1,'Düsseldorf',51.23,6.78], [1,'Dortmund',51.51,7.47], [1,'Essen',51.46,7.01],
+  [1,'Leipzig',51.34,12.37], [1,'Bremen',53.08,8.80], [1,'Dresden',51.05,13.74], [1,'Hannover',52.37,9.73],
+  [1,'Nuremberg',49.45,11.08], [2,'Duisburg',51.43,6.76], [2,'Bochum',51.48,7.22], [2,'Wuppertal',51.26,7.15],
+  [2,'Bielefeld',52.02,8.53], [2,'Bonn',50.74,7.10], [2,'Münster',51.96,7.63], [2,'Mannheim',49.49,8.47],
+  [2,'Karlsruhe',49.01,8.40], [2,'Augsburg',48.37,10.90], [2,'Wiesbaden',50.08,8.24], [2,'Mönchengladbach',51.19,6.44],
+  [2,'Gelsenkirchen',51.51,7.10], [2,'Aachen',50.78,6.08], [2,'Braunschweig',52.27,10.52], [2,'Kiel',54.32,10.13],
+  [2,'Chemnitz',50.83,12.92], [2,'Halle',51.48,11.97], [2,'Magdeburg',52.13,11.63], [2,'Freiburg',47.99,7.85],
+  [2,'Krefeld',51.33,6.56], [2,'Mainz',50.00,8.27], [2,'Lübeck',53.87,10.69], [2,'Erfurt',50.98,11.03],
+  [2,'Oberhausen',51.47,6.85], [2,'Rostock',54.09,12.10], [2,'Kassel',51.31,9.48], [3,'Hagen',51.36,7.47],
+  [3,'Potsdam',52.39,13.06], [3,'Saarbrücken',49.24,7.00], [3,'Hamm',51.68,7.82], [3,'Ludwigshafen',49.48,8.44],
+  [3,'Oldenburg',53.14,8.21], [3,'Osnabrück',52.28,8.05], [3,'Leverkusen',51.03,6.98], [3,'Darmstadt',49.87,8.65],
+  [3,'Heidelberg',49.40,8.69], [3,'Regensburg',49.01,12.10], [3,'Paderborn',51.72,8.75], [3,'Ingolstadt',48.77,11.43],
+  [3,'Würzburg',49.79,9.95], [3,'Ulm',48.40,9.99], [3,'Heilbronn',49.14,9.22], [3,'Pforzheim',48.89,8.70],
+  [3,'Wolfsburg',52.42,10.79], [3,'Göttingen',51.54,9.93], [3,'Koblenz',50.36,7.59], [3,'Trier',49.75,6.64],
+  [3,'Kaiserslautern',49.44,7.77], [3,'Siegen',50.87,8.02], [3,'Gießen',50.58,8.68], [3,'Fulda',50.55,9.68],
+  [3,'Bamberg',49.89,10.89], [3,'Bayreuth',49.95,11.58], [3,'Passau',48.57,13.43], [3,'Rosenheim',47.86,12.12],
+  [3,'Kempten',47.73,10.31], [3,'Memmingen',47.99,10.18], [3,'Hanau',50.13,8.92], [3,'Aschaffenburg',49.97,9.15],
+  [3,'Erlangen',49.59,11.00], [3,'Offenburg',48.47,7.94], [3,'Lindau',47.55,9.68], [1,'Vienna',48.21,16.37],
+  [2,'Graz',47.07,15.44], [2,'Linz',48.31,14.29], [2,'Salzburg',47.81,13.04], [2,'Innsbruck',47.27,11.39],
+  [3,'Klagenfurt',46.62,14.31], [3,'Villach',46.61,13.85], [3,'Bregenz',47.50,9.75], [3,'Wels',48.16,14.03],
+  [3,'Kufstein',47.58,12.17], [3,'Landeck',47.14,10.57], [3,'Imst',47.24,10.74], [1,'Paris',48.86,2.35],
+  [1,'Lyon',45.76,4.84], [1,'Marseille',43.30,5.37], [2,'Lille',50.63,3.06], [2,'Strasbourg',48.58,7.75],
+  [2,'Metz',49.12,6.18], [2,'Nancy',48.69,6.18], [2,'Reims',49.26,4.03], [2,'Mulhouse',47.75,7.34],
+  [2,'Dijon',47.32,5.04], [3,'Valenciennes',50.36,3.52], [3,'Amiens',49.89,2.30], [3,'Besançon',47.24,6.02],
+  [3,'Colmar',48.08,7.36], [3,'Calais',50.95,1.86], [3,'Dunkerque',51.03,2.38], [1,'Zürich',47.37,8.54],
+  [2,'Basel',47.56,7.59], [2,'Bern',46.95,7.45], [2,'Geneva',46.20,6.15], [3,'Lausanne',46.52,6.63],
+  [3,'Lucerne',47.05,8.31], [3,'St. Gallen',47.42,9.38], [3,'Chur',46.85,9.53], [3,'Bolzano',46.50,11.35],
+  [2,'Verona',45.44,10.99], [1,'Milan',45.46,9.19],
+];
+
+const flatKm = ([lon1, lat1], [lon2, lat2]) =>
+  Math.hypot((lon2 - lon1) * 111.3 * Math.cos(toRad((lat1 + lat2) / 2)), (lat2 - lat1) * 111.3);
+
+// The best-known city near a point: nearest wins, but a bigger city counts as closer
+// (a junction near Mainz stays Mainz; one between villages becomes Frankfurt).
+function bigCityNear(p, maxKm = 25) {
+  let best = null;
+  for (const [tier, name, lat, lon] of MAJOR_CITIES) {
+    const d = flatKm(p, [lon, lat]);
+    if (d > maxKm) continue;
+    const score = d * (tier === 1 ? 0.5 : tier === 2 ? 0.75 : 1);
+    if (!best || score < best.score) best = { name, score };
+  }
+  return best?.name || null;
+}
+
+// Big cities a stretch of road passes close by, in driving order.
+function bigCitiesAlong(route, fromKm, toKm) {
+  const hits = new Map();
+  for (let k = fromKm; k <= toKm + 2; k += 2) {
+    const p = pointAtKm(route, Math.min(k, toKm));
+    for (const [tier, name, lat, lon] of MAJOR_CITIES) {
+      if (hits.has(name)) continue;
+      const reach = tier === 1 ? 12 : tier === 2 ? 8 : 5; // ring roads pass big cities further out
+      if (flatKm(p, [lon, lat]) <= reach) hits.set(name, k);
+    }
+  }
+  return [...hits.entries()].sort((a, b) => a[1] - b[1]).map(([n]) => n);
+}
+
 // A cheap route (simplified geometry, no country info) only to discover a corridor.
 async function roughRoute(env, points) {
   const data = await fetchJson(`${ORS_BASE}/directions/driving-car/geojson`, {
@@ -859,17 +930,25 @@ async function describeOption(env, route, via, pois, maxCities = 4) {
     iso: p.AddressInfo?.Country?.ISOCode,
   })));
   const parts = roadsAlong(route).filter((r, i, a) => r.ref !== a[i - 1]?.ref);
-  // Name a town where you join each main road (not the first one: that's where you start).
-  const major = parts.map((r, i) => ({ r, i })).filter(({ r, i }) => i > 0 && r.toKm - r.fromKm >= 25).slice(0, maxCities);
-  const names = await Promise.all(major.map(({ r }) => placeName(env, pointAtKm(route, r.fromKm + 1))));
-  major.forEach(({ i }, k) => { parts[i].city = names[k]; });
+  // Per road: the big city where you join it (not for the first road: that's where you start),
+  // then the big cities it passes. Only when no big city is near: the local town name.
+  const lookups = [];
+  parts.forEach((r, i) => {
+    const long = r.toKm - r.fromKm >= 25;
+    const join = i > 0 && long ? bigCityNear(pointAtKm(route, r.fromKm + 1)) : null;
+    const along = long ? bigCitiesAlong(route, r.fromKm, r.toKm) : [];
+    r.cities = [...new Set([join, ...along].filter(Boolean))].slice(0, 3);
+    if (!r.cities.length && i > 0 && long && lookups.length < maxCities) lookups.push(i);
+  });
+  const names = await Promise.all(lookups.map((i) => placeName(env, pointAtKm(route, parts[i].fromKm + 1))));
+  lookups.forEach((i, k) => { if (names[k]) parts[i].cities = [names[k]]; });
   const ionity = pois.filter((p) =>
     projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).offRouteKm <= 5).length;
   return {
     via, ionity,
     distanceKm: Math.round(route.distanceKm),
     durationMin: Math.round(route.durationMin),
-    roads: parts.map((r) => ({ ref: r.ref, country: r.country, city: r.city || null })),
+    roads: parts.map((r) => ({ ref: r.ref, country: r.country, cities: r.cities || [] })),
     signature: mainRoads(route.steps, ALT_DEFAULTS.mainRoadKm),
   };
 }

@@ -105,7 +105,7 @@
   .opt-top .tag.slow { color: var(--full); }
   .opt-top .tag.cur { color: var(--sign-blue); }
   .opt-roads { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; line-height: 1.6; }
-  .opt-roads .pair { white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+  .opt-roads .pair { white-space: normal; display: inline-flex; align-items: center; gap: 5px; }
   .opt-roads .city { color: var(--muted); font-weight: 600; margin-right: 2px; }
   .opt-roads .sep { color: var(--muted); margin: 0 2px; }
   .opt-meta { margin-top: 8px; color: var(--muted); font-size: 1rem; }
@@ -321,7 +321,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.9";
+const APP_VERSION = "2026-11-14.10";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -451,7 +451,8 @@ function optionCard(o, i, fastestMin, isCurrent) {
   const tag = isCurrent ? `<span class="tag cur">Current</span>`
     : diff <= 1 ? `<span class="tag fast">Fastest</span>` : `<span class="tag slow">+${fmtMin(diff)}</span>`;
   const roads = o.roads.map((r) =>
-    `<span class="pair">${roadBadge(r.ref, r.country)}${r.city ? ` <span class="city">${esc(r.city)}</span>` : ""}</span>`).join('<span class="sep">›</span>');
+    `<span class="pair">${roadBadge(r.ref, r.country)}${(r.cities || (r.city ? [r.city] : [])).length
+      ? ` <span class="city">${(r.cities || [r.city]).map(esc).join(" · ")}</span>` : ""}</span>`).join('<span class="sep">›</span>');
   return `<button type="button" class="opt${isCurrent ? " current" : ""}" data-i="${i}">
     <div class="opt-top">${fmtMin(o.durationMin)} <span class="km">${o.distanceKm} km</span>${tag}</div>
     <div class="opt-roads">${roads || '<span class="city">No numbered roads</span>'}</div>

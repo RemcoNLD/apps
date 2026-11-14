@@ -605,7 +605,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.29";
+const APP_VERSION = "2026-11-14.30";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -964,6 +964,28 @@ function project(lonlat) {
   return bestAhead && bestAhead.d < 1 ? bestAhead : best;
 }
 
+function minAtKm(k) {
+  const { km, min } = state.route;
+  for (let i = 0; i < km.length - 1; i++) {
+    if (km[i + 1] >= k) return min[i] + ((k - km[i]) / ((km[i + 1] - km[i]) || 1)) * (min[i + 1] - min[i]);
+  }
+  return min[min.length - 1];
+}
+
+// How far and how long to the charger itself, from where you are.
+// A charger right next to the road (a service area): where the route passes it.
+// One beyond an exit or in a town: the route up to 3 km before it (point A of the detour lookup),
+// then the real drive from there to the charger. Without that, every charger near one junction
+// would show the same distance: that of the junction, not of the charger.
+function wayTo(s) {
+  const passKm = s.alongKm - state.user.km, passMin = s.alongMin - state.user.min;
+  if (s.toKm == null || s.toMin == null || (s.offRouteKm ?? 0) <= SERVICE_AREA_KM) return { km: passKm, min: passMin };
+  const aKm = Math.max(0, s.alongKm - 3);
+  const km = aKm + s.toKm - state.user.km;
+  const min = minAtKm(aKm) + s.toMin - state.user.min;
+  return { km: Math.max(km, s.offRouteKm ?? 0, 0), min: Math.max(min, 0) };
+}
+
 function pointAtKm(k) {
   const { coords, km } = state.route;
   for (let i = 0; i < km.length - 1; i++) {
@@ -1108,7 +1130,9 @@ function detourCandidates(inView = []) {
 async function fetchDetours(stations) {
   if (detourBusy) { detourAgain = true; return; }
   const now = Date.now();
-  const todo = stations.filter((s) => !("detourMin" in s) && !s.detourLoading && !(s.detourTriedAt && now - s.detourTriedAt < DETOUR_RETRY_MS))
+  // Also chargers beyond an exit whose detour came from an older version without the way there.
+  const needs = (s) => !("detourMin" in s) || (s.toKm === undefined && (s.offRouteKm ?? 0) > SERVICE_AREA_KM);
+  const todo = stations.filter((s) => needs(s) && !s.detourLoading && !(s.detourTriedAt && now - s.detourTriedAt < DETOUR_RETRY_MS))
     .sort((a, b) => a.alongKm - b.alongKm);
   if (!todo.length) return;
   detourBusy = true;
@@ -1118,8 +1142,11 @@ async function fetchDetours(stations) {
       const chunk = todo.slice(i, i + 20);
       const items = chunk.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, a: pointAtKm(Math.max(0, s.alongKm - 3)), b: pointAtKm(Math.min(state.route.distanceKm, s.alongKm + 3)) }));
       try {
-        const { detours } = await api("/detours", { items });
-        for (const s of chunk) if (detours && s.id in detours) s.detourMin = detours[s.id];
+        const { detours, reach } = await api("/detours", { items });
+        for (const s of chunk) {
+          if (detours && s.id in detours) s.detourMin = detours[s.id];
+          if (reach?.[s.id]) { s.toMin = reach[s.id].toMin; s.toKm = reach[s.id].toKm; }
+        }
       } catch (_) { /* try again in a few minutes */ }
       for (const s of chunk) s.detourLoading = false;
       // Show each batch as it arrives (nearest first), then look up the status of what came into view.
@@ -1722,14 +1749,13 @@ function stationRow(site, change, after) {
   const s = site.primary, members = site.members;
   const infos = members.map(shownStatus);
   const cls = CLS_ORDER.find((c) => infos.some((i) => i.cls === c)) || "nodata";
-  const km = site.alongKm - state.user.km;
-  const min = site.alongMin - state.user.min;
   const kw = Math.max(0, ...members.map((m) => m.status?.maxKw || m.maxKw || 0)) || null;
   // The quickest one to reach decides the detour shown.
   const withDetour = members.filter((m) => detourOf(m) != null);
   const quick = withDetour.length ? withDetour.reduce((a, b) => (detourOf(b) < detourOf(a) ? b : a)) : s;
   const dm = detourOf(quick);
   const reach = reachOf(quick);
+  const { km, min } = wayTo(quick);
   const detour = dm != null && dm >= SHOW_DETOUR_FROM
     ? `<span class="dmin${reach === "roundtrip" ? " round" : ""}" title="${dm} minutes extra to get there and back">+${dm}</span>` : "";
   const country = s.country ? `<span class="flag" title="${esc(s.country)}">${flagOf(s.country)}</span>` : "";
@@ -2000,7 +2026,7 @@ function helpHtml() {
   </ul>
 
   <h3>The screen while driving</h3>
-  <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are, and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
+  <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit, including the drive from the motorway to it), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>Road numbers on the line show where you change roads, styled like that country's signs.</p>
 
   <h3>Free or not</h3>

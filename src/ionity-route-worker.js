@@ -667,7 +667,7 @@ const ionityAlongRoute = (env, route, corridorKm) => sitesAlongRoute(env, route,
 // switching route options then don't use the (scarce: 500 a day) matrix quota again.
 function detourKeyAB(id, a, b) {
   const bearing = (Math.atan2(b[0] - a[0], b[1] - a[1]) * 180 / Math.PI + 360) % 360;
-  return `det:${id}:${Math.round(bearing / 45) % 8}`;
+  return `det2:${id}:${Math.round(bearing / 45) % 8}`;
 }
 const detourItem = (route, s) => ({
   id: s.id, lat: s.lat, lon: s.lon,
@@ -685,6 +685,8 @@ function cachedDetours(route, stations) {
   }
   return result;
 }
+// A detour as remembered: {min, toMin, toKm}. min = extra minutes; toMin/toKm = the drive from
+// route point A (3 km before) to the charger itself, so the app can show the real way there.
 
 // items: [{id, lat, lon, a:[lon,lat], b:[lon,lat]}]
 async function detourItems(env, items) {
@@ -709,15 +711,20 @@ async function detourItems(env, items) {
       const m = await fetchJson(`${ORS_BASE}/matrix/driving-car`, {
         method: "POST",
         headers: orsHeaders(env),
-        body: JSON.stringify({ locations, sources, destinations, metrics: ["duration"] }),
+        body: JSON.stringify({ locations, sources, destinations, metrics: ["duration", "distance"] }),
       }, "Matrix");
       chunk.forEach((it, k) => {
         // rows: 2k = A, 2k+1 = S ; columns: 2k = S, 2k+1 = B
         const AS = m.durations?.[2 * k]?.[2 * k];
         const SB = m.durations?.[2 * k + 1]?.[2 * k + 1];
         const AB = m.durations?.[2 * k]?.[2 * k + 1];
+        const ASm = m.distances?.[2 * k]?.[2 * k]; // metres
         if ([AS, SB, AB].every((v) => typeof v === "number")) {
-          const d = Math.max(0, Math.round((AS + SB - AB) / 60));
+          const d = {
+            min: Math.max(0, Math.round((AS + SB - AB) / 60)),
+            toMin: Math.round(AS / 6) / 10,
+            toKm: typeof ASm === "number" ? Math.round(ASm / 100) / 10 : null,
+          };
           result.set(it.id, d);
           memoSet(detourKeyAB(it.id, it.a, it.b), d, 6 * 3600 * 1000);
         }
@@ -1042,7 +1049,7 @@ async function handlePlan(request, env) {
   const checked = new Set(first.filter((s) => status[s.id] != null || !LIVE_COUNTRIES.has(s.country)).map((s) => s.id));
   stations = stations.map((s) => {
     const out = { ...s, status: status[s.id] ?? null, statusChecked: checked.has(s.id) };
-    if (det.has(s.id)) out.detourMin = det.get(s.id);
+    if (det.has(s.id)) { const d = det.get(s.id); out.detourMin = d.min; out.toMin = d.toMin; out.toKm = d.toKm; }
     return out;
   });
 
@@ -1303,7 +1310,10 @@ async function handleDetours(request, env) {
     .filter((it) => it && typeof it.id === "string" && Number.isFinite(it.lat) && Number.isFinite(it.lon) && ok(it.a) && ok(it.b))
     .slice(0, 20);
   const det = await detourItems(env, items);
-  return json(request, { detours: Object.fromEntries(det), checkedAt: new Date().toISOString() });
+  // detours: id -> extra minutes (as before); reach: id -> {toMin, toKm} from route point A to the charger.
+  const detoursOut = {}, reach = {};
+  for (const [id, d] of det) { detoursOut[id] = d.min; reach[id] = { toMin: d.toMin, toKm: d.toKm }; }
+  return json(request, { detours: detoursOut, reach, checkedAt: new Date().toISOString() });
 }
 
 // ---------------------------------------------------------------- logos
@@ -1587,7 +1597,8 @@ async function route(request, env) {
       title: a.Title, lat: a.Latitude, lon: a.Longitude,
       offRouteKm: Math.round(proj.offRouteKm * 1000) / 1000,
       road: roadAtIndex(route, proj.index),
-      detourMinRaw: det.get("x") ?? null,
+      detourMinRaw: det.get("x")?.min ?? null,
+      reach: det.get("x") ? { toMin: det.get("x").toMin, toKm: det.get("x").toKm } : null,
     });
   }
   if (path === "/debug/ocm-operator" && request.method === "GET") {

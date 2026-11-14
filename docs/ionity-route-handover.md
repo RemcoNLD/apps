@@ -103,7 +103,7 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 | `POST /alternatives` | `{from, to}` → up to 3 route options (see below), each with main roads, cities on the way and the number of Ionity sites. |
 | `POST /plan` | `{from, to, via?, brands?, corridorKm?}` → route (coordinates, km and minutes per point, roads, via positions) plus the chargers of those brands within 5 km. `via`: one point or a list of up to 3. Detours are included only if cached; status only for the first 8 chargers. |
 | `POST /status` | `{stations:[{id, lat, lon, country, brand}]}` → live status per charger. |
-| `POST /detours` | `{items:[{id, lat, lon, a, b}]}` (max 20) → extra minutes per charger. `a`/`b` are route points 3 km before and after it. |
+| `POST /detours` | `{items:[{id, lat, lon, a, b}]}` (max 20) → `detours`: extra minutes per charger; `reach`: `{toMin, toKm}`, the drive from `a` to the charger. `a`/`b` are route points 3 km before and after it. |
 | `GET /brands` *public* | The brands (key, name, colour). |
 | `GET /logo/<brand>` *public* | The brand's site icon (image). |
 | `GET /admin/usage` *public, own password* | Usage per day for the admin page (`Authorization: Bearer <ADMIN_TOKEN>`). |
@@ -127,7 +127,8 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 ### Detours
 
 - Via the OpenRouteService **matrix**: for each charger S, the times A→S, S→B and A→B, where A and B are route points 3 km before and after it. Detour = A→S + S→B − A→B, in minutes. 20 chargers fit in one matrix call.
-- Cached 6 hours per charger and driving direction (`det:<id>:<bearing>`), in memory.
+- The same matrix call also gives the drive A→S in km (`metrics: duration, distance`). The app uses it to show the real distance and time to a charger beyond an exit (see 5, Behaviour).
+- Cached 6 hours per charger and driving direction (`det2:<id>:<bearing>`), in memory.
 - Planning doesn't compute detours. The app asks `/detours` for the chargers it shows (and, with "Easy to reach" on, the next 60). This keeps the matrix quota (500/day) low.
 
 ### Live status
@@ -187,6 +188,7 @@ One file, `ionity-route.html`, with no libraries or build step. The version is i
 - **Status refresh:** every minute for the chargers on screen (at least half visible), in batches of 4, only when the screen is on. Chargers checked within the last minute aren't asked again. Tap a row to update it (at most once a minute; otherwise "Checked N s ago").
 - **No blinking:** rows are only redrawn when their content changed (`patchList`, `setHtml`). While updating, a row keeps its numbers and turns grey.
 - **Detours:** fetched for the rows on screen. With "Easy to reach" on, also for the next 60 chargers; a charger then only appears once its detour is known.
+- **Distance on a row:** for a charger next to the road (within 250 m: a service area) it's where the route passes it. For one further away it's the route up to point A (3 km before the closest point) plus the drive A→charger from `/detours` (`wayTo()`). Before that answer is in, the closest point on the route is used, which makes chargers around one junction all show the same distance.
 - **"Easy to reach":** on your side of the road, or a detour of at most 6 minutes, and no round trips.
 - **Screen:** a Wake Lock keeps it on while driving.
 

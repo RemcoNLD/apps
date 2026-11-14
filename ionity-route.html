@@ -332,13 +332,76 @@
   }
   .brand-btn[aria-pressed="true"] { border-color: var(--sign-blue); color: var(--line); }
   .brand-btn[aria-pressed="false"] .logo { opacity: .45; filter: grayscale(1); }
+  /* Help button (question mark), top right */
+  .help-btn {
+    width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center; padding: 0 !important;
+    border-radius: 50%; border: 2px solid var(--muted) !important; color: var(--muted); background: none;
+    font-weight: 800; font-size: 1.1rem; line-height: 1;
+  }
+  .start-top { display: flex; align-items: center; justify-content: space-between; margin: 0 0 10px; }
+  .start-top .apps-back { margin: 0; }
+  /* Status age, bottom right in your own row */
+  .you .age { text-align: right; color: var(--muted); font-size: .95rem; line-height: 1.25; white-space: nowrap; }
+  .you .age.err { color: var(--danger); white-space: normal; max-width: 9em; }
+
+  /* ---------- introduction (first run) ---------- */
+  .intro {
+    position: fixed; inset: 0; z-index: 30; background: var(--asphalt); display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+  }
+  .intro-top { display: flex; justify-content: flex-end; padding: 12px 18px 0; }
+  .slides {
+    flex: 1; min-height: 0; display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+    scrollbar-width: none; overscroll-behavior-x: contain;
+  }
+  .slides::-webkit-scrollbar { display: none; }
+  .slide {
+    flex: 0 0 100%; scroll-snap-align: center; overflow-y: auto; padding: 8px 24px 12px;
+    display: flex; flex-direction: column; justify-content: center; max-width: 100%;
+  }
+  .slide > * { width: 100%; max-width: 480px; margin-left: auto; margin-right: auto; }
+  .slide h2 { font-size: 1.75rem; font-weight: 800; margin: 18px 0 8px; letter-spacing: -.01em; }
+  .slide p { color: var(--muted); font-size: 1.1rem; line-height: 1.5; margin: 0 0 10px; }
+  .slide p b { color: var(--line); }
+  .intro-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px 20px; }
+  .dots { display: flex; gap: 8px; }
+  .dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); opacity: .35; }
+  .dots span.on { opacity: 1; background: var(--sign-blue); }
+  .intro-foot .primary { margin: 0; width: auto; padding: 14px 26px; }
+
+  /* Demo strip: real row styles on a small piece of road */
+  .demo { position: relative; padding: 4px 0; }
+  .demo::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 8px; background: var(--sign-blue); border-radius: 4px; }
+  .demo .row { --row-h: 72px; grid-template-columns: 48px 1fr auto; padding-right: 2px; }
+  .demo .name { font-size: 1.15rem; }
+  .demo .avail .stat { font-size: 1.6rem; }
+  .demo .row.dest .name, .demo .row.you .name { font-size: 1.1rem; }
+  .demo .note { color: var(--muted); font-size: .85rem; text-align: right; }
+
+  /* ---------- help ---------- */
+  #help h3 { font-size: 1.2rem; margin: 26px 0 8px; }
+  #help p, #help li { color: var(--muted); line-height: 1.5; font-size: 1.02rem; }
+  #help p b, #help li b { color: var(--line); }
+  #help ul { padding-left: 1.1em; margin: 6px 0; }
+  .legend { display: grid; grid-template-columns: 56px 1fr; gap: 10px 12px; align-items: center; margin: 8px 0; }
+  .legend > .k { display: flex; justify-content: center; align-items: center; position: relative; min-height: 26px; }
+  .legend .v { color: var(--muted); line-height: 1.4; }
+  .legend .v b { color: var(--line); }
+  .legend .sidemark, .legend .dmin { position: static; transform: none; margin: 0; }
+  .legend .dot { width: 22px; height: 22px; border-radius: 50%; }
+  .legend .dot.ring { border: 4px solid var(--muted); }
+  .legend .kv { font-weight: 800; font-size: 1.15rem; }
+  .help-actions { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
   .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
 </style>
 </head>
 <body>
 
 <section id="start">
-  <a class="apps-back" href="./">‹ Apps</a>
+  <div class="start-top">
+    <a class="apps-back" href="./">‹ Apps</a>
+    <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
+  </div>
   <h1>Ionity route</h1>
   <p class="lede">Fast chargers along your route, Ionity and any others you pick, with how many are free and how much of a detour each one is.</p>
 
@@ -390,12 +453,29 @@
   <p class="error" id="brandSheetError" hidden></p>
 </div>
 
+<div class="sheet" id="help" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="sheet-head">
+    <h2 id="helpTitle">How it works</h2>
+    <button type="button" class="link" id="helpClose">Close</button>
+  </div>
+  <div id="helpBody"></div>
+</div>
+
+<div class="intro" id="intro" hidden role="dialog" aria-modal="true" aria-label="Introduction">
+  <div class="intro-top"><button type="button" class="link" id="introSkip">Skip</button></div>
+  <div class="slides" id="slides"></div>
+  <div class="intro-foot">
+    <div class="dots" id="dots" aria-hidden="true"></div>
+    <button type="button" class="primary" id="introNext">Next</button>
+  </div>
+</div>
+
 <section id="drive" hidden>
   <div class="bar">
     <button id="newRoute">New route</button>
     <button id="brandsBtn" class="brands-btn" type="button" aria-label="Choose which brands to show"></button>
     <button id="mySide" class="toggle" aria-pressed="false">Easy to reach</button>
-    <span id="age"></span>
+    <button type="button" class="help-btn" id="helpDrive" aria-label="Help and manual">?</button>
   </div>
   <div class="strip">
     <div class="row dest" id="destRow"></div>
@@ -411,7 +491,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.22";
+const APP_VERSION = "2026-11-14.23";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -869,8 +949,9 @@ async function refreshStatus(force = true) {
   try {
     await fetchStatus(todo);
     state.statusAt = Date.now();
+    state.statusError = false;
   } catch (e) {
-    $("age").textContent = "Couldn’t refresh charger status";
+    state.statusError = true;
   } finally {
     for (const s of todo) s.loadingAt = null;
     save();
@@ -1308,7 +1389,7 @@ function render() {
   const gps = u.at == null ? "Waiting for your location…"
     : u.acc != null && u.acc > 100 ? `Location rough (±${Math.round(u.acc)} m)` : "On route";
   $("youRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
-    <div><div class="name">You</div><div class="sub">${gps}${roadNow() ? `&ensp;${roadPartBadge(roadNow())}` : ""}</div></div><div></div>`;
+    <div><div class="name">You</div><div class="sub">${gps}${roadNow() ? `&ensp;${roadPartBadge(roadNow())}` : ""}</div></div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`;
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcomingShown();
@@ -1327,9 +1408,11 @@ function render() {
   list.scrollTop = state.stickToBottom ? list.scrollHeight : list.scrollHeight - list.clientHeight - fromBottom;
   updateScrollUi();
 
-  if (state.statusAt) {
+  if (state.statusError) {
+    $("age").textContent = "Couldn’t update status";
+  } else if (state.statusAt) {
     const ago = Math.round((Date.now() - state.statusAt) / 60000);
-    $("age").textContent = ago < 1 ? "Status now" : `Status ${ago} min old`;
+    $("age").innerHTML = ago < 1 ? "Status<br>now" : `Status<br>${ago} min old`;
   }
 }
 
@@ -1382,6 +1465,165 @@ $("version").textContent = APP_VERSION;
 $("checkUpdate").addEventListener("click", () => checkForUpdate(true));
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(false); });
 checkForUpdate(false);
+
+
+// ------------------------------------------------------------- introduction and help
+// Small pieces of the real screen, drawn with the same styles, for the intro and the manual.
+const demoDot = (cls) => `<span class="marker" aria-hidden="true"></span>`;
+function demoRow({ cls = "free", name, km, min, kw, stat, reach = "", detour = "", logo = "", note = "" }) {
+  return `<div class="row st ${cls}">
+    ${demoDot(cls)}${reach || detour ? `<span class="reach">${reach}${detour}</span>` : ""}
+    <div><div class="name">${logo}<span class="label">${name}</span></div>
+      <div class="sub meta"><span class="when"><b>${km}</b>&nbsp;km&ensp;${min}</span>${kw ? `<span class="kw">${BOLT}${kw}</span>` : ""}</div></div>
+    <div class="avail"><span class="stat">${stat}</span>${note ? `<div class="note">${note}</div>` : ""}</div>
+  </div>`;
+}
+const demoDest = `<div class="row dest"><span class="marker" aria-hidden="true"></span><div><div class="name">Munich</div><div class="sub">Arrive 17:40</div></div><div class="dist"><div class="km">612<small>km</small></div></div></div>`;
+const demoYou = `<div class="row you"><span class="marker" aria-hidden="true"></span><div><div class="name">You</div><div class="sub">On route</div></div><div class="age">Status<br>now</div></div>`;
+const exitMark = () => reachMark("exit", "right");
+const roundMark = () => reachMark("roundtrip", "left");
+
+const SLIDES = [
+  {
+    title: "Every fast charger ahead",
+    text: `<p>Your route as one road: <b>your destination at the top</b>, <b>you at the bottom</b>, and the chargers in between in the order you reach them.</p>
+      <p>The nearest one sits right above you, so you can decide at any moment: charge now, or drive on.</p>`,
+    demo: () => `${demoDest}${demoRow({ name: "Aachen-Land", km: 142, min: "1:31", kw: 350, stat: "<strong>4/6</strong>" })}
+      ${demoRow({ name: "Venlo", km: 38, min: "26 min", kw: 350, stat: "<strong>2/4</strong>" })}${demoYou}`,
+  },
+  {
+    title: "Free right now",
+    text: `<p><b>Green</b>: chargers free right now, out of the total. <b>Orange</b>: all in use. <b>Grey</b>: probably out of order.</p>
+      <p>Live in the Netherlands, Germany and Austria, updated every minute for the chargers on screen. Tap a charger to update it straight away.</p>`,
+    demo: () => `${demoRow({ name: "Free", km: 12, min: "8 min", kw: 350, stat: "<strong>3/6</strong>" })}
+      ${demoRow({ cls: "full", name: "All in use", km: 47, min: "31 min", kw: 300, stat: "<strong>0/4</strong>" })}
+      ${demoRow({ cls: "offline", name: "Out of order", km: 88, min: "58 min", stat: "<strong>Offline</strong>" })}`,
+  },
+  {
+    title: "Worth the detour?",
+    text: `<p>Chargers off the motorway show the <b>extra minutes</b> to get there and back, like <b>+7</b>.</p>
+      <p>A grey arrow means you leave at an exit and carry on in the same direction. A <b>red</b> arrow means a round trip: you have to turn around.</p>
+      <p><b>Easy to reach</b> at the top hides the round trips.</p>`,
+    demo: () => `${demoRow({ name: "Autohof Lohfelden", km: 23, min: "15 min", kw: 300, stat: "<strong>5/8</strong>", reach: exitMark(), detour: `<span class="dmin">+4</span>` })}
+      ${demoRow({ name: "Other side", km: 31, min: "20 min", kw: 350, stat: "<strong>2/6</strong>", reach: roundMark(), detour: `<span class="dmin round">+14</span>` })}`,
+  },
+  {
+    title: "Your brands",
+    text: `<p>Pick the brands you want before you plan: Ionity, Fastned, Tesla and more.</p>
+      <p>While driving, tap the <b>logos</b> at the top to hide or show brands straight away, or to add another brand to your route.</p>`,
+    top: () => `<div class="brands" style="margin:0 0 18px">${["ionity", "fastned", "tesla"].map((k, i) =>
+        `<span class="brand-btn" aria-pressed="${i < 2}">${logoHtml(k)}${esc(BRAND[k].name)}</span>`).join("")}</div>`,
+    demo: () => `${`<div class="row st free"><span class="marker" aria-hidden="true"></span><div><div class="name"><span class="label">Best</span></div>
+        <div class="sub meta"><span class="when"><b>18</b>&nbsp;km&ensp;12 min</span></div></div>
+        <div class="avail multi"><span class="ml free">${logoHtml("ionity")}<span class="stat"><strong>2/6</strong></span></span><span class="ml full">${logoHtml("fastned")}<span class="stat"><strong>0/4</strong></span></span></div></div>`}`,
+  },
+  {
+    title: "On the road",
+    text: `<p>The list follows your GPS. Leave the route and it <b>plans a new one</b> by itself.</p>
+      <p><b>Tap the destination</b> to compare other routes from where you are. Scroll up to look further ahead; the blue button brings you back.</p>
+      <p>Help is always behind the <b>?</b> at the top.</p>`,
+    top: () => `<div class="banner ok" style="margin:0 0 14px"><span>New route via A3 › A5</span></div>`,
+    demo: () => `<div class="row dest"><span class="marker" aria-hidden="true"></span><div><div class="name">Munich</div><div class="sub">Arrive 17:40</div>
+      <div class="sub roads"><span>via&nbsp;</span>${roadBadge("A3", "DE")}<span class="sep">›</span>${roadBadge("A5", "DE")}<span class="sep">›</span>${roadBadge("A8", "DE")}</div></div>
+      <div class="dist"><div class="km">612<small>km</small></div><div class="min">6 h 10</div></div></div>${demoYou}`,
+  },
+];
+
+const INTRO_KEY = "ionity-route-intro-seen";
+function showIntro() {
+  $("slides").innerHTML = SLIDES.map((sl, i) =>
+    `<section class="slide" aria-label="${i + 1} of ${SLIDES.length}">${sl.top ? `<div>${sl.top()}</div>` : ""}${sl.demo() ? `<div class="demo">${sl.demo()}</div>` : ""}<div><h2>${sl.title}</h2>${sl.text}</div></section>`).join("");
+  $("dots").innerHTML = SLIDES.map(() => "<span></span>").join("");
+  $("intro").hidden = false;
+  $("slides").scrollLeft = 0;
+  updateIntro();
+}
+function introIndex() {
+  const el = $("slides");
+  return Math.round(el.scrollLeft / (el.clientWidth || 1));
+}
+function updateIntro() {
+  const i = introIndex();
+  [...$("dots").children].forEach((d, k) => d.classList.toggle("on", k === i));
+  $("introNext").textContent = i >= SLIDES.length - 1 ? "Get started" : "Next";
+}
+function closeIntro() {
+  $("intro").hidden = true;
+  try { localStorage.setItem(INTRO_KEY, "1"); } catch (_) {}
+}
+$("slides").addEventListener("scroll", () => requestAnimationFrame(updateIntro), { passive: true });
+$("introSkip").addEventListener("click", closeIntro);
+$("introNext").addEventListener("click", () => {
+  const i = introIndex();
+  if (i >= SLIDES.length - 1) return closeIntro();
+  const el = $("slides");
+  el.scrollTo({ left: (i + 1) * el.clientWidth, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+});
+
+function helpHtml() {
+  const dot = (c) => `<span class="dot" style="background:var(--${c})"></span>`;
+  return `
+  <p>Fast chargers along your route, with how many are free and how much of a detour each one is.</p>
+
+  <h3>Planning a route</h3>
+  <ul>
+    <li><b>Destination</b>: a town or address. <b>Start</b> left empty means where you are now.</li>
+    <li><b>Via</b> (optional): a town to drive through, to choose your own way.</li>
+    <li>Without a via, you get <b>route options</b> to choose from, with their main roads and the cities on the way.</li>
+    <li><b>Chargers to show</b>: the brands to look for. Only fast chargers (50 kW and up) are shown.</li>
+    <li><b>Simulate the drive</b>: drives the route for you, sped up, to try the app at home.</li>
+  </ul>
+
+  <h3>The screen while driving</h3>
+  <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are, and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
+  <p>Road numbers on the line show where you change roads, styled like that country's signs.</p>
+
+  <h3>Free or not</h3>
+  <div class="legend">
+    <div class="k">${dot("free")}</div><div class="v"><b class="kv" style="color:var(--free)">3/6</b>&ensp;3 of 6 chargers free right now.</div>
+    <div class="k">${dot("full")}</div><div class="v"><b class="kv" style="color:var(--full)">0/4</b>&ensp;All in use.</div>
+    <div class="k">${dot("offline")}</div><div class="v"><b>Offline</b>: reported out of order, or nothing has changed for hours.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. <b>…</b> updating. Grey numbers are more than 3 minutes old.</div>
+    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
+  </div>
+  <p>Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is.</p>
+  <p>A free charger now is no guarantee it is still free when you arrive.</p>
+
+  <h3>Detours</h3>
+  <div class="legend">
+    <div class="k"><span class="dmin">+7</span></div><div class="v">7 minutes extra to get there and back onto your route.</div>
+    <div class="k" style="color:var(--muted)">${reachMark("exit", "right")}</div><div class="v">Via an exit: leave and rejoin in the same direction.</div>
+    <div class="k">${reachMark("roundtrip", "left")}</div><div class="v">Round trip: you have to turn around and come back (detour in red).</div>
+  </div>
+  <p>A charger right next to the motorway on your side has no mark: you just pull in. Detours appear a moment after a charger comes on screen.</p>
+  <p><b>Easy to reach</b> hides the round trips and keeps chargers on your side plus those with a short detour.</p>
+
+  <h3>Brands</h3>
+  <p>Places with several brands share one row, with a line per brand on the right. Tap the <b>logos</b> at the top to hide or show the brands on your route straight away. Adding a brand that wasn't on the route plans the route again from where you are.</p>
+
+  <h3>On the way</h3>
+  <ul>
+    <li><b>Scroll up</b> to see chargers further ahead. The blue arrow brings you back to the next ones.</li>
+    <li><b>Tap the destination</b> to compare other routes from where you are.</li>
+    <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
+    <li>The screen stays on while the app is open.</li>
+    <li><b>New route</b> takes you back to the start screen.</li>
+  </ul>
+
+  <div class="help-actions">
+    <button type="button" class="link" id="replayIntro">Show the introduction again</button>
+    <span class="hint">Version ${APP_VERSION}</span>
+  </div>`;
+}
+function openHelp() {
+  $("helpBody").innerHTML = helpHtml();
+  $("help").hidden = false;
+  $("help").scrollTop = 0;
+  $("replayIntro").addEventListener("click", () => { $("help").hidden = true; showIntro(); });
+}
+$("helpStart").addEventListener("click", openHelp);
+$("helpDrive").addEventListener("click", openHelp);
+$("helpClose").addEventListener("click", () => { $("help").hidden = true; });
 
 // While driving: show or hide the brands on this route straight away; adding new ones replans.
 let pendingAdd = new Set();
@@ -1473,6 +1715,7 @@ wireSearch("to", "toResults", "to");
 wireSearch("from", "fromResults", "from");
 wireSearch("via", "viaResults", "via");
 restore();
+if (!localStorage.getItem(INTRO_KEY)) showIntro();
 </script>
 </body>
 </html>

@@ -16,6 +16,7 @@
       --ok: #23914b; --warn: #c47a12; --bad: #c43d35; --blue: #1f55ad; color-scheme: light; }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html { background: var(--bg); }
   body {
     margin: 0 auto; max-width: 720px; color: var(--text); background: var(--bg);
@@ -34,6 +35,10 @@
     padding: 12px 16px; font: inherit; font-weight: 700; color: #fff;
     background: var(--blue); border: 0; border-radius: 10px; cursor: pointer;
   }
+  .remember { display: flex; align-items: center; gap: 8px; margin: -4px 0 14px; color: var(--muted); }
+  .remember input { width: 20px; height: 20px; flex: none; }
+  .session { display: flex; gap: 18px; margin: 12px 0 4px; }
+  .link { padding: 0; background: none; color: var(--blue); font-weight: 600; text-decoration: underline; }
   .card { background: var(--card); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
   .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .name { font-weight: 700; }
@@ -57,10 +62,17 @@
 <h1>Usage</h1>
 <p class="muted">How much of the free tiers the Ionity route app uses, per data source.</p>
 
-<form class="login" id="login">
-  <input id="pw" type="password" placeholder="Admin password" autocomplete="current-password" aria-label="Admin password">
-  <button type="submit">Show</button>
+<form id="login">
+  <div class="login">
+    <input id="pw" type="password" placeholder="Admin password" autocomplete="current-password" aria-label="Admin password">
+    <button type="submit">Show</button>
+  </div>
+  <label class="remember"><input id="remember" type="checkbox" checked> Remember me on this device</label>
 </form>
+<div class="session" id="session" hidden>
+  <button type="button" class="link" id="refresh">Refresh</button>
+  <button type="button" class="link" id="logout">Log out</button>
+</div>
 <p id="msg" class="error" hidden></p>
 <div id="out"></div>
 
@@ -159,16 +171,35 @@ function render(d) {
   $("out").innerHTML = html;
 }
 
-async function load() {
-  const token = $("pw").value.trim();
+function savedToken() {
+  try { return localStorage.getItem(KEY) || sessionStorage.getItem(KEY) || ""; } catch (_) { return ""; }
+}
+function rememberToken(token) {
+  try {
+    localStorage.removeItem(KEY); sessionStorage.removeItem(KEY);
+    // Remembered: kept on this device. Otherwise only until this tab is closed.
+    ($("remember").checked ? localStorage : sessionStorage).setItem(KEY, token);
+  } catch (_) {}
+}
+function showLoggedIn(on) {
+  $("login").hidden = on;
+  $("session").hidden = !on;
+}
+
+async function load(token = $("pw").value.trim()) {
   if (!token) return;
   $("msg").hidden = true;
   $("out").innerHTML = `<p class="muted">Loading…</p>`;
   try {
     const res = await fetch(`${WORKER}/admin/usage`, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-    try { localStorage.setItem(KEY, token); } catch (_) {}
+    if (!res.ok) {
+      if (res.status === 401) { try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch (_) {} showLoggedIn(false); }
+      throw new Error(data.error || `Error ${res.status}`);
+    }
+    if ($("pw").value.trim()) rememberToken(token);
+    $("pw").value = "";
+    showLoggedIn(true);
     render(data);
   } catch (e) {
     $("out").innerHTML = "";
@@ -178,7 +209,15 @@ async function load() {
 }
 
 $("login").addEventListener("submit", (e) => { e.preventDefault(); load(); });
-try { const t = localStorage.getItem(KEY); if (t) { $("pw").value = t; load(); } } catch (_) {}
+$("refresh").addEventListener("click", () => load(savedToken()));
+$("logout").addEventListener("click", () => {
+  try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch (_) {}
+  $("out").innerHTML = "";
+  showLoggedIn(false);
+  $("pw").focus();
+});
+const t = savedToken();
+if (t) load(t);
 </script>
 </body>
 </html>

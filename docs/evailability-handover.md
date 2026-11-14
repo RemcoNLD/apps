@@ -276,7 +276,7 @@ The app, files, texts and device storage are renamed. The Worker still runs as `
 ## 10. Open items (as of 14 November 2026)
 
 **To check on the next drive**
-- Row names after the stricter rules (app `.50`): service-area names (e.g. 't Hol, Keizershof, Hoezaar) instead of "Fastned" / "Shell Recharge", no host names (restaurants, hotels), no flipping back. If a row still shows only the brand, add a line in the press-and-hold sheet showing where the name came from (`place.src`, `place.ok`) to tell missing data from a bug.
+- Row names after the stricter rules (app `.50`): service-area names (e.g. 't Hol, Keizershof, Hoezaar) instead of "Fastned" / "Shell Recharge", no host names (restaurants, hotels), no flipping back. Since app `.51` the press-and-hold sheet shows two small lines under the title: **Name from** (which rule in `siteName()` gave the name) and **Lookup** (what `/places` returned: service area or station name, town, failed search, or not looked up yet). A brand-only row with "no service area or station within reach" means missing OpenStreetMap data; one with an area that was "skipped" or "not looked up yet" for long points to a bug. The sheet title now uses the row's own label (`siteLabel`), so both always match.
 - Smoothness of the list after the keyed `patchList` and scroll anchoring.
 - "Overpass" vs "Overpass errors" on the usage page.
 

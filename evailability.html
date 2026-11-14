@@ -841,7 +841,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.54";
+const APP_VERSION = "2026-11-14.55";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1485,8 +1485,11 @@ function celebrateArrival() {
 // Open Charge Map's, so a "fast" listing that is really an AC charger (13 kW) drops out too.
 const POWER_KEY = "evailability-power";
 const POWER_LEVELS = [50, 150, 300];
+// Extra fast (150 kW+) until another level is chosen on this device: 50 kW chargers are mostly
+// in towns near the motorway and charge too slowly for a long trip.
+const DEFAULT_KW = 150;
 function minKw() {
-  try { const v = Number(localStorage.getItem(POWER_KEY)); return POWER_LEVELS.includes(v) ? v : 50; } catch (_) { return 50; }
+  try { const v = Number(localStorage.getItem(POWER_KEY)); return POWER_LEVELS.includes(v) ? v : DEFAULT_KW; } catch (_) { return DEFAULT_KW; }
 }
 function kwOf(s) { return s.status?.maxKw || s.maxKw || null; }
 function powerOk(s) {
@@ -2819,7 +2822,7 @@ function helpHtml() {
   <p><b>Easy to reach</b> hides the round trips and keeps chargers on your side plus those with a short detour.</p>
 
   <h3>Charging power</h3>
-  <p>Choose <b>Fast</b> (50 kW and up), <b>Extra fast</b> (150 kW and up) or <b>HPC</b> (300 kW and up) on the start screen or under the brand logos. It filters straight away, without planning again. Where live data reports a lower maximum than the charger's listing, the live value counts. Set above Fast, the brands button shows the minimum (e.g. <b>150+</b>).</p>
+  <p>Choose <b>Fast</b> (50 kW and up), <b>Extra fast</b> (150 kW and up) or <b>HPC</b> (300 kW and up) on the start screen or under the brand logos; Extra fast until you choose another. It filters straight away, without planning again. Where live data reports a lower maximum than the charger's listing, the live value counts. Set above Fast, the brands button shows the minimum (e.g. <b>150+</b>).</p>
   <p>At a service area, the chargers on your side come first; those on the other side follow, with the distance including the turn-around.</p>
 
   <h3>Brands</h3>

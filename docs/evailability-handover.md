@@ -179,7 +179,7 @@ One file, `evailability.html`, with no libraries or build step. The version is i
 - **Splash:** shows the idea: a car display with "your navigation" on the left and the chargers coming up on the right, the timeline moving down as you drive; about 5 s, or tap. On a fresh start only (after a force close or reboot; not when coming back from the background, and not after an update reload, thanks to a sessionStorage flag). Not shown before the introduction has been seen. "Don't show again" there, and a toggle in Help.
 - **Access code:** asked once per device (section 6).
 - **Introduction:** five slides on first use; can be shown again from Help.
-- **Start:** To / From (empty means your location), a + for up to 2 via points, the brand picker, and "Simulate the drive". Without vias you get the route options as cards. The chosen card shows "Planning…" until the route is ready.
+- **Start:** To / From (empty means your location), a + for up to 2 via points (the screen reads bottom to top like the drive: a new via goes right under To and the earlier one moves down; the lower via is driven first), the brand picker, and "Simulate the drive". Without vias you get the route options as cards. The chosen card shows "Planning…" until the route is ready.
 - **Driving:** destination at the top (tap: compare routes from here), you at the bottom, chargers in route order in between. Chargers of several brands at one spot (within 200 m, same side) share one row.
   - Each row shows the name, distance and time to it, max power, and free/total (green free, orange full, grey when older than 3 minutes or being updated).
   - Left of the row: how to reach it (exit arrow, red round trip) and extra minutes.

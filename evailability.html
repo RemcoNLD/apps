@@ -838,7 +838,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.42";
+const APP_VERSION = "2026-11-14.43";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1254,7 +1254,8 @@ $("planBtn").addEventListener("click", async () => {
   try {
     const from = state.from ? [state.from.lon, state.from.lat] : await currentPosition();
     // With your own via points, plan those; otherwise offer the options found.
-    state.vias = [state.via1, state.via2].filter((v, i) => v && !$(`via${i + 1}Row`).hidden);
+    // In driving order: the lower via (nearer From) first.
+    state.vias = [[state.via2, 2], [state.via1, 1]].filter(([v, n]) => v && !$(`via${n}Row`).hidden).map(([v]) => v);
     rememberPlaces([state.to, state.from, ...state.vias]); // offered again in every address field
     if (!state.vias.length) {
       btn.textContent = "Finding routes…";
@@ -2615,7 +2616,7 @@ function helpHtml() {
   <ul>
     <li><b>To</b>: a town or address. <b>From</b> left empty means where you are now. The <b>×</b> empties a field.</li>
     <li>Tap a field to see the <b>places you used before</b> (as start, via or destination), the last ten; type to narrow them down. The × next to one forgets it.</li>
-    <li><b>+</b> next to To adds a <b>via</b> point (up to two), to choose your own way, for example via Luxembourg instead of Brussels. The × on a via removes it. A <b>town</b> as via is passed on the main road nearest to it (via Dordrecht = the N3/A16 by Dordrecht, not its centre); a <b>street address</b> is driven to exactly.</li>
+    <li><b>+</b> next to To adds a <b>via</b> point (up to two), to choose your own way, for example via Luxembourg instead of Brussels. The × on a via removes it. The screen reads bottom to top like your drive (From, vias, To): a new via goes right under To, so enter them in the order you'll pass them. A <b>town</b> as via is passed on the main road nearest to it (via Dordrecht = the N3/A16 by Dordrecht, not its centre); a <b>street address</b> is driven to exactly.</li>
     <li>Without a via, you get <b>route options</b> to choose from, with their main roads and the cities on the way.</li>
     <li><b>Chargers</b>: the brands to look for. Only fast chargers (50 kW and up) are shown. Live free counts in the Netherlands, Germany and Austria; elsewhere location and detour only.</li>
     <li><b>Simulate the drive</b>: drives the route for you, sped up, to try the app at home.</li>
@@ -2777,11 +2778,21 @@ wireSearch("via2", "via2Results", "via2");
 
 // + next to To: show the next via row (max two). On a via, the x removes the row.
 function syncAddVia() { $("addVia").disabled = !$("via1Row").hidden && !$("via2Row").hidden; }
+// The screen reads bottom to top like the drive: From, the vias, To. So a new via goes right under
+// To (it's the last stop before the destination) and an earlier one moves down: entering
+// "N3" and then "A17" drives N3 first, then the A17.
 $("addVia").addEventListener("click", () => {
-  const n = $("via1Row").hidden ? 1 : 2;
-  $(`via${n}Row`).hidden = false;
-  syncAddVia();
-  $(`via${n}`).focus();
+  if (!$("via1Row").hidden) {
+    $("via2Row").hidden = false;
+    $("via2").value = $("via1").value; state.via2 = state.via1;
+    $("via1").value = ""; state.via1 = null;
+    $("via1Results").innerHTML = ""; $("via2Results").innerHTML = "";
+    for (const n of [1, 2]) { const c = document.querySelector(`.clear-btn[data-for="via${n}"]`); if (c) c.hidden = false; }
+  } else {
+    $("via1Row").hidden = false;
+  }
+  syncAddVia(); updatePlanBtn();
+  $("via1").focus();
 });
 for (const n of [1, 2]) {
   document.querySelector(`.clear-btn[data-for="via${n}"]`).addEventListener("click", (e) => {

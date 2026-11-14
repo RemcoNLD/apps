@@ -161,6 +161,14 @@
   .name .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .name .detour, .name .country { flex-shrink: 0; }
   .stat { flex-shrink: 0; font-size: 1.3rem; font-weight: 600; color: var(--muted); line-height: 1; }
+  /* Availability, big in the right-hand column */
+  .avail { text-align: right; }
+  .avail .stat { font-size: 1.95rem; font-weight: 800; letter-spacing: -.02em; }
+  .st.offline .avail .stat { font-size: 1.15rem; }
+  .when { color: var(--muted); white-space: nowrap; }
+  .st .sub.meta { gap: 7px; font-size: 1rem; }
+  .st .sub.meta .flag { font-size: 1rem; }
+  .when b { color: var(--line); font-weight: 800; }
   .stat strong { font-weight: 800; }
   .sub.meta { display: flex; align-items: center; gap: 10px; }
   .sub.meta > * { flex-shrink: 0; }
@@ -206,7 +214,7 @@
   .st.full .marker { background: var(--full); }
   .st.full .stat strong { color: var(--full); }
   .st.offline .marker { background: var(--offline); }
-  .st.offline .name, .st.offline .dist { opacity: .55; }
+  .st.offline .name, .st.offline .dist, .st.offline .sub { opacity: .55; }
   .st.stale .marker { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
   .st.stale .stat, .st.stale .stat strong { color: var(--muted); font-weight: 700; }
   .row.st { cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -341,7 +349,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.17";
+const APP_VERSION = "2026-11-14.18";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -1015,6 +1023,12 @@ function exitIcon(side) {
     <polyline points="${head}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
 }
 
+// Compact duration for the second line: "3:20" (hours:minutes), or "48 min".
+function fmtClock(m) {
+  m = Math.max(0, Math.round(m));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+}
+
 function stationRow(s, change, after) {
   let info = statusInfo(s);
   const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
@@ -1036,8 +1050,8 @@ function stationRow(s, change, after) {
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
     <span class="marker" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
     <div><div class="name"><span class="label">${esc(shortName(s.name))}</span></div>
-      <div class="sub meta"><span class="stat">${info.text}</span>${s.road ? "" : country}${kw && info.cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
-    <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}</div></div>
+      <div class="sub meta"><span class="when"><b>${fmtKm(km)}</b>&nbsp;km&ensp;${fmtClock(min)}</span>${s.road ? "" : country}${kw && info.cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
+    <div class="avail"><span class="stat">${info.text}</span></div>
   </div>`;
 }
 

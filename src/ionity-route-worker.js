@@ -491,11 +491,17 @@ async function deLocationsNear(lat, lon, radius = 400) {
 // Summarise the Ionity chargers around one site. The same charger can be reported twice
 // (operator feed and the federal register); merge by EVSE ID and prefer a live status.
 function summariseDe(locations, station) {
-  const ion = locations.filter(isIonityLoc);
+  const dist = (l) => haversineKm(
+    [Number(l.coordinates?.longitude ?? l.coordinates?.lon), Number(l.coordinates?.latitude ?? l.coordinates?.lat)],
+    [station.lon, station.lat]);
+  const ion = locations.filter(isIonityLoc).map((l) => ({ l, d: dist(l) })).filter((x) => x.d <= 0.6);
+  if (!ion.length) return null;
+  // Motorway sites often have one site per side (e.g. "West" and "Ost"), a few hundred metres apart.
+  // Keep only the entries close to the nearest one, so the other side is not counted in.
+  const nearest = Math.min(...ion.map((x) => x.d));
   const byId = new Map();
-  for (const l of ion) {
-    const lon = l.coordinates?.longitude ?? l.coordinates?.lon, lat = l.coordinates?.latitude ?? l.coordinates?.lat;
-    if (haversineKm([Number(lon), Number(lat)], [station.lon, station.lat]) > 0.6) continue;
+  for (const { l, d } of ion) {
+    if (d > nearest + 0.08) continue;
     for (const e of l.evses || []) {
       if (["REMOVED", "PLANNED"].includes(e.status)) continue;
       const id = String(e.evse_id || e.uid || `${l.id}-${byId.size}`).replace(/[^A-Za-z0-9]/g, "").toUpperCase();

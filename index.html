@@ -49,13 +49,13 @@ a.app.dragging { transition:box-shadow .18s ease; z-index:2; box-shadow:0 12px 2
       <span class="icon" aria-hidden="true">🚗</span>
       <span><div class="name">Speed check</div><div class="desc">Measure another car’s speed between two landmarks.</div></span>
     </a>
-    <a class="app" data-id="ionity-route" href="ionity-route.html">
+    <a class="app" data-id="evailability" href="evailability.html">
       <span class="icon" aria-hidden="true">⚡</span>
-      <span><div class="name">Ionity route</div><div class="desc">Ionity chargers along your route, with free chargers and detour minutes.</div></span>
+      <span><div class="name">EVailability</div><div class="desc">Fast chargers along your route, with free chargers and detour minutes.</div></span>
     </a>
-    <a class="app" data-id="ionity-usage" href="admin.html">
+    <a class="app" data-id="evailability-usage" href="admin.html">
       <span class="icon" aria-hidden="true">📊</span>
-      <span><div class="name">Ionity route usage</div><div class="desc">How much of the free API tiers the Ionity route app uses (password).</div></span>
+      <span><div class="name">EVailability usage</div><div class="desc">How much of the free API tiers EVailability uses (password).</div></span>
     </a>
     <a class="app" data-id="puzzzld" href="puzzzld/">
       <span class="icon" aria-hidden="true">🧩</span>
@@ -83,7 +83,8 @@ a.app.dragging { transition:box-shadow .18s ease; z-index:2; box-shadow:0 12px 2
 
   // restore saved order
   try {
-    const order = JSON.parse(localStorage.getItem(KEY) || "[]");
+    const renamed = { "ionity-route": "evailability", "ionity-usage": "evailability-usage" };
+    const order = JSON.parse(localStorage.getItem(KEY) || "[]").map((id) => renamed[id] || id);
     order.forEach((id) => { const el = list.querySelector('[data-id="' + id + '"]'); if (el) list.appendChild(el); });
   } catch (e) {}
   function saveOrder() {

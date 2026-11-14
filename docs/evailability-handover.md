@@ -1,8 +1,8 @@
-# Ionity route: handover
+# EVailability: handover
 
 A web app for the phone that shows the fast chargers along a driving route, with how many are free right now and how many minutes of detour each one costs. You plan a route once; while you drive, the list follows your GPS: destination at the top, you at the bottom, chargers in between in the order you reach them.
 
-- **App:** https://remconld.github.io/apps/ionity-route.html
+- **App:** https://remconld.github.io/apps/evailability.html (the old address `ionity-route.html` forwards here)
 - **Usage page:** https://remconld.github.io/apps/admin.html
 - **Server (proxy):** https://ionity.remco-dv.workers.dev
 - **Code:** GitHub repo `RemcoNLD/apps` (branch `main`)
@@ -15,10 +15,10 @@ No passwords, keys or tokens are in this document or in the repo. Where they're 
 
 ```
 iPhone (Safari / home-screen app)
-   │  ionity-route.html — one static file on GitHub Pages
+   │  evailability.html — one static file on GitHub Pages
    │  sends X-Access header (access token) on every call
    ▼
-Cloudflare Worker "ionity"  (src/ionity-route-worker.js)
+Cloudflare Worker "ionity"  (src/evailability-worker.js)
    │  holds all API keys, caches, combines sources, counts usage
    ├── OpenRouteService (HeiGIT): routing, travel-time matrix, geocoding (Pelias)
    ├── Open Charge Map: charger locations per operator
@@ -36,13 +36,14 @@ Why a Worker: the browser can't hold API keys safely, several sources don't allo
 
 | Path | What |
 |---|---|
-| `ionity-route.html` | The whole app: HTML, CSS and JavaScript in one file. No build step, no libraries. |
-| `src/ionity-route-worker.js` | The Cloudflare Worker (one ES module, no dependencies). |
+| `evailability.html` | The whole app: HTML, CSS and JavaScript in one file. No build step, no libraries. |
+| `ionity-route.html` | Forwarder from the app's old name (old links and home-screen icons). Carries an `APP_VERSION` so old cached copies reload into it. |
+| `src/evailability-worker.js` | The Cloudflare Worker (one ES module, no dependencies). |
 | `wrangler.toml` | Worker name, entry file, KV binding. |
 | `.github/workflows/deploy-worker.yml` | Deploys the Worker on every push that changes the Worker or `wrangler.toml`. |
 | `admin.html` | Usage page (calls per source per day against the free-tier limits). |
 | `index.html` | The apps page that links to the apps. |
-| `docs/ionity-route-handover.md` | This document. |
+| `docs/evailability-handover.md` | This document. |
 
 ---
 
@@ -68,7 +69,7 @@ Not (yet) live: Belgium (waiting for an Eco-Movement data token) and France. Cha
 
 ## 3. Setting it up from scratch
 
-1. **Repo and Pages.** Put `ionity-route.html`, `admin.html` and `index.html` in a GitHub repo. Settings → Pages → Deploy from a branch → `main`, folder `/`. The app's address is then `https://<user>.github.io/<repo>/ionity-route.html`.
+1. **Repo and Pages.** Put `evailability.html`, `admin.html` and `index.html` in a GitHub repo. Settings → Pages → Deploy from a branch → `main`, folder `/`. The app's address is then `https://<user>.github.io/<repo>/evailability.html`.
 2. **Cloudflare.** Create a free account. Note the account ID (dashboard sidebar). Workers → choose a `workers.dev` subdomain.
 3. **KV namespace.** Storage & Databases → KV → create `ionity-usage`. Put its ID in `wrangler.toml` under `[[kv_namespaces]]` with `binding = "USAGE"`.
 4. **API keys.** Get keys from OpenRouteService (sign up, create a token), Open Charge Map (My profile → API keys) and E-Control (register for the Ladestellenverzeichnis API).
@@ -79,8 +80,8 @@ Not (yet) live: Belgium (waiting for an Eco-Movement data token) and France. Cha
    - optional `OCM_IONITY_OPERATOR_ID`: only to force Ionity's Open Charge Map operator ID.
 
    `keep_vars = true` in `wrangler.toml` makes sure a deploy doesn't remove these.
-6. **Deploy pipeline.** Create a Cloudflare API token with the template *Edit Cloudflare Workers* (plus KV edit), then add repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub (Settings → Secrets and variables → Actions). Every push that changes `src/ionity-route-worker.js` or `wrangler.toml` deploys through `cloudflare/wrangler-action@v3`. It can also be started by hand (Actions → Deploy Ionity Worker → Run workflow).
-7. **Point the app at the Worker.** In `ionity-route.html`, `const WORKER = "https://ionity.<subdomain>.workers.dev"`. In the Worker, add the app's origin to `ALLOWED_ORIGINS` and set `ECONTROL_REFERER`.
+6. **Deploy pipeline.** Create a Cloudflare API token with the template *Edit Cloudflare Workers* (plus KV edit), then add repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub (Settings → Secrets and variables → Actions). Every push that changes `src/evailability-worker.js` or `wrangler.toml` deploys through `cloudflare/wrangler-action@v3`. It can also be started by hand (Actions → Deploy EVailability Worker → Run workflow).
+7. **Point the app at the Worker.** In `evailability.html` (and `admin.html`), `const WORKER = "https://ionity.<subdomain>.workers.dev"`. In the Worker, add the app's origin to `ALLOWED_ORIGINS` and set `ECONTROL_REFERER`.
 8. **Check.** Open `https://ionity.<subdomain>.workers.dev/`: it should answer `ok: true` and show which keys are set. Then open the app and enter an access code (section 6).
 
 To deploy by hand instead: `npx wrangler deploy` in the repo root, after `npx wrangler login`.
@@ -89,7 +90,7 @@ To deploy by hand instead: `npx wrangler deploy` in the repo root, after `npx wr
 
 ## 4. The Worker
 
-One file, `src/ionity-route-worker.js`. It's organised in sections, marked `// ---…` in the code.
+One file, `src/evailability-worker.js`. It's organised in sections, marked `// ---…` in the code.
 
 ### Endpoints
 
@@ -167,10 +168,11 @@ Watch the 1,000 writes/day: writes happen for usage (≤ every 2 min while in us
 
 ## 5. The app
 
-One file, `ionity-route.html`, with no libraries or build step. The version is in `APP_VERSION`; raise it on every change ("Check for update" in Help compares it with the live file).
+One file, `evailability.html`, with no libraries or build step. The version is in `APP_VERSION`; raise it on every change ("Check for update" in Help compares it with the live file).
 
 ### Screens
 
+- **Splash:** on a fresh start only (after a force close or reboot; not when coming back from the background, and not after an update reload, thanks to a sessionStorage flag). Not shown before the introduction has been seen. "Don't show again" there, and a toggle in Help.
 - **Access code:** asked once per device (section 6).
 - **Introduction:** five slides on first use; can be shown again from Help.
 - **Start:** To / From (empty means your location), a + for up to 2 via points, the brand picker, and "Simulate the drive". Without vias you get the route options as cards. The chosen card shows "Planning…" until the route is ready.
@@ -198,13 +200,16 @@ One file, `ionity-route.html`, with no libraries or build step. The version is i
 
 | Key | Content |
 |---|---|
-| `ionity-route-access` | Access token |
-| `ionity-route-v1` | Current route, chargers, statuses (so a reload continues) |
-| `ionity-route-brands` | Brands chosen on the start screen |
-| `ionity-route-hidden` | Brands hidden on the current route |
-| `ionity-route-myside` | "Easy to reach" on/off |
-| `ionity-route-nav` | Navigation app used last |
-| `ionity-route-intro-seen` | Introduction shown |
+| `evailability-access` | Access token |
+| `evailability-v1` | Current route, chargers, statuses (so a reload continues) |
+| `evailability-brands` | Brands chosen on the start screen |
+| `evailability-hidden` | Brands hidden on the current route |
+| `evailability-myside` | "Easy to reach" on/off |
+| `evailability-nav` | Navigation app used last |
+| `evailability-intro-seen` | Introduction shown |
+| `evailability-splash-off` | Splash screen switched off |
+
+On first start the app moves settings from the old `ionity-route-…` keys to these. sessionStorage `evailability-session` marks that the splash was already considered in this session.
 
 ---
 
@@ -213,7 +218,7 @@ One file, `ionity-route.html`, with no libraries or build step. The version is i
 The app asks for a code once per device. The Worker does the check, so the page source doesn't reveal how it works.
 
 - **Valid code:** 9 digits that pass the *11-proef*, like a Dutch BSN: 9×d1 + 8×d2 + … + 2×d8 − 1×d9 must be divisible by 11. Example: `123456782`. Spaces and dots are ignored.
-- **Token:** if the code is right, the Worker returns a token: an HMAC-SHA256 of a fixed text, keyed with `ACCESS_SECRET` (or `OCM_API_KEY` if that isn't set). The app stores it and sends it as `X-Access`. Every endpoint except the public ones requires it; without it the answer is 401 and the app asks for the code again.
+- **Token:** if the code is right, the Worker returns a token: an HMAC-SHA256 of a fixed text (`ionity-route-access-v1`, kept from the old name so existing tokens stay valid), keyed with `ACCESS_SECRET` (or `OCM_API_KEY` if that isn't set). The app stores it and sends it as `X-Access`. Every endpoint except the public ones requires it; without it the answer is 401 and the app asks for the code again.
 - **Signing everyone out:** set or change `ACCESS_SECRET`.
 - **Guessing:** limited to 5 tries per 10 minutes per IP address (per Worker copy).
 - **Strength:** about 1 in 11 random 9-digit numbers passes. This is a light barrier against casual use, not real security. For more, replace `elfProef` with a list of codes stored as a secret, or with Cloudflare Access.
@@ -222,7 +227,7 @@ The app asks for a code once per device. The Worker does the check, so the page 
 
 ## 7. Testing and debugging
 
-- **Worker:** `node --check src/ionity-route-worker.js`. The Worker can be imported in Node 18+ and called as `worker.fetch(new Request(...), env, ctx)` with a mocked `globalThis.fetch` and a fake KV (`get`/`put`). That's how changes were tested during development.
+- **Worker:** `node --check src/evailability-worker.js`. The Worker can be imported in Node 18+ and called as `worker.fetch(new Request(...), env, ctx)` with a mocked `globalThis.fetch` and a fake KV (`get`/`put`). That's how changes were tested during development.
 - **App:** open it in a desktop browser, tick "Simulate the drive" and plan a route; it drives the route at speed. For headless tests, jsdom or Playwright with `fetch` replaced work well. The app's functions are global (`state`, `render()`, `openNavSheet()`…).
 - **Diagnostics in a browser:** `https://ionity.remco-dv.workers.dev/debug/brands?access=<ADMIN_TOKEN>` lists the Open Charge Map operators matched per brand. `/debug/ndw`, `/debug/de`, `/debug/at` and `/debug/detour` show raw lookups (see the code for parameters).
 - **Logs:** Cloudflare dashboard → Workers → `ionity` → Logs / Observability. Look there for "exceeded CPU" or "exceeded memory" errors.
@@ -237,3 +242,13 @@ The app asks for a code once per device. The Worker does the check, so the page 
 - **Free plan:** CPU, memory and the 1,000 KV writes/day are the tightest limits. If they become a problem, the Workers Paid plan ($5/month) removes most of them.
 - **Flitsmeister** can't be opened with a destination from a web page on iPhone, so it gets the coordinates copied.
 - **Access code:** light protection (section 6).
+
+---
+
+## 9. Rename to EVailability: what's left
+
+The app, files, texts and device storage are renamed. The Worker still runs as `ionity` (address `ionity.remco-dv.workers.dev`) because Worker secrets can't be copied by code. To finish:
+
+1. Create the secrets on a Worker named `evailability` (or rename the Worker in the Cloudflare dashboard, if offered, which keeps them): `ORS_API_KEY`, `OCM_API_KEY`, `ECONTROL_API_KEY`, `ADMIN_TOKEN`, and `ACCESS_SECRET` if used. Same values keep existing access tokens valid.
+2. Set `name = "evailability"` in `wrangler.toml`, and `WORKER` in `evailability.html` and `admin.html` to `https://evailability.remco-dv.workers.dev`.
+3. After a week or so, delete the old `ionity` Worker. Optionally rename the KV namespace (bound by ID, so nothing breaks).

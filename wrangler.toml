@@ -1,12 +1,13 @@
-# Cloudflare Worker "ionity" (proxy for ionity-route.html).
+# Cloudflare Worker for EVailability (evailability.html). Still named "ionity" until its secrets are
+# copied to a Worker named "evailability"; then change name below and WORKER in the app and admin page.
 # Deployed by .github/workflows/deploy-worker.yml. Secrets (API keys) live in Cloudflare only.
 name = "ionity"
-main = "src/ionity-route-worker.js"
+main = "src/evailability-worker.js"
 compatibility_date = "2025-09-01"
 workers_dev = true
 keep_vars = true
 
-# Usage counts for admin.html (KV namespace "ionity-usage")
+# Usage counts for admin.html (KV namespace "ionity-usage", bound by ID, so its name doesn't matter)
 [[kv_namespaces]]
 binding = "USAGE"
 id = "b52b6fe114a244a3a87f3a5cb5db3c73"

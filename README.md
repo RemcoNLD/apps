@@ -1,4 +1,4 @@
 # apps
 Various apps
 
-- **Ionity route** (`ionity-route.html`, Worker in `src/`): see [docs/ionity-route-handover.md](docs/ionity-route-handover.md)
+- **EVailability** (`evailability.html`, Worker in `src/`): see [docs/evailability-handover.md](docs/evailability-handover.md). `ionity-route.html` only forwards old links and home-screen icons.

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title>Usage · Ionity route</title>
+<title>Usage · EVailability</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
 <style>
   :root {
@@ -63,7 +63,7 @@
 <body>
 <a class="apps-back" href="./">‹ Apps</a>
 <h1>Usage</h1>
-<p class="muted">How much of the free tiers the Ionity route app uses, per data source.</p>
+<p class="muted">How much of the free tiers EVailability uses, per data source.</p>
 
 <form id="login">
   <div class="login">
@@ -80,8 +80,9 @@
 <div id="out"></div>
 
 <script>
-const WORKER = "https://ionity.remco-dv.workers.dev";
-const KEY = "ionity-admin-token";
+const WORKER = "https://ionity.remco-dv.workers.dev"; // old Worker name until its secrets are moved
+const KEY = "evailability-admin-token";
+try { const old = localStorage.getItem("ionity-admin-token"); if (old && !localStorage.getItem(KEY)) localStorage.setItem(KEY, old); localStorage.removeItem("ionity-admin-token"); } catch (_) {}
 
 // Free-tier limits we know for sources that don't report them (per day).
 // OpenRouteService reports its own limits, so those come live from the Worker.

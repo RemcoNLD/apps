@@ -1,4 +1,4 @@
-// Ionity route planner – Cloudflare Worker proxy (phase 1)
+// EVailability (formerly "Ionity route") – Cloudflare Worker proxy
 //
 // Endpoints
 //   GET  /                      health check: shows which secrets are set
@@ -350,7 +350,7 @@ async function geocode(env, q) {
   } catch (_) { /* fall back to Nominatim below */ }
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`;
   const data = await fetchJson(url, {
-    headers: { "User-Agent": "ionity-route personal app (github.com/RemcoNLD)" },
+    headers: { "User-Agent": "evailability personal app (github.com/RemcoNLD)" },
   }, "Nominatim");
   return data.map((d) => ({ label: d.display_name, lat: +d.lat, lon: +d.lon }));
 }
@@ -1326,7 +1326,7 @@ async function findIcon(site) {
   const base = `https://${site}/`;
   const tries = [];
   try {
-    const res = await fetch(base, { headers: { "User-Agent": "Mozilla/5.0 (ionity-route logo fetch)", Accept: "text/html" }, redirect: "follow" });
+    const res = await fetch(base, { headers: { "User-Agent": "Mozilla/5.0 (evailability logo fetch)", Accept: "text/html" }, redirect: "follow" });
     countCall("Logo fetch");
     const html = (await res.text()).slice(0, 300000);
     const links = [...html.matchAll(/<link\b[^>]*>/gi)].map((m) => m[0]);
@@ -1348,7 +1348,7 @@ async function findIcon(site) {
   tries.push(`${base}favicon.ico`, `https://www.google.com/s2/favicons?domain=${site}&sz=64`);
   for (const url of tries.slice(0, 5)) {
     try {
-      const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (ionity-route logo fetch)" }, redirect: "follow" });
+      const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (evailability logo fetch)" }, redirect: "follow" });
       countCall("Logo fetch");
       const type = (res.headers.get("Content-Type") || "").split(";")[0].trim();
       if (!res.ok || !/^image\//.test(type)) continue;
@@ -1412,6 +1412,7 @@ async function accessToken(env) {
   if (cached) return cached;
   const secret = env.ACCESS_SECRET || env.OCM_API_KEY || "";
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  // Fixed text from the app's old name. Changing it would sign every device out, so it stays.
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode("ionity-route-access-v1"));
   const token = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   memoSet("access-token", token, 24 * 3600 * 1000);
@@ -1457,7 +1458,7 @@ async function route(request, env) {
   if (path === "/" && request.method === "GET") {
     return json(request, {
       ok: true,
-      service: "ionity-route proxy",
+      service: "evailability proxy",
       secrets: { ORS_API_KEY: !!env.ORS_API_KEY, OCM_API_KEY: !!env.OCM_API_KEY },
     });
   }

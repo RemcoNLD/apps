@@ -1,0 +1,2420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EVailability">
+<meta name="theme-color" content="#1d2429">
+<title>EVailability</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  /* Overpass descends from Highway Gothic, the lettering on motorway signs. */
+  :root {
+    --asphalt: #1d2429;
+    --asphalt-raised: #263038;
+    --line: #f3f1ea;
+    --muted: #93a0a8;
+    --sign-blue: #2f63b8;
+    --free: #43b96d;
+    --full: #f0a43a;
+    --offline: #6c767d;
+    --danger: #e0574f;
+    --row-h: 86px;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --asphalt: #eef1f3;
+      --asphalt-raised: #ffffff;
+      --line: #1b2328;
+      --muted: #5c6970;
+      --sign-blue: #1f55ad;
+      --free: #23914b;
+      --full: #c47a12;
+      --offline: #7f888e;
+      color-scheme: light;
+    }
+  }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--asphalt);
+    color: var(--line);
+    font-family: "Overpass", "Helvetica Neue", Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+             env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--sign-blue); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  /* ---------- start screen ---------- */
+  #start { max-width: 560px; margin: 0 auto; padding: 10px 16px 24px; }
+  #start h1 { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; flex: 1; }
+  #start .lede { color: var(--muted); margin: 0 0 28px; line-height: 1.5; }
+  label.field { display: block; font-weight: 600; margin: 18px 0 6px; }
+  .input {
+    width: 100%; padding: 14px 16px; font-size: 1.15rem;
+    background: var(--asphalt-raised); border: 2px solid transparent; border-radius: 10px;
+  }
+  .input:focus { border-color: var(--sign-blue); outline: none; }
+  .input-wrap { position: relative; }
+  .input-wrap .input { padding-right: 52px; }
+  .input::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+  .clear-btn {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px;
+    display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--muted); padding: 0;
+  }
+  .clear-btn svg { width: 22px; height: 22px; }
+  .clear-btn:active { background: var(--asphalt); }
+  .hint { color: var(--muted); font-size: .9rem; margin-top: 6px; }
+  .results { list-style: none; margin: 6px 0 0; padding: 0; }
+  .results button {
+    width: 100%; text-align: left; padding: 12px 16px; border: 0; border-radius: 8px;
+    background: transparent; line-height: 1.35;
+  }
+  .results button:hover, .results button[aria-pressed="true"] { background: var(--asphalt-raised); }
+  .results button[aria-pressed="true"] { box-shadow: inset 4px 0 0 var(--sign-blue); }
+  .check { display: flex; gap: 10px; align-items: center; margin: 22px 0 0; color: var(--muted); }
+  .check input { width: 20px; height: 20px; accent-color: var(--sign-blue); }
+  .apps-back { display: inline-block; margin: 0 0 10px; font-weight: 700; text-decoration: none; color: inherit; opacity: .65; }
+  .apps-back:active { opacity: 1; }
+  .primary {
+    margin-top: 26px; width: 100%; padding: 16px; font-size: 1.2rem; font-weight: 800;
+    background: var(--sign-blue); color: #fff; border: 0; border-radius: 10px;
+  }
+  .primary:disabled { opacity: .45; cursor: default; }
+
+  /* Route options */
+  .sheet {
+    position: fixed; inset: 0; z-index: 20; overflow-y: auto; background: var(--asphalt);
+    padding: calc(env(safe-area-inset-top, 0px) + 16px) 18px calc(env(safe-area-inset-bottom, 0px) + 24px);
+  }
+  .sheet-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+  .sheet-head h2 { margin: 0; font-size: 1.5rem; }
+  .sheet .hint { margin: 0 0 14px; }
+  .opt {
+    display: block; width: 100%; text-align: left; margin: 0 0 12px; padding: 14px 16px; cursor: pointer;
+    background: var(--asphalt-raised); color: var(--line); border: 2px solid transparent; border-radius: 12px; font: inherit;
+  }
+  .opt.current { border-color: var(--sign-blue); }
+  .opt:active { opacity: .8; }
+  /* After tapping a card: it stays, marked, while the route is planned */
+  #optionsBody.busy .opt { pointer-events: none; }
+  #optionsBody.busy .opt:not(.picked) { opacity: .4; }
+  .opt.picked { border-color: var(--sign-blue); }
+  .opt-top .tag.busy { color: var(--sign-blue); display: inline-flex; align-items: center; gap: 8px; }
+  .spinner {
+    width: 16px; height: 16px; border-radius: 50%; border: 3px solid currentColor; border-right-color: transparent;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Status bottom right while updating: a turning ring and the text gently pulsing */
+  .you .age { position: relative; }
+  .you .age.busy { display: inline-flex; align-items: center; gap: 10px; color: var(--sign-blue); }
+  .you .age.busy .spinner { width: 18px; height: 18px; flex: none; }
+  .you .age.busy .txt { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) { .you .age.busy .txt { animation: none; } }
+  /* Arrival: a short confetti shower and a card */
+  .confetti { position: fixed; inset: 0; z-index: 45; pointer-events: none; overflow: hidden; }
+  .confetti i {
+    position: absolute; top: -16px; width: 9px; height: 14px; border-radius: 2px; opacity: .95;
+    animation: fall var(--d, 2.6s) cubic-bezier(.25,.6,.4,1) var(--delay, 0s) forwards;
+  }
+  @keyframes fall {
+    to { transform: translate(var(--x, 0), 105vh) rotate(var(--r, 540deg)); opacity: 0.9; }
+  }
+  .arrived {
+    position: fixed; z-index: 46; left: 50%; top: 38%; transform: translate(-50%, -50%) scale(.9);
+    width: min(86vw, 380px); padding: 22px 20px 18px; border-radius: 20px; text-align: center;
+    background: var(--asphalt-raised); color: var(--line); box-shadow: 0 16px 40px rgba(0,0,0,.35);
+    opacity: 0; transition: opacity .35s, transform .35s;
+  }
+  .arrived.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .arrived .big { font-size: 2.6rem; line-height: 1; }
+  .arrived h2 { margin: 10px 0 4px; font-size: 1.45rem; }
+  .arrived p { margin: 0 0 14px; color: var(--muted); }
+  .arrived button { font: inherit; font-weight: 800; padding: 10px 22px; border-radius: 999px; border: 0; background: var(--sign-blue); color: #fff; }
+  @media (prefers-reduced-motion: reduce) { .confetti { display: none; } .arrived { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+  .opt-top { display: flex; align-items: baseline; gap: 10px; font-size: 1.35rem; font-weight: 800; }
+  .opt-top .km { color: var(--muted); font-weight: 600; font-size: 1.05rem; }
+  .opt-top .tag { margin-left: auto; font-size: .95rem; font-weight: 800; }
+  .opt-top .tag.fast { color: var(--free); }
+  .opt-top .tag.slow { color: var(--full); }
+  .opt-top .tag.cur { color: var(--sign-blue); }
+  .opt-roads { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; line-height: 1.6; }
+  .opt-roads .pair { white-space: normal; display: inline-flex; align-items: center; gap: 5px; }
+  .opt-roads .city { color: var(--muted); font-weight: 600; margin-right: 2px; }
+  .opt-roads .sep { color: var(--muted); margin: 0 2px; }
+  .opt-meta { margin-top: 8px; color: var(--muted); font-size: 1rem; }
+  .dest { cursor: pointer; }
+  .version { margin-top: 36px; }
+  .link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; font-size: inherit; }
+  .error { color: var(--danger); margin-top: 14px; line-height: 1.45; }
+
+  /* ---------- driving screen ---------- */
+  #drive { height: 100%; display: flex; flex-direction: column; }
+  .bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 16px; color: var(--muted); font-size: .95rem;
+  }
+  .bar button { background: none; border: 0; color: var(--muted); padding: 6px 0; font-weight: 600; }
+  .bar .toggle {
+    padding: 6px 12px; border-radius: 999px; border: 2px solid var(--muted); color: var(--muted); white-space: nowrap;
+  }
+  .bar .toggle[aria-pressed="true"] { background: var(--free); border-color: var(--free); color: #fff; }
+  #age { text-align: right; }
+  .bar .brands-btn {
+    display: inline-flex; align-items: center; gap: 0; padding: 4px 10px 4px 6px; border-radius: 999px;
+    border: 2px solid var(--muted); min-height: 36px;
+  }
+  .brands-btn .logo { width: 22px; height: 22px; margin-left: -6px; box-shadow: 0 0 0 2px var(--asphalt); }
+  .brands-btn .logo:first-child { margin-left: 0; }
+  .brands-btn .n { margin-left: 5px; font-size: .9rem; }
+  #brandSheet .group-title { color: var(--muted); font-weight: 700; margin: 18px 0 8px; font-size: .95rem; }
+  #brandSheet .brand-btn.add[aria-pressed="true"] { border-style: dashed; }
+
+  /* The strip: one vertical road, destination at the top, you at the bottom. */
+  .strip {
+    position: relative; flex: 1; min-height: 0;
+    display: flex; flex-direction: column;
+    padding: 0 16px 12px;
+  }
+  .strip::before {
+    content: ""; position: absolute; left: 38px; top: 30px; bottom: 44px; width: 8px;
+    background: var(--sign-blue); border-radius: 4px;
+  }
+  .list {
+    flex: 1; min-height: 0; display: flex; flex-direction: column;
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    padding: 16px 0 14px; /* room for road badges on the line at the top and bottom edge */
+  }
+  .list::-webkit-scrollbar { display: none; }
+  .list > :first-child { margin-top: auto; } /* rows sit at the bottom, next to you */
+  /* Fade at the top when there are more chargers above */
+  .list.more-above { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 56px); mask-image: linear-gradient(to bottom, transparent 0, #000 56px); }
+
+  .row {
+    position: relative; display: grid; grid-template-columns: 48px 1fr auto; align-items: center;
+    column-gap: 14px; height: var(--row-h); padding: 8px 0;
+  }
+  .row > div { min-width: 0; }
+  .row > div:not(.dist):first-of-type { margin-left: 12px; } /* room for the reach symbol next to the dot */
+  .marker {
+    justify-self: center; width: 30px; height: 30px; border-radius: 50%;
+    border: 5px solid var(--asphalt); background: var(--offline); z-index: 1;
+  }
+  .name { font-size: 1.35rem; font-weight: 800; line-height: 1.1; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
+  .name .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .name .detour, .name .country { flex-shrink: 0; }
+  .stat { flex-shrink: 0; font-size: 1.3rem; font-weight: 600; color: var(--muted); line-height: 1; }
+  /* Availability, big in the right-hand column */
+  .avail { text-align: right; }
+  .avail .stat { font-size: 1.95rem; font-weight: 800; letter-spacing: -.02em; }
+  .st.offline .avail .stat { font-size: 1.15rem; }
+  .when { color: var(--muted); white-space: nowrap; }
+  .st .sub.meta { gap: 7px; font-size: 1rem; }
+  .st .sub.meta .flag { font-size: 1rem; }
+  .when b { color: var(--line); font-weight: 800; }
+  .stat strong { font-weight: 800; }
+  /* "24/40": free count full size, the total smaller and tucked under the slash */
+  .stat .sl { margin-right: -.16em; }
+  .stat .tot { font-size: .6em; letter-spacing: 0; }
+  .sub.meta { display: flex; align-items: center; gap: 10px; }
+  .sub.meta > * { flex-shrink: 0; }
+  .sub.meta .side { margin-right: 0; }
+  .country { font-size: .85rem; font-weight: 600; color: var(--muted); }
+  .dmin { margin-left: 6px; color: var(--full); font-weight: 800; }
+  .dmin.round { color: var(--danger); }
+  /* Reachability symbol with the extra minutes underneath, just right of the dot */
+  .reach {
+    position: absolute; left: 40px; top: 50%; transform: translateY(-50%); z-index: 2;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 20px;
+  }
+  .reach .sidemark { position: static; transform: none; }
+  .reach .dmin { margin: 0; font-size: .82rem; line-height: 1; }
+  .sidemark.round { width: 18px; height: 18px; color: var(--danger); }
+  .detour {
+    font-size: 1.05rem; font-weight: 800; padding: 1px 8px 0; border-radius: 6px;
+    border: 2px solid var(--full); color: var(--full);
+  }
+  .side { display: inline-flex; width: 30px; height: 22px; }
+  .side svg { width: 100%; height: 100%; }
+  .side.right { color: var(--free); }
+  .side.left { color: var(--muted); }
+  .flag { font-size: 1.15rem; line-height: 1; }
+  .kw { display: inline-flex; align-items: center; gap: 3px; }
+  .kw svg { width: 10px; height: 15px; color: #f2c200; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .kw svg { color: #d9a400; } }
+  .sidemark { position: absolute; top: 50%; transform: translateY(-50%); width: 10px; height: 16px; z-index: 2; line-height: 0; }
+  .sidemark svg { width: 100%; height: 100%; }
+  .sidemark.r { left: 42px; }
+  .sidemark.l { left: -1px; }
+  .sidemark.mine { color: var(--free); }
+  .sidemark.other, .sidemark.exit { color: var(--muted); }
+  .sub { margin-top: 4px; font-size: 1.1rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub strong { font-weight: 800; }
+  .dist { text-align: right; line-height: 1.05; }
+  .dist .km { font-size: 1.9rem; font-weight: 800; }
+  .dist .km small { font-size: 1rem; font-weight: 600; margin-left: 2px; }
+  .dist .min { font-size: 1.05rem; color: var(--muted); margin-top: 2px; }
+
+  .st.free .marker { background: var(--free); }
+  .st.free .stat strong { color: var(--free); }
+  .st.full .marker { background: var(--full); }
+  .st.full .stat strong { color: var(--full); }
+  .st.offline .marker { background: var(--offline); }
+  .st.offline .name, .st.offline .dist, .st.offline .sub { opacity: .55; }
+  .st.stale .marker { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
+  .st.stale .stat, .st.stale .stat strong { color: var(--muted); font-weight: 700; }
+  .row.st { cursor: pointer; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  .row.st.pressing { opacity: .6; transition: opacity .45s; }
+  /* Short message at the bottom ("Checked 25 s ago", "Coordinates copied") */
+  .toast {
+    position: fixed; z-index: 40; left: 50%; transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); max-width: calc(100% - 32px);
+    padding: 10px 16px; border-radius: 999px; background: var(--line); color: var(--asphalt);
+    font-weight: 700; font-size: .98rem; text-align: center; box-shadow: 0 6px 18px rgba(0,0,0,.3);
+  }
+  /* Press and hold a charger: send it to a navigation app */
+  .backdrop { position: fixed; inset: 0; z-index: 25; background: rgba(0,0,0,.45); }
+  .navsheet {
+    position: fixed; z-index: 26; left: 0; right: 0; bottom: 0; max-width: 560px; margin: 0 auto;
+    background: var(--asphalt-raised); border-radius: 18px 18px 0 0;
+    padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 14px); box-shadow: 0 -8px 24px rgba(0,0,0,.3);
+  }
+  .navsheet h2 { margin: 0; font-size: 1.3rem; }
+  .navsheet .sub { margin: 2px 0 12px; }
+  .navsheet .navbtn {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 13px 12px; margin: 0;
+    background: none; border: 0; border-top: 1px solid rgba(128,128,128,.25); font-size: 1.1rem; font-weight: 700;
+  }
+  .navsheet .navbtn small { color: var(--muted); font-weight: 400; font-size: .85rem; margin-left: auto; text-align: right; }
+  .navsheet .navbtn .ico { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; color: #fff; font-size: .95rem; font-weight: 800; flex-shrink: 0; }
+  .navsheet .cancel { margin-top: 10px; width: 100%; padding: 13px; border-radius: 12px; border: 0; background: var(--asphalt); font-weight: 800; font-size: 1.05rem; }
+  .row.st:active { opacity: .7; }
+  .st.nodata .marker { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
+
+  .dest .marker {
+    width: 36px; height: 36px; border-radius: 8px; background: var(--line);
+    border: 5px solid var(--asphalt);
+  }
+  .dest .name { font-size: 1.35rem; }
+  .row.dest { height: auto; min-height: var(--row-h); }
+  .dest .sub { margin-top: 2px; }
+  /* Appears when you've scrolled up: takes you back to the next chargers. */
+  .fab {
+    position: absolute; z-index: 3; left: 18px; bottom: calc(var(--row-h) + 18px);
+    width: 48px; height: 48px; display: grid; place-items: center;
+    border: 0; border-radius: 50%; background: var(--sign-blue); color: #fff;
+    box-shadow: 0 0 0 5px var(--asphalt), 0 6px 16px rgba(0, 0, 0, .35);
+  }
+  .fab svg { width: 26px; height: 26px; }
+  /* While scrolled up: the road at the bottom of the view, until the next change scrolls in */
+  .sticky-road {
+    position: absolute; z-index: 3; left: 18px; width: 48px; display: flex; justify-content: center;
+    bottom: calc(var(--row-h) + 18px + 48px + 14px); pointer-events: none;
+  }
+  .sticky-road > span { display: block; border-radius: 8px; padding: 3px; background: var(--asphalt); }
+  .sticky-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
+  .fab:active { transform: scale(.95); }
+  .you .marker {
+    width: 38px; height: 38px; background: var(--line);
+    clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%); border: 0; border-radius: 0;
+  }
+  .you .name { font-size: 1.2rem; }
+  .you .sub { font-size: 1rem; }
+
+  .banner {
+    margin: 0 16px 12px; padding: 14px 16px; border-radius: 10px;
+    background: var(--asphalt-raised); border-left: 6px solid var(--full);
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600;
+  }
+  .banner button {
+    background: var(--sign-blue); color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 800;
+  }
+  .banner.ok { border-left-color: var(--free); }
+  .sub.roads { color: var(--muted); font-weight: 600; font-size: 1rem; display: flex; align-items: center; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+  .sub.roads > * { flex-shrink: 0; }
+  /* Road numbers styled like that country's road signs (see roadBadge) */
+  .rb {
+    display: inline-block; flex-shrink: 0; padding: 2px 6px 0; border-radius: 4px;
+    font-size: .85rem; font-weight: 800; line-height: 1.25; letter-spacing: .02em;
+    color: #fff; background: #c4262e; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.55);
+  }
+  .rb.e { background: #0f7a3f; }
+  .rb.red { background: #c4262e; }
+  .rb.yellow { background: #f2c200; color: #1b1b1b; box-shadow: inset 0 0 0 1.5px #1b1b1b; }
+  /* German Autobahn: blue with a white rim and cut corners (Zeichen 405) */
+  .rb.shield {
+    padding: 1.5px; background: #fff; box-shadow: none; border-radius: 0;
+    clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
+  }
+  .rb.shield > span {
+    display: block; padding: 1px 6px 0; background: #1d4fa3; color: #fff;
+    clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
+  }
+  /* Road badge sitting on the timeline where the road changes */
+  .tl-road { position: absolute; left: 24px; transform: translate(-50%, 50%); z-index: 2; line-height: 1; }
+  .tl-road.below { bottom: 0; }
+  .tl-road.above { top: 0; transform: translate(-50%, -50%); }
+  .tl-road { border-radius: 8px; padding: 3px; background: var(--asphalt); }
+  .tl-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
+  .tl-road .rb.shield, .sticky-road .rb.shield { padding: 1.5px; }
+  .tl-road .rb.shield > span, .sticky-road .rb.shield > span { padding: 1px 5px 0; }
+  .rb.blue { background: #1d4fa3; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.7); }
+  .sub.roads .rb { font-size: .9rem; margin-right: 2px; }
+  .sub.roads .sep { color: var(--muted); margin: 0 3px; }
+  /* Brand logos (site icons, on a white tile so dark logos stay visible) */
+  .logo {
+    display: inline-block; flex-shrink: 0; width: 20px; height: 20px; border-radius: 5px; background: #fff;
+    padding: 2px; object-fit: contain; vertical-align: middle;
+  }
+  .logo.ini {
+    padding: 0; display: inline-grid; place-items: center; color: #fff; font-size: .72rem; font-weight: 800;
+    line-height: 1; text-shadow: 0 0 2px rgba(0,0,0,.5); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.6);
+  }
+  .name .logo { align-self: center; }
+  .name { gap: 8px; }
+  /* Several brands at one site: one small line per brand on the right */
+  /* Logos in one column, counts right-aligned in the next */
+  .avail.multi { display: grid; grid-template-columns: auto auto; justify-content: end; align-items: center; gap: 3px 7px; }
+  .avail.multi .ml { display: contents; }
+  .avail.multi .stat { text-align: right; }
+  .avail.multi .more { grid-column: 1 / -1; text-align: right; }
+  .logo.spacer { visibility: hidden; }
+  .avail.multi .stat { font-size: 1.2rem; letter-spacing: 0; }
+  .avail.multi.n3 .stat { font-size: 1.02rem; }
+  .avail.multi.n3 .logo { width: 17px; height: 17px; }
+  .avail.multi .more { color: var(--muted); font-size: .85rem; font-weight: 700; }
+  .ml.free .stat strong { color: var(--free); }
+  .ml.full .stat strong { color: var(--full); }
+  .ml.offline .stat strong { color: var(--offline); }
+  .ml.stale .stat, .ml.stale .stat strong { color: var(--muted); font-weight: 700; }
+  /* Brand picker on the start screen */
+  .brands { display: flex; flex-wrap: wrap; gap: 8px; }
+  .brand-btn {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px 8px 8px; border-radius: 999px;
+    background: var(--asphalt-raised); border: 2px solid transparent; font-weight: 700; font-size: 1rem; color: var(--muted);
+  }
+  .brand-btn[aria-pressed="true"] { border-color: var(--sign-blue); color: var(--line); }
+  .brand-btn[aria-pressed="false"] .logo { opacity: .45; filter: grayscale(1); }
+  /* Help button (question mark), top right */
+  .help-btn {
+    width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center; padding: 0 !important;
+    border-radius: 50%; border: 2px solid var(--muted) !important; color: var(--muted); background: none;
+    font-weight: 800; font-size: 1.1rem; line-height: 1;
+  }
+  .start-top { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+  .start-top .apps-back { margin: 0; font-size: 1.9rem; line-height: 1; padding: 0 6px 4px 0; }
+  /* Compact address rows: a short tag on the left, the field, and (for To) a + for via points */
+  .fld { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .fld .tag { width: 40px; flex-shrink: 0; color: var(--muted); font-weight: 700; font-size: .95rem; }
+  .fld .input-wrap { flex: 1; min-width: 0; }
+  #start .input { padding: 10px 46px 10px 12px; font-size: 1.05rem; border-radius: 9px; }
+  #start .clear-btn { width: 36px; height: 36px; right: 4px; }
+  #via1Row .clear-btn, #via2Row .clear-btn { display: grid; } /* on a via, the x removes it */
+  .add-via {
+    width: 42px; height: 42px; flex-shrink: 0; display: grid; place-items: center; padding: 0;
+    border-radius: 9px; border: 2px solid var(--sign-blue); background: none; color: var(--sign-blue);
+  }
+  .add-via svg { width: 22px; height: 22px; }
+  .add-via:disabled { opacity: .3; }
+  .fld:not(#toRow) .input-wrap { margin-right: 50px; } /* line up with the To field next to its + */
+  #start .results { margin: 4px 0 0 48px; }
+  #start .results button { padding: 9px 12px; }
+  .brands-head { display: flex; align-items: baseline; justify-content: space-between; margin: 16px 0 8px; font-weight: 700; }
+  .brands-head .hint { margin: 0; font-weight: 400; font-size: .85rem; }
+  #start .brands { gap: 6px; }
+  #start .brand-btn { padding: 5px 10px 5px 5px; font-size: .9rem; gap: 6px; }
+  #start .brand-btn .logo { width: 20px; height: 20px; }
+  #start .check { margin: 14px 0 0; font-size: .95rem; }
+  #start .primary { margin-top: 14px; padding: 14px; }
+  /* Status age, bottom right in your own row */
+  .you .age { text-align: right; color: var(--muted); font-size: .95rem; line-height: 1.25; white-space: nowrap; }
+  .you .age.err { color: var(--danger); white-space: normal; max-width: 9em; }
+
+  /* ---------- introduction (first run) ---------- */
+  .intro {
+    position: fixed; inset: 0; z-index: 30; background: var(--asphalt); display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+  }
+  .intro-top { display: flex; justify-content: flex-end; padding: 12px 18px 0; }
+  .slides {
+    flex: 1; min-height: 0; display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+    scrollbar-width: none; overscroll-behavior-x: contain;
+  }
+  .slides::-webkit-scrollbar { display: none; }
+  .slide {
+    flex: 0 0 100%; scroll-snap-align: center; overflow-y: auto; padding: 8px 24px 12px;
+    display: flex; flex-direction: column; justify-content: center; max-width: 100%;
+  }
+  .slide > * { width: 100%; max-width: 480px; margin-left: auto; margin-right: auto; }
+  .slide h2 { font-size: 1.75rem; font-weight: 800; margin: 18px 0 8px; letter-spacing: -.01em; }
+  .slide p { color: var(--muted); font-size: 1.1rem; line-height: 1.5; margin: 0 0 10px; }
+  .slide p b { color: var(--line); }
+  .intro-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px 20px; }
+  .dots { display: flex; gap: 8px; }
+  .dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); opacity: .35; }
+  .dots span.on { opacity: 1; background: var(--sign-blue); }
+  .intro-foot .primary { margin: 0; width: auto; padding: 14px 26px; }
+
+  .lock { z-index: 50; justify-content: center; }
+  .lock-box { width: 100%; max-width: 420px; margin: 0 auto; padding: 24px; }
+  .lock-box h2 { font-size: 1.8rem; margin: 0 0 8px; }
+  .lock-box p { color: var(--muted); margin: 0 0 18px; line-height: 1.45; }
+  .lock-box .input { font-size: 1.3rem; letter-spacing: .08em; }
+  .lock-box .primary { margin-top: 14px; }
+  .lock-box .error { margin-top: 12px; }
+  /* Availability history in the press-and-hold sheet */
+  .navsheet .hist { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--asphalt); }
+  .navsheet .hist div { display: flex; gap: 8px; align-items: baseline; line-height: 1.4; }
+  .navsheet .hist .logo { width: 18px; height: 18px; align-self: center; }
+  .navsheet .hist b { color: var(--line); }
+  .navsheet .hist .muted { color: var(--muted); font-size: .9rem; }
+  .navsheet .hist .tip { color: var(--free); font-size: .9rem; font-weight: 700; }
+  /* Demo strip: real row styles on a small piece of road */
+  .demo { position: relative; padding: 4px 0; }
+  .demo::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 8px; background: var(--sign-blue); border-radius: 4px; }
+  .demo .row { --row-h: 72px; grid-template-columns: 48px 1fr auto; padding-right: 2px; }
+  .demo .name { font-size: 1.15rem; }
+  .demo .avail .stat { font-size: 1.6rem; }
+  .demo .row.dest .name, .demo .row.you .name { font-size: 1.1rem; }
+  .demo .note { color: var(--muted); font-size: .85rem; text-align: right; }
+
+  /* ---------- help ---------- */
+  #help h3 { font-size: 1.2rem; margin: 26px 0 8px; }
+  #help p, #help li { color: var(--muted); line-height: 1.5; font-size: 1.02rem; }
+  #help p b, #help li b { color: var(--line); }
+  #help ul { padding-left: 1.1em; margin: 6px 0; }
+  .legend { display: grid; grid-template-columns: 56px 1fr; gap: 10px 12px; align-items: center; margin: 8px 0; }
+  .legend > .k { display: flex; justify-content: center; align-items: center; position: relative; min-height: 26px; }
+  .legend .v { color: var(--muted); line-height: 1.4; }
+  .legend .v b { color: var(--line); }
+  .legend .sidemark, .legend .dmin { position: static; transform: none; margin: 0; }
+  .legend .dot { width: 22px; height: 22px; border-radius: 50%; }
+  .legend .dot.ring { border: 4px solid var(--muted); }
+  .legend .kv { font-weight: 800; font-size: 1.15rem; }
+  .help-actions { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+  .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
+  /* Splash screen on a fresh start (not when the app comes back from the background) */
+  .splash {
+    position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: calc(env(safe-area-inset-top, 0px) + 24px) 24px calc(env(safe-area-inset-bottom, 0px) + 24px);
+    background: radial-gradient(120% 80% at 50% 30%, #26323b 0%, #1d2429 55%, #151b1f 100%); color: #f3f1ea;
+    text-align: center; transition: opacity .45s ease, transform .45s ease; -webkit-tap-highlight-color: transparent;
+  }
+  .splash.gone { opacity: 0; transform: scale(1.04); pointer-events: none; }
+  .splash .mark { width: 132px; height: 132px; filter: drop-shadow(0 14px 30px rgba(0,0,0,.45)); animation: pop .6s cubic-bezier(.2,1.4,.4,1) both; }
+  .splash .mark .dash { stroke-dasharray: 7 9; animation: drive .9s linear infinite; }
+  .splash .mark .bolt { transform-origin: 60px 44px; animation: glow 1.6s ease-in-out infinite; }
+  .splash .sp-name { margin: 26px 0 6px; font-size: 2.5rem; font-weight: 800; letter-spacing: -.01em; animation: rise .6s .15s ease both; }
+  .splash .sp-name b { color: #43b96d; }
+  .splash .tag { margin: 0; color: #93a0a8; font-size: 1.1rem; animation: rise .6s .3s ease both; }
+  .splash .chips { display: flex; gap: 10px; margin-top: 26px; }
+  .splash .chips span {
+    font-weight: 800; font-size: 1.15rem; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.06);
+    animation: rise .5s ease both;
+  }
+  .splash .chips span:nth-child(1) { color: #43b96d; animation-delay: .45s; }
+  .splash .chips span:nth-child(2) { color: #43b96d; animation-delay: .6s; }
+  .splash .chips span:nth-child(3) { color: #f0a43a; animation-delay: .75s; }
+  .splash .foot { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .splash .foot label { display: inline-flex; align-items: center; gap: 10px; font-size: 1.05rem; color: #d7dde1; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.06); }
+  .splash .foot input { width: 22px; height: 22px; accent-color: #43b96d; margin: 0; }
+  .splash .foot small { color: #93a0a8; font-size: .9rem; }
+  @keyframes pop { from { opacity: 0; transform: scale(.7); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+  @keyframes drive { to { stroke-dashoffset: -16; } }
+  @keyframes glow { 50% { transform: scale(1.08); filter: drop-shadow(0 0 8px rgba(67,185,109,.8)); } }
+  @media (prefers-reduced-motion: reduce) {
+    .splash .mark, .splash .sp-name, .splash .tag, .splash .chips span, .splash .mark .dash, .splash .mark .bolt { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="splash" id="splash" role="dialog" aria-label="EVailability">
+  <svg class="mark" viewBox="0 0 120 120" aria-hidden="true">
+    <defs>
+      <linearGradient id="spRoad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c3740"/><stop offset="1" stop-color="#46535d"/></linearGradient>
+    </defs>
+    <rect x="2" y="2" width="116" height="116" rx="30" fill="#263038" stroke="rgba(255,255,255,.08)"/>
+    <path d="M30 118 L56 66 H64 L90 118 Z" fill="url(#spRoad)"/>
+    <path class="dash" d="M60 116 V68" stroke="#f3f1ea" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <circle cx="60" cy="44" r="25" fill="none" stroke="#43b96d" stroke-width="3.5" stroke-dasharray="118 40" stroke-linecap="round" transform="rotate(-210 60 44)"/>
+    <path class="bolt" d="M64 26 L49 48 H59 L55 62 L71 39 H61 Z" fill="#43b96d"/>
+  </svg>
+  <div class="sp-name"><b>EV</b>ailability</div>
+  <p class="tag">Free chargers along your way</p>
+  <div class="chips" aria-hidden="true"><span>4/4</span><span>2/8</span><span>0/6</span></div>
+  <div class="foot">
+    <label><input type="checkbox" id="splashOff"> Don’t show again</label>
+    <small>Tap to continue</small>
+  </div>
+</div>
+<script>
+// Only on a fresh start: after a force close or a reboot. Coming back from the background
+// doesn't reload the page, and a reload in the same session (an update) keeps the session flag.
+(() => {
+  const el = document.getElementById("splash");
+  let show = false;
+  try {
+    const fresh = !sessionStorage.getItem("evailability-session");
+    sessionStorage.setItem("evailability-session", "1");
+    const seenIntro = localStorage.getItem("evailability-intro-seen") || localStorage.getItem("ionity-route-intro-seen");
+    show = fresh && !!seenIntro && !localStorage.getItem("evailability-splash-off");
+  } catch (_) { show = false; }
+  if (!show) { el.remove(); return; }
+  let timer = setTimeout(close, 2600);
+  function close() { clearTimeout(timer); el.classList.add("gone"); setTimeout(() => el.remove(), 500); }
+  const box = document.getElementById("splashOff");
+  box.addEventListener("click", (e) => e.stopPropagation());
+  box.closest("label").addEventListener("click", (e) => e.stopPropagation());
+  box.addEventListener("change", () => {
+    try { box.checked ? localStorage.setItem("evailability-splash-off", "1") : localStorage.removeItem("evailability-splash-off"); } catch (_) {}
+    clearTimeout(timer);
+    if (box.checked) timer = setTimeout(close, 700);
+  });
+  el.addEventListener("click", close);
+})();
+</script>
+
+<section id="start">
+  <div class="start-top">
+    <a class="apps-back" href="./" aria-label="Back to apps">‹</a>
+    <h1>EVailability</h1>
+    <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
+  </div>
+
+  <div class="fld" id="toRow">
+    <label class="tag" for="to">To</label>
+    <div class="input-wrap"><input id="to" class="input" type="search" placeholder="Destination" autocomplete="off" aria-label="Destination"><button type="button" class="clear-btn" data-for="to" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+    <button type="button" class="add-via" id="addVia" aria-label="Add a via point" title="Add a via point"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
+  </div>
+  <ul id="toResults" class="results"></ul>
+  <div class="fld" id="via1Row" hidden>
+    <label class="tag" for="via1">Via</label>
+    <div class="input-wrap"><input id="via1" class="input" type="search" placeholder="Town to drive through" autocomplete="off" aria-label="First via point"><button type="button" class="clear-btn" data-for="via1" aria-label="Remove via point" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+  </div>
+  <ul id="via1Results" class="results"></ul>
+  <div class="fld" id="via2Row" hidden>
+    <label class="tag" for="via2">Via</label>
+    <div class="input-wrap"><input id="via2" class="input" type="search" placeholder="Town to drive through" autocomplete="off" aria-label="Second via point"><button type="button" class="clear-btn" data-for="via2" aria-label="Remove via point" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+  </div>
+  <ul id="via2Results" class="results"></ul>
+  <div class="fld" id="fromRow">
+    <label class="tag" for="from">From</label>
+    <div class="input-wrap"><input id="from" class="input" type="search" placeholder="Your location" autocomplete="off" aria-label="Start"><button type="button" class="clear-btn" data-for="from" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+  </div>
+  <ul id="fromResults" class="results"></ul>
+
+  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT</span></div>
+  <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
+
+  <label class="check"><input id="sim" type="checkbox"> Simulate the drive</label>
+
+  <button id="planBtn" class="primary" disabled>Plan route</button>
+  <p id="startError" class="error" hidden></p>
+</section>
+
+<div class="sheet" id="options" hidden role="dialog" aria-modal="true" aria-labelledby="optionsTitle">
+  <div class="sheet-head">
+    <h2 id="optionsTitle">Choose a route</h2>
+    <button type="button" class="link" id="optionsClose">Close</button>
+  </div>
+  <div id="optionsBody"></div>
+</div>
+
+<div class="sheet" id="brandSheet" hidden role="dialog" aria-modal="true" aria-labelledby="brandSheetTitle">
+  <div class="sheet-head">
+    <h2 id="brandSheetTitle">Brands</h2>
+    <button type="button" class="link" id="brandSheetClose">Done</button>
+  </div>
+  <div class="group-title">On this route: tap to show or hide</div>
+  <div class="brands" id="brandsShown"></div>
+  <div id="addWrap">
+    <div class="group-title">Add to this route (plans again from where you are)</div>
+    <div class="brands" id="brandsAdd"></div>
+    <button type="button" class="primary" id="addBrandsBtn" hidden>Add and replan</button>
+  </div>
+  <p class="error" id="brandSheetError" hidden></p>
+</div>
+
+<div class="sheet" id="help" hidden role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="sheet-head">
+    <h2 id="helpTitle">How it works</h2>
+    <button type="button" class="link" id="helpClose">Close</button>
+  </div>
+  <div id="helpBody"></div>
+  <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
+</div>
+
+<div class="intro" id="intro" hidden role="dialog" aria-modal="true" aria-label="Introduction">
+  <div class="intro-top"><button type="button" class="link" id="introSkip">Skip</button></div>
+  <div class="slides" id="slides"></div>
+  <div class="intro-foot">
+    <div class="dots" id="dots" aria-hidden="true"></div>
+    <button type="button" class="primary" id="introNext">Next</button>
+  </div>
+</div>
+
+<div class="backdrop" id="navBackdrop" hidden></div>
+<div class="navsheet" id="navSheet" hidden role="dialog" aria-modal="true" aria-labelledby="navTitle">
+  <h2 id="navTitle"></h2>
+  <div class="sub" id="navSub"></div>
+  <div class="hist" id="navHist" hidden></div>
+  <div id="navList"></div>
+  <button type="button" class="cancel" id="navCancel">Cancel</button>
+</div>
+<div class="toast" id="toast" hidden role="status" aria-live="polite"></div>
+
+<div class="intro lock" id="lock" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+  <div class="lock-box">
+    <h2 id="lockTitle">EVailability</h2>
+    <p>Enter your access code. You only need to do this once on this device.</p>
+    <input id="lockCode" class="input" type="text" inputmode="numeric" autocomplete="off" placeholder="Access code" aria-label="Access code">
+    <button type="button" class="primary" id="lockBtn">Open</button>
+    <p class="error" id="lockError" hidden></p>
+  </div>
+</div>
+
+<section id="drive" hidden>
+  <div class="bar">
+    <button id="newRoute">New route</button>
+    <button id="brandsBtn" class="brands-btn" type="button" aria-label="Choose which brands to show"></button>
+    <button id="mySide" class="toggle" aria-pressed="false">Easy to reach</button>
+    <button type="button" class="help-btn" id="helpDrive" aria-label="Help and manual">?</button>
+  </div>
+  <div class="strip">
+    <div class="row dest" id="destRow"></div>
+    <div class="sticky-road" id="stickyRoad" hidden aria-hidden="true"></div>
+    <button type="button" class="fab" id="more" hidden aria-label="Back to the next chargers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="list" id="list"></div>
+    <div class="row you" id="youRow"></div>
+  </div>
+  <div class="banner" id="offRoute" hidden role="status" aria-live="polite">
+    <span id="offRouteText"></span>
+    <button id="recalc" hidden>Try again</button>
+  </div>
+</section>
+
+<script>
+const APP_VERSION = "2026-11-14.32";
+const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
+
+// The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
+// Same website, so they're still here: move them to the new names once (access code, route, brands…).
+(() => {
+  try {
+    for (const k of ["v1", "myside", "brands", "hidden", "access", "nav", "intro-seen"]) {
+      const old = localStorage.getItem(`ionity-route-${k}`);
+      if (old != null && localStorage.getItem(`evailability-${k}`) == null) localStorage.setItem(`evailability-${k}`, old);
+      localStorage.removeItem(`ionity-route-${k}`);
+    }
+  } catch (_) { /* storage blocked: the app just starts fresh */ }
+})();
+const STORE_KEY = "evailability-v1";
+const STATUS_EVERY_MS = 60 * 1000;
+const FRESH_MS = 60 * 1000;         // a charger checked within a minute isn't asked again when it scrolls into view
+const STALE_MS = 3 * 60 * 1000;     // further ones turn grey after 3 minutes; tap to refresh
+const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
+const PASSED_KM = 0.5;      // a station drops off once you're this far past it
+const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
+// Every charging stop costs a little time to pull in and out (exit lane, slow road through the
+// service area, merging again). That isn't a detour, so it's taken off before showing "+N".
+const PULL_IN_MIN = 2;
+// Only for chargers right next to the motorway (a service area). A charger beyond an exit
+// (Autohof, town) costs you the exit and the way back, and that is the detour itself.
+const SERVICE_AREA_KM = 0.25;
+function detourOf(s) {
+  if (s.detourMin == null) return null;
+  // On the other side of the road it can't be a service area you pull into: either you turn
+  // around (a big detour anyway) or it's at an exit reachable from both sides (e.g. Dietmannsried).
+  const serviceArea = s.offRouteKm != null && s.offRouteKm <= SERVICE_AREA_KM && sideOf(s) !== "left";
+  const pullIn = serviceArea ? PULL_IN_MIN : 0;
+  return Math.max(0, s.detourMin - pullIn);
+}
+const OFF_ROUTE_KM = 1.0;
+const MY_SIDE_MAX_DETOUR = 6; // minutes; "Easy to reach" also shows any charger with at most this detour
+const MY_SIDE_KEY = "evailability-myside";
+const BRANDS_KEY = "evailability-brands";
+const DETOUR_RETRY_MS = 5 * 60 * 1000;
+// Same keys as the Worker's brand table. The logo comes from the Worker (the brand's site icon).
+const BRANDS = [
+  { key: "ionity", name: "Ionity", color: "#2b2e83" },
+  { key: "fastned", name: "Fastned", color: "#c9a400" },
+  { key: "tesla", name: "Tesla", color: "#e31937" },
+  { key: "enbw", name: "EnBW", color: "#000099" },
+  { key: "aral", name: "Aral pulse", color: "#0064aa" },
+  { key: "shell", name: "Shell Recharge", color: "#dd1d21" },
+  { key: "total", name: "TotalEnergies", color: "#ed0000" },
+  { key: "electra", name: "Electra", color: "#00a6a0" },
+  { key: "izivia", name: "Izivia", color: "#00a0dc" },
+  { key: "powerdot", name: "Powerdot", color: "#6a2c91" },
+  { key: "allego", name: "Allego", color: "#ff6a13" },
+];
+const BRAND = Object.fromEntries(BRANDS.map((b) => [b.key, b]));
+const brandKey = (s) => (BRAND[s.brand] ? s.brand : "ionity");
+const HIDDEN_KEY = "evailability-hidden";
+function loadHidden() {
+  try { return new Set((JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]") || []).filter((k) => BRAND[k])); }
+  catch (_) { return new Set(); }
+}
+function saveHidden() { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...state.hidden])); } catch (_) {} }
+function loadBrands() {
+  try {
+    const v = JSON.parse(localStorage.getItem(BRANDS_KEY) || "null");
+    const ok = Array.isArray(v) ? v.filter((k) => BRAND[k]) : [];
+    return ok.length ? ok : ["ionity"];
+  } catch (_) { return ["ionity"]; }
+}
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const state = {
+  to: null, from: null, via: null, // {label, lat, lon}
+  rerouting: false, lastRerouteAt: 0, bannerTimer: null,
+  route: null, stations: [],      // from the Worker
+  statusAt: null,
+  user: { km: 0, min: 0, offKm: 0, acc: null, at: null },
+  offCount: 0,
+  stickToBottom: true,
+  mySideOnly: localStorage.getItem(MY_SIDE_KEY) === "1",
+  brands: loadBrands(),
+  hidden: loadHidden(),   // brands on this route you've switched off for now (no replanning)           // follow the nearest chargers unless you've scrolled up
+  watchId: null, simTimer: null, statusTimer: null, wakeLock: null,
+};
+
+// ------------------------------------------------------------- API
+
+// A dropped connection (Safari: "Load failed") gets one more try after a short pause.
+// If the server is busy, a second try usually works.
+const ACCESS_KEY = "evailability-access";
+const accessToken = () => { try { return localStorage.getItem(ACCESS_KEY) || ""; } catch (_) { return ""; } };
+async function api(path, body) {
+  const headers = { "X-Access": accessToken() };
+  const opts = body
+    ? { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : { headers };
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    try { res = await fetch(WORKER + path, opts); break; }
+    catch (e) {
+      if (attempt >= 1) throw new Error("Couldn’t reach the server. Please try again in a moment.");
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) { // code no longer valid: ask again
+    try { localStorage.removeItem(ACCESS_KEY); } catch (_) {}
+    showLock();
+  }
+  if (!res.ok) throw new Error(data.error || `The server answered ${res.status}`);
+  return data;
+}
+
+// ---- access code: asked once, checked by the server; the token it returns is kept on this device
+function showLock() { $("lock").hidden = false; setTimeout(() => $("lockCode").focus(), 50); }
+async function unlock() {
+  const code = $("lockCode").value.replace(/\D/g, "");
+  $("lockError").hidden = true;
+  $("lockBtn").disabled = true;
+  try {
+    const res = await fetch(`${WORKER}/unlock`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.token) throw new Error(data.error || "That code isn’t right.");
+    localStorage.setItem(ACCESS_KEY, data.token);
+    $("lock").hidden = true;
+    $("lockCode").value = "";
+    if (!booted) boot();
+  } catch (e) {
+    $("lockError").textContent = /fetch|load failed|network/i.test(e.message) ? "Couldn’t reach the server. Try again." : e.message;
+    $("lockError").hidden = false;
+  } finally {
+    $("lockBtn").disabled = false;
+  }
+}
+
+// ------------------------------------------------------------- start screen
+
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+function wireSearch(inputId, listId, key) {
+  const input = $(inputId), list = $(listId);
+  const search = debounce(async () => {
+    const q = input.value.trim();
+    state[key] = null; updatePlanBtn();
+    if (q.length < 3) { list.innerHTML = ""; return; }
+    try {
+      const { results } = await api(`/geocode?q=${encodeURIComponent(q)}`);
+      // Europe first: the geocoder also knows the other Venlo, in North Dakota.
+      const inEurope = (r) => r.lat > 34 && r.lat < 72 && r.lon > -25 && r.lon < 45;
+      results.sort((a, b) => inEurope(b) - inEurope(a));
+      list.innerHTML = results.map((r, i) =>
+        `<li><button type="button" data-i="${i}" aria-pressed="false">${esc(r.label)}</button></li>`).join("");
+      list.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+        list.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", "false"));
+        b.setAttribute("aria-pressed", "true");
+        state[key] = results[+b.dataset.i];
+        input.value = state[key].label.split(",")[0];
+        list.innerHTML = ""; // chosen: the suggestions go away
+        input.blur();
+        syncClear();
+        updatePlanBtn();
+      }));
+    } catch (e) { list.innerHTML = `<li class="error">${esc(e.message)}</li>`; }
+  }, 350);
+  const clear = document.querySelector(`.clear-btn[data-for="${inputId}"]`);
+  const isVia = /^via/.test(inputId); // on a via the x is always there: it removes the via
+  const syncClear = () => { clear.hidden = isVia ? false : !input.value; };
+  input.addEventListener("input", () => { syncClear(); search(); });
+  clear.addEventListener("click", () => {
+    input.value = "";
+    state[key] = null;
+    list.innerHTML = "";
+    syncClear();
+    updatePlanBtn();
+    input.focus();
+  });
+  syncClear();
+}
+
+function updatePlanBtn() {
+  const fromOk = !$("from").value.trim() || state.from;
+  const viaOk = [1, 2].every((n) => $(`via${n}Row`).hidden || !$(`via${n}`).value.trim() || state[`via${n}`]);
+  $("planBtn").disabled = !(state.to && fromOk && viaOk);
+}
+
+function showStartError(msg) { const p = $("startError"); p.textContent = msg; p.hidden = !msg; }
+
+function currentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error("This browser can’t share your location. Fill in a start instead."));
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve([p.coords.longitude, p.coords.latitude]),
+      () => reject(new Error("Location access was refused. Allow it in your browser settings, or fill in a start.")),
+      { enableHighAccuracy: true, timeout: 15000 });
+  });
+}
+
+// Rerouting and switching routes keep the brands of the current route; the start screen passes its own.
+async function plan(fromLonLat, brands = state.planBrands || state.brands) {
+  const body = { from: fromLonLat, to: [state.to.lon, state.to.lat], brands };
+  if (state.vias?.length) body.via = state.vias.map((v) => [v.lon, v.lat]);
+  const data = await api("/plan", body);
+  state.route = data.route;
+  state.stations = data.stations;
+  state.planBrands = data.brands || ["ionity"];
+  // Only the first few come with a status; the rest are fetched once they're on screen.
+  for (const s of state.stations) s.statusAt = s.statusChecked === false ? null : Date.now();
+  state.statusAt = Date.now();
+  state.user = { km: 0, min: 0, offKm: 0, acc: null, at: null };
+  state.offCount = 0;
+  save();
+}
+
+// ---------------------------------------------------------------- route options
+// Main roads of the current route ahead, in the same form as an option's signature ("A12>A3>A5").
+function currentSignature() {
+  const km = new Map(), order = [];
+  for (const r of (state.route?.roads || []).filter((r) => r.toKm > state.user.km + 1)) {
+    if (r.ref[0] === "E") continue;
+    if (!km.has(r.ref)) { km.set(r.ref, 0); order.push(r.ref); }
+    km.set(r.ref, km.get(r.ref) + (r.toKm - Math.max(r.fromKm, state.user.km)));
+  }
+  return order.filter((r) => km.get(r) >= 30).join(">");
+}
+
+function optionCard(o, i, fastestMin, isCurrent) {
+  const diff = o.durationMin - fastestMin;
+  const tag = isCurrent ? `<span class="tag cur">Current</span>`
+    : diff <= 1 ? `<span class="tag fast">Fastest</span>` : `<span class="tag slow">+${fmtMin(diff)}</span>`;
+  const roads = o.roads.map((r) =>
+    `<span class="pair">${roadBadge(r.ref, r.country)}${(r.cities || (r.city ? [r.city] : [])).length
+      ? ` <span class="city">${(r.cities || [r.city]).map(esc).join(" · ")}</span>` : ""}</span>`).join('<span class="sep">›</span>');
+  return `<button type="button" class="opt${isCurrent ? " current" : ""}" data-i="${i}">
+    <div class="opt-top">${fmtMin(o.durationMin)} <span class="km">${o.distanceKm} km</span>${tag}</div>
+    <div class="opt-roads">${roads || '<span class="city">No numbered roads</span>'}</div>
+    <div class="opt-meta">${o.ionity} Ionity site${o.ionity === 1 ? "" : "s"} along the way</div>
+  </button>`;
+}
+
+// Shows the options and resolves with the chosen one (or null when closed).
+function chooseRoute(options, { title, hint, current } = {}) {
+  return new Promise((resolve) => {
+    const fastestMin = Math.min(...options.map((o) => o.durationMin));
+    $("optionsTitle").textContent = title || "Choose a route";
+    $("optionsBody").innerHTML = (hint ? `<p class="hint">${hint}</p>` : "") +
+      options.map((o, i) => optionCard(o, i, fastestMin, current && o.signature === current)).join("");
+    $("options").hidden = false;
+    $("optionsBody").classList.remove("busy");
+    const done = (v) => { $("optionsBody").onclick = null; $("optionsClose").onclick = null; if (!v) closeOptions(); resolve(v); };
+    $("optionsBody").onclick = (e) => {
+      const b = e.target.closest(".opt");
+      if (!b) return;
+      // Keep the cards on screen and show this one being planned; the caller closes the sheet.
+      b.classList.add("picked");
+      const tag = b.querySelector(".tag");
+      if (tag) { tag.className = "tag busy"; tag.innerHTML = `<span class="spinner" aria-hidden="true"></span>Planning…`; }
+      $("optionsBody").classList.add("busy");
+      $("optionsClose").onclick = null;
+      done(options[+b.dataset.i]);
+    };
+    $("optionsClose").onclick = () => done(null);
+  });
+}
+
+function closeOptions() {
+  $("options").hidden = true;
+  $("optionsBody").classList.remove("busy");
+}
+
+function showOptionsLoading(title) {
+  $("optionsTitle").textContent = title;
+  $("optionsBody").innerHTML = `<p class="hint">Looking for other routes… this takes a few seconds.</p>`;
+  $("optionsClose").onclick = () => { $("options").hidden = true; };
+  $("options").hidden = false;
+}
+
+// A chosen route option becomes the trip's via point (replacing any you typed).
+function useOption(o) {
+  state.vias = o.via ? [{ label: "Chosen route", lon: o.via[0], lat: o.via[1], auto: true }] : [];
+}
+
+// While driving: tap the destination to compare routes from where you are now.
+$("destRow").addEventListener("click", async () => {
+  if (!state.route || state.rerouting) return;
+  showOptionsLoading("Routes from here");
+  try {
+    const from = state.user.lonlat || await currentPosition();
+    const { options } = await api("/alternatives", { from, to: [state.to.lon, state.to.lat] });
+    if ($("options").hidden) return; // closed while loading
+    const cur = currentSignature();
+    const pick = await chooseRoute(options, {
+      title: "Routes from here",
+      hint: options.length > 1 ? "Your current route is outlined. Tap another to switch." : "No other sensible route found from here.",
+      current: cur,
+    });
+    if (!pick || pick.signature === cur) return closeOptions();
+    useOption(pick);
+    await plan(from);
+    closeOptions();
+    state.stickToBottom = true;
+    showBanner(`New route via ${roadsAhead().map((r) => r.ref).join(" › ")}`, { ok: true, hideAfter: 8000 });
+    render();
+  } catch (e) {
+    $("optionsBody").classList.remove("busy");
+    $("optionsClose").onclick = closeOptions;
+    $("optionsBody").innerHTML = `<p class="error">Couldn’t ${$("optionsBody").querySelector(".picked") ? "switch route" : "find routes"}: ${esc(e.message)}</p>`;
+  }
+});
+
+$("planBtn").addEventListener("click", async () => {
+  const btn = $("planBtn");
+  state.arrived = false; state.wasAway = false;
+  playNoSleep(); // started by this tap: iOS lets a video play from a tap without asking
+  btn.disabled = true; btn.textContent = "Planning…"; showStartError("");
+  try {
+    const from = state.from ? [state.from.lon, state.from.lat] : await currentPosition();
+    // With your own via points, plan those; otherwise offer the options found.
+    state.vias = [state.via1, state.via2].filter((v, i) => v && !$(`via${i + 1}Row`).hidden);
+    if (!state.vias.length) {
+      btn.textContent = "Finding routes…";
+      let options = [];
+      try { options = (await api("/alternatives", { from, to: [state.to.lon, state.to.lat] })).options || []; }
+      catch (_) { /* no options: just plan the fastest */ }
+      if (options.length > 1) {
+        const pick = await chooseRoute(options, { hint: "Tap the route you want to drive." });
+        if (!pick) return;
+        useOption(pick);
+      }
+      btn.textContent = "Planning…";
+    }
+    state.hidden.clear(); saveHidden();
+    await plan(from, state.brands);
+    startDriving();
+    closeOptions();
+  } catch (e) {
+    closeOptions();
+    showStartError(e.message);
+  } finally {
+    btn.textContent = "Plan route"; updatePlanBtn();
+  }
+});
+
+// ------------------------------------------------------------- geometry
+
+const R = 6371, rad = (d) => d * Math.PI / 180;
+function xy([lon, lat], refLat) { return [rad(lon) * R * Math.cos(rad(refLat)), rad(lat) * R]; }
+function seg(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+  let t = l2 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return { t, d: Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy)) };
+}
+
+// Where you are along the route. Prefers the part of the route ahead of your last position,
+// so a road that passes close to itself doesn't make you jump back.
+function project(lonlat) {
+  const { coords, km, min } = state.route;
+  const p = xy(lonlat, lonlat[1]);
+  let best = null, bestAhead = null;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const r = seg(p, xy(coords[i], lonlat[1]), xy(coords[i + 1], lonlat[1]));
+    const along = km[i] + r.t * (km[i + 1] - km[i]);
+    const cand = { d: r.d, km: along, min: min[i] + r.t * (min[i + 1] - min[i]) };
+    if (!best || cand.d < best.d) best = cand;
+    if (along >= state.user.km - 2 && (!bestAhead || cand.d < bestAhead.d)) bestAhead = cand;
+  }
+  return bestAhead && bestAhead.d < 1 ? bestAhead : best;
+}
+
+function minAtKm(k) {
+  const { km, min } = state.route;
+  for (let i = 0; i < km.length - 1; i++) {
+    if (km[i + 1] >= k) return min[i] + ((k - km[i]) / ((km[i + 1] - km[i]) || 1)) * (min[i + 1] - min[i]);
+  }
+  return min[min.length - 1];
+}
+
+// How far and how long to the charger itself, from where you are.
+// A charger right next to the road (a service area): where the route passes it.
+// One beyond an exit or in a town: the route up to 3 km before it (point A of the detour lookup),
+// then the real drive from there to the charger. Without that, every charger near one junction
+// would show the same distance: that of the junction, not of the charger.
+function wayTo(s) {
+  const passKm = s.alongKm - state.user.km, passMin = s.alongMin - state.user.min;
+  if (s.toKm == null || s.toMin == null || (s.offRouteKm ?? 0) <= SERVICE_AREA_KM) return { km: passKm, min: passMin };
+  const aKm = Math.max(0, s.alongKm - 3);
+  const km = aKm + s.toKm - state.user.km;
+  const min = minAtKm(aKm) + s.toMin - state.user.min;
+  return { km: Math.max(km, s.offRouteKm ?? 0, 0), min: Math.max(min, 0) };
+}
+
+function pointAtKm(k) {
+  const { coords, km } = state.route;
+  for (let i = 0; i < km.length - 1; i++) {
+    if (km[i + 1] >= k) {
+      const t = (k - km[i]) / ((km[i + 1] - km[i]) || 1);
+      return [coords[i][0] + t * (coords[i + 1][0] - coords[i][0]), coords[i][1] + t * (coords[i + 1][1] - coords[i][1])];
+    }
+  }
+  return coords[coords.length - 1];
+}
+
+// Which side of the road a station is on, seen in your driving direction.
+// Only for stations close to the route (service areas); further away it's a detour either way.
+const SIDE_WITHIN_KM = 0.5;
+const SIDE_V = 2;
+function sideOf(s) {
+  if (s._sideV === SIDE_V) return s._side; // older saved routes recalculate
+  const { coords } = state.route;
+  const ref = s.lat, p = xy([s.lon, s.lat], ref);
+  let best = { d: Infinity, i: 0 };
+  for (let i = 0; i < coords.length - 1; i++) {
+    const r = seg(p, xy(coords[i], ref), xy(coords[i + 1], ref));
+    if (r.d < best.d) best = { d: r.d, i };
+  }
+  let side = null;
+  s._exitSide = null;
+  if (best.d > 0.015) { // right on the line: can't tell
+    const a = xy(coords[best.i], ref), b = xy(coords[best.i + 1], ref);
+    const cross = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+    const which = cross < 0 ? "right" : "left";
+    // Further away it's beyond an exit: "left/right of the motorway" doesn't apply, the exit does.
+    if (best.d <= SIDE_WITHIN_KM) side = which; else s._exitSide = which;
+  }
+  s._side = side;
+  s._sideV = SIDE_V;
+  return side;
+}
+
+// ------------------------------------------------------------- driving
+
+function startDriving() {
+  $("start").hidden = true;
+  $("drive").hidden = false;
+  stopTracking();
+  if ($("sim").checked) startSimulation(); else startGps();
+  state.statusTimer = setInterval(refreshStatus, STATUS_EVERY_MS);
+  keepAwake();
+  render();
+  setTimeout(() => refreshStatus(false), 300); // what's on screen and not known yet
+}
+
+function stopTracking() {
+  if (state.watchId != null) navigator.geolocation.clearWatch(state.watchId);
+  clearInterval(state.simTimer); clearInterval(state.statusTimer);
+  state.watchId = state.simTimer = state.statusTimer = null;
+}
+
+function startGps() {
+  if (!navigator.geolocation) return;
+  state.watchId = navigator.geolocation.watchPosition(
+    (p) => onPosition([p.coords.longitude, p.coords.latitude], p.coords.accuracy),
+    () => { state.user.acc = null; render(); },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+
+// Drives the route at 100 km/h, sped up 30 times, so a test drive takes minutes.
+function startSimulation() {
+  let k = 0;
+  state.simTimer = setInterval(() => {
+    k = Math.min(k + (100 * 30) / 3600, state.route.distanceKm);
+    onPosition(pointAtKm(k), 10);
+    if (k >= state.route.distanceKm) clearInterval(state.simTimer);
+  }, 1000);
+}
+
+function onPosition(lonlat, accuracy) {
+  const pr = project(lonlat);
+  state.user = { km: pr.km, min: pr.min, offKm: pr.d, acc: accuracy, at: Date.now(), lonlat };
+  const reliable = accuracy == null || accuracy < 100;
+  state.offCount = reliable && pr.d > OFF_ROUTE_KM ? state.offCount + 1 : 0;
+  // Once past a via point, it no longer matters for a new route.
+  const viaKms = state.route.viaKms || (state.route.viaKm != null ? [state.route.viaKm] : []);
+  if (state.vias?.length && viaKms.length && pr.km > viaKms[0] && pr.d < OFF_ROUTE_KM) {
+    state.vias.shift();
+    state.route.viaKms = viaKms.slice(1);
+    state.route.viaKm = state.route.viaKms[0] ?? null;
+    save();
+  }
+  // Arrived: within 150 m of the end of the route, after having been further away.
+  const left = state.route.distanceKm - pr.km;
+  if (left > 0.5) state.wasAway = true;
+  if (!state.arrived && state.wasAway && reliable && pr.d < 0.3 && left < 0.15) celebrateArrival();
+  if (state.arrived) state.offCount = 0; // parking past the destination isn't leaving the route
+  if (state.offCount >= 3 && !state.rerouting && Date.now() - state.lastRerouteAt > 60000) reroute();
+  render();
+}
+
+// A mild celebration on arrival: a short confetti shower and a card. Then the screen may sleep.
+function celebrateArrival() {
+  state.arrived = true;
+  save();
+  const colors = ["#43b96d", "#2f63b8", "#f0a43a", "#e0574f", "#ffd200", "#9b59b6"];
+  const box = document.createElement("div");
+  box.className = "confetti";
+  box.setAttribute("aria-hidden", "true");
+  box.innerHTML = Array.from({ length: 70 }, () => {
+    const st = [
+      `left:${(Math.random() * 100).toFixed(1)}%`, `background:${colors[Math.floor(Math.random() * colors.length)]}`,
+      `--x:${Math.round(Math.random() * 160 - 80)}px`, `--r:${Math.round(Math.random() * 900 - 450)}deg`,
+      `--d:${(2.2 + Math.random() * 1.6).toFixed(2)}s`, `--delay:${(Math.random() * 0.6).toFixed(2)}s`,
+    ];
+    return `<i style="${st.join(";")}"></i>`;
+  }).join("");
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 4800);
+  const card = document.createElement("div");
+  card.className = "arrived";
+  card.setAttribute("role", "status");
+  const name = state.to?.label?.split(",")[0] || "your destination";
+  card.innerHTML = `<div class="big" aria-hidden="true">🎉</div><h2>You’ve arrived</h2><p>${esc(name)}, ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><button type="button">Nice</button>`;
+  document.body.appendChild(card);
+  requestAnimationFrame(() => card.classList.add("show"));
+  const close = () => { card.classList.remove("show"); setTimeout(() => card.remove(), 400); };
+  card.querySelector("button").addEventListener("click", close);
+  setTimeout(close, 8000);
+  try { navigator.vibrate?.([60, 80, 60]); } catch (_) {}
+  letSleep();
+}
+
+// Chargers ahead of the brands you're showing right now.
+function upcomingShown() {
+  return upcoming().filter((s) => !state.hidden.has(brandKey(s)));
+}
+const shownBrands = () => (state.planBrands || ["ionity"]).filter((k) => !state.hidden.has(k));
+// With "Easy to reach" on, a charger only appears once its detour is known: otherwise it would
+// show up first and vanish a moment later.
+function visibleAhead() {
+  const all = upcomingShown();
+  return state.mySideOnly ? all.filter((s) => !detourPending(s) && onMySide(s)) : all;
+}
+
+// Ask in small batches: each Worker call may only make a limited number of lookups.
+async function fetchStatus(stations) {
+  const list = stations.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, country: s.country, brand: brandKey(s) }));
+  const batches = [];
+  for (let i = 0; i < list.length; i += STATUS_BATCH) batches.push(list.slice(i, i + STATUS_BATCH));
+  const status = {};
+  for (let i = 0; i < batches.length; i += 3) { // 3 batches at a time
+    const res = await Promise.all(batches.slice(i, i + 3).map((b) => api("/status", { stations: b })));
+    for (const r of res) Object.assign(status, r.status);
+  }
+  const now = Date.now();
+  for (const s of state.stations) if (s.id in status) { s.status = status[s.id]; s.statusAt = now; }
+}
+
+// Tap a charger to refresh just that one.
+// Any charger being looked up right now (the 1-minute round, a tap, or after scrolling).
+function statusBusy() {
+  const now = Date.now();
+  return (state.stations || []).some((s) => s.loadingAt && now - s.loadingAt < 20000);
+}
+
+async function refreshOne(ids) {
+  const list = state.stations.filter((x) => ids.includes(x.id) && !(x.loadingAt && Date.now() - x.loadingAt < 20000));
+  if (!list.length) return;
+  for (const s of list) s.loadingAt = Date.now();
+  render();
+  try { await fetchStatus(list); } catch (e) { /* keeps the old (grey) value */ }
+  for (const s of list) s.loadingAt = null;
+  save(); render();
+}
+
+// Detour minutes are worked out only for chargers you actually see (the matrix quota is small).
+// The app sends the route points 3 km before and after each charger.
+let detourBusy = false, detourAgain = false;
+// Not known yet, and either never asked or being asked right now. (Asked and failed counts as
+// known-unknown: the charger is shown, so a failing lookup can't hide it for good.)
+const detourPending = (s) => !("detourMin" in s) && (!s.detourTriedAt || s.detourLoading);
+// With "Easy to reach" on, the filter needs the detours of the chargers ahead, not just those on screen.
+const FILTER_AHEAD = 60; // at most 3 matrix calls per route
+function detourCandidates(inView = []) {
+  const ahead = state.mySideOnly ? upcomingShown().slice(0, FILTER_AHEAD) : [];
+  return [...new Set([...inView, ...ahead])];
+}
+async function fetchDetours(stations) {
+  if (detourBusy) { detourAgain = true; return; }
+  const now = Date.now();
+  // Also chargers beyond an exit whose detour came from an older version without the way there.
+  const needs = (s) => !("detourMin" in s) || (s.toKm === undefined && (s.offRouteKm ?? 0) > SERVICE_AREA_KM);
+  const todo = stations.filter((s) => needs(s) && !s.detourLoading && !(s.detourTriedAt && now - s.detourTriedAt < DETOUR_RETRY_MS))
+    .sort((a, b) => a.alongKm - b.alongKm);
+  if (!todo.length) return;
+  detourBusy = true;
+  for (const s of todo) { s.detourTriedAt = now; s.detourLoading = true; }
+  try {
+    for (let i = 0; i < todo.length; i += 20) {
+      const chunk = todo.slice(i, i + 20);
+      const items = chunk.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, a: pointAtKm(Math.max(0, s.alongKm - 3)), b: pointAtKm(Math.min(state.route.distanceKm, s.alongKm + 3)) }));
+      try {
+        const { detours, reach } = await api("/detours", { items });
+        for (const s of chunk) {
+          if (detours && s.id in detours) s.detourMin = detours[s.id];
+          if (reach?.[s.id]) { s.toMin = reach[s.id].toMin; s.toKm = reach[s.id].toKm; }
+        }
+      } catch (_) { /* try again in a few minutes */ }
+      for (const s of chunk) s.detourLoading = false;
+      // Show each batch as it arrives (nearest first), then look up the status of what came into view.
+      render();
+      refreshWhenSettled();
+    }
+  } finally {
+    for (const s of todo) s.detourLoading = false;
+    detourBusy = false;
+    save(); render();
+    if (detourAgain) { detourAgain = false; fetchDetours(detourCandidates(stationsInView())); }
+  }
+}
+
+// Chargers whose row is (mostly) on screen right now.
+function stationsInView() {
+  const list = $("list");
+  const box = list.getBoundingClientRect();
+  const ids = new Set();
+  for (const row of list.querySelectorAll(".row.st[data-ids]")) {
+    const r = row.getBoundingClientRect();
+    const shown = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
+    if (shown >= r.height * 0.5) for (const id of row.dataset.ids.split(" ")) ids.add(id);
+  }
+  return state.stations.filter((s) => ids.has(s.id));
+}
+
+// Look up the chargers on screen. With force (the 1-minute timer, "Status now") all of them;
+// otherwise (after scrolling or switching the filter) only those not checked in the last minute.
+// A lookup isn't cancelled when its row scrolls away: the answer is kept for when you scroll back,
+// and a charger already being looked up isn't asked for twice.
+async function refreshStatus(force = true) {
+  if (document.visibilityState !== "visible" || $("drive").hidden || !state.route) return;
+  const now = Date.now();
+  const busy = (s) => s.loadingAt && now - s.loadingAt < 20000;
+  const inView = stationsInView();
+  fetchDetours(detourCandidates(inView));
+  const todo = inView.filter((s) => !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
+  if (!todo.length) return;
+  for (const s of todo) s.loadingAt = now;
+  render();
+  try {
+    await fetchStatus(todo);
+    state.statusAt = Date.now();
+    state.statusError = false;
+  } catch (e) {
+    state.statusError = true;
+  } finally {
+    for (const s of todo) s.loadingAt = null;
+    save();
+    render();
+  }
+}
+
+// After scrolling: wait until the list has been still for a moment, then fetch what's in view.
+let settleTimer = null;
+function refreshWhenSettled() {
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => refreshStatus(false), 600);
+}
+
+// Keep the screen on while driving. The Screen Wake Lock is the normal way, but iOS drops it
+// (another app or Siri on top, the GPS prompt, a call, Low Power Mode) and doesn't always give it
+// back, and in some versions a home-screen app gets it without it doing anything. So: ask again
+// whenever it was released, on every tap and every 30 s, and also play a tiny silent, muted video
+// in a loop (the long-standing trick that keeps iPhones awake). The video has no sound track, so it
+// doesn't interrupt music or CarPlay.
+const NOSLEEP_MP4 = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAANLbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAJxAAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAnV0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAJxAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAACcQAAAAAAABAAAAAAHtbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAACgABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABmG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAVhzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAK/+EAFmdCwArZHsBEAAADAAQAAAMACDxImSABAAVoy4PLIAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAAAJHAAACRwAAABhzdHRzAAAAAAAAAAEAAAAKAABAAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAAKAAAAAQAAADxzdHN6AAAAAAAAAAAAAAAKAAAChgAAAAoAAAAKAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAABRzdGNvAAAAAAAAAAEAAAN7AAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAAuFtZGF0AAACcAYF//9s3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTAgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MToweDExMSBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MCBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0wIHdlaWdodHA9MCBrZXlpbnQ9MjUwIGtleWludF9taW49MSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAA5liIQF////D0UAAVefgAAAAAZBmjgL+oAAAAAGQZpUAv6gAAAABUGaYBf1AAAABUGagBf1AAAABUGaoBf1AAAABUGawBf1AAAABUGa4Bf1AAAABUGbABb1AAAABUGbIBX1";
+let noSleepVideo = null;
+function playNoSleep() {
+  if (!noSleepVideo) {
+    const v = document.createElement("video");
+    v.setAttribute("playsinline", ""); v.setAttribute("muted", ""); v.setAttribute("aria-hidden", "true");
+    v.muted = true; v.loop = true; v.disablePictureInPicture = true;
+    v.style.cssText = "position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:-1";
+    v.src = NOSLEEP_MP4;
+    document.body.appendChild(v);
+    noSleepVideo = v;
+  }
+  if (noSleepVideo.paused) noSleepVideo.play().then(() => { state.awakeVideo = true; }, () => { state.awakeVideo = false; });
+}
+async function keepAwake() {
+  if ($("drive").hidden || document.visibilityState !== "visible" || state.arrived) return;
+  playNoSleep();
+  if (!("wakeLock" in navigator) || (state.wakeLock && !state.wakeLock.released)) return;
+  try {
+    const lock = await navigator.wakeLock.request("screen");
+    state.wakeLock = lock;
+    state.awakeError = null;
+    lock.addEventListener("release", () => { setTimeout(keepAwake, 1000); });
+  } catch (e) { state.awakeError = e.name || "not allowed"; }
+}
+function letSleep() {
+  noSleepVideo?.pause();
+  state.wakeLock?.release?.().catch(() => {});
+  state.wakeLock = null;
+}
+// What Help shows about keeping the screen on.
+function awakeText() {
+  const lock = state.wakeLock && !state.wakeLock.released;
+  if (lock && state.awakeVideo) return "Screen stays on (wake lock and video).";
+  if (lock) return "Screen stays on (wake lock).";
+  if (state.awakeVideo) return "Screen stays on (video).";
+  return `Screen may turn off${state.awakeError ? ` (${state.awakeError})` : ""}. Tap the screen once while driving.`;
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !$("drive").hidden) { keepAwake(); refreshStatus(); }
+});
+// A tap lets iOS start what it refused without one.
+for (const ev of ["touchend", "click"]) document.addEventListener(ev, () => { if (!$("drive").hidden) keepAwake(); }, { passive: true });
+setInterval(keepAwake, 30000);
+
+function updateScrollUi() {
+  const list = $("list");
+  const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  state.stickToBottom = fromBottom < 24;
+  $("more").hidden = state.stickToBottom;
+  list.classList.toggle("more-above", list.scrollTop > 4);
+  updateStickyRoad();
+}
+
+// Keeps the road in view above the down button while you scroll through the list.
+// Show as many whole road badges as fit on the via line, then "…" (never a half badge).
+function fitRoads(box) {
+  if (!box) return;
+  const over = () => box.scrollWidth > box.clientWidth + 1;
+  if (!over()) return;
+  const more = document.createElement("span");
+  more.className = "sep"; more.textContent = "› …";
+  box.appendChild(more);
+  while (over()) {
+    const badges = box.querySelectorAll(".rb");
+    if (badges.length <= 1) break;
+    const last = badges[badges.length - 1];
+    const sep = last.previousElementSibling;
+    last.remove();
+    if (sep?.classList.contains("sep")) sep.remove();
+  }
+}
+
+function updateStickyRoad() {
+  const el = $("stickyRoad");
+  const hide = () => { el.hidden = true; };
+  if (state.stickToBottom || !state.route) return hide();
+  const y = $("more").getBoundingClientRect().top - 24; // where the badge sits
+  const rows = [...$("list").querySelectorAll(".row.st[data-ids]")];
+  const row = rows.find((r) => r.getBoundingClientRect().bottom >= y);
+  if (!row) return hide();
+  // The row's own change badge is right there: let that one show instead.
+  // A road badge on the line is right there: let that one show instead.
+  for (const b of $("list").querySelectorAll(".tl-road")) {
+    const r = b.getBoundingClientRect();
+    if (r.bottom > y - 30 && r.top < y + 30) return hide();
+  }
+  const s = state.stations.find((x) => x.id === row.dataset.ids.split(" ")[0]);
+  const road = s && roadParts().filter((r) => r.fromKm <= s.alongKm).at(-1);
+  if (!road) return hide();
+  el.innerHTML = `<span>${roadPartBadge(road)}</span>`;
+  el.hidden = false;
+}
+$("list").addEventListener("scroll", () => { updateScrollUi(); refreshWhenSettled(); }, { passive: true });
+// ---- tap: update (at most once a minute) · press and hold: navigate there
+const TAP_MIN_MS = 60 * 1000;
+let toastTimer = null;
+function toast(text, ms = 2200) {
+  clearTimeout(toastTimer);
+  $("toast").textContent = text;
+  $("toast").hidden = false;
+  toastTimer = setTimeout(() => { $("toast").hidden = true; }, ms);
+}
+let suppressClick = false;
+$("list").addEventListener("click", (e) => {
+  const row = e.target.closest(".row.st[data-ids]");
+  if (!row) return;
+  if (suppressClick) { suppressClick = false; return; } // that was a long press
+  const ids = row.dataset.ids.split(" ");
+  const members = state.stations.filter((s) => ids.includes(s.id));
+  const now = Date.now();
+  const due = members.filter((s) => !s.statusAt || now - s.statusAt >= TAP_MIN_MS);
+  if (!due.length) {
+    const last = Math.max(...members.map((s) => s.statusAt || 0));
+    toast(`Checked ${Math.max(1, Math.round((now - last) / 1000))} s ago`);
+    return;
+  }
+  refreshOne(due.map((s) => s.id));
+});
+
+const LONG_PRESS_MS = 500;
+let press = null;
+function cancelPress() {
+  if (!press) return;
+  clearTimeout(press.timer);
+  press.row.classList.remove("pressing");
+  press = null;
+}
+$("list").addEventListener("pointerdown", (e) => {
+  const row = e.target.closest(".row.st[data-ids]");
+  if (!row || (e.pointerType === "mouse" && e.button !== 0)) return;
+  cancelPress();
+  row.classList.add("pressing");
+  press = {
+    row, x: e.clientX, y: e.clientY,
+    timer: setTimeout(() => {
+      const ids = row.dataset.ids.split(" ");
+      cancelPress();
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 800); // in case no click follows
+      try { navigator.vibrate?.(15); } catch (_) {}
+      openNavSheet(ids);
+    }, LONG_PRESS_MS),
+  };
+});
+$("list").addEventListener("pointermove", (e) => {
+  if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) cancelPress(); // scrolling
+});
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) $("list").addEventListener(ev, cancelPress);
+$("list").addEventListener("scroll", cancelPress, { passive: true });
+// Right-click on a computer, or the system long press on Android
+$("list").addEventListener("contextmenu", (e) => {
+  const row = e.target.closest(".row.st[data-ids]");
+  if (!row) return;
+  e.preventDefault();
+  cancelPress();
+  openNavSheet(row.dataset.ids.split(" "));
+});
+
+// ---- navigation apps
+const NAV_KEY = "evailability-nav";
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const NAV_APPS = [
+  { key: "apple", name: "Apple Maps", color: "#1f8bf4", ico: isIOS ? "\uF8FF" : "A", url: (p) => `https://maps.apple.com/?daddr=${p.lat},${p.lon}&dirflg=d` },
+  { key: "google", name: "Google Maps", color: "#34a853", ico: "G",
+    url: (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=driving`,
+    app: (p) => `comgooglemaps://?daddr=${p.lat},${p.lon}&directionsmode=driving` },
+  { key: "waze", name: "Waze", color: "#33ccff", ico: "W", url: (p) => `https://waze.com/ul?ll=${p.lat},${p.lon}&navigate=yes` },
+  // Flitsmeister has no public link to start navigation on iPhone: copy the coordinates to paste there.
+  // On Android, a geo: link offers it (and any other navigation app).
+  { key: "flitsmeister", name: "Flitsmeister", color: "#ff7a00", ico: "F",
+    note: isIOS ? "Copies coordinates" : "",
+    url: isIOS ? null : (p) => `geo:${p.lat},${p.lon}?q=${p.lat},${p.lon}(${encodeURIComponent(p.name)})` },
+];
+let navTarget = null;
+function navOrder() {
+  const fav = localStorage.getItem(NAV_KEY);
+  return [...NAV_APPS].sort((a, b) => (b.key === fav) - (a.key === fav));
+}
+function openNavSheet(ids) {
+  const members = state.stations.filter((s) => ids.includes(s.id));
+  if (!members.length) return;
+  const s = members.find((m) => brandKey(m) === "ionity") || members[0];
+  navTarget = { lat: +s.lat.toFixed(5), lon: +s.lon.toFixed(5), name: shortName(s.name), full: s.name };
+  const km = Math.min(...members.map((m) => m.alongKm)) - state.user.km;
+  $("navTitle").textContent = navTarget.name;
+  $("navSub").textContent = `${fmtKm(km)} km ahead · ${members.map((m) => (BRAND[brandKey(m)] || BRAND.ionity).name).join(", ")}`;
+  $("navHist").innerHTML = historyHtml(members);
+  $("navHist").hidden = !$("navHist").innerHTML;
+  const appBtn = (a) => `<button type="button" class="navbtn" data-nav="${a.key}"><span class="ico" style="background:${a.color}">${a.ico}</span>${esc(a.name)}${a.note ? `<small>${esc(a.note)}</small>` : ""}</button>`;
+  $("navList").innerHTML = navOrder().map(appBtn).join("") +
+    `<button type="button" class="navbtn" data-nav="copy"><span class="ico" style="background:var(--muted)">⧉</span>Copy coordinates<small>${navTarget.lat}, ${navTarget.lon}</small></button>` +
+    (navigator.share ? `<button type="button" class="navbtn" data-nav="share"><span class="ico" style="background:var(--muted)">↗</span>Share…</button>` : "");
+  $("navBackdrop").hidden = false;
+  $("navSheet").hidden = false;
+}
+// How likely you can charge on arrival: since when it's full, or when it was last full.
+// "since" times come from the operator's data where it has them, otherwise from what this app saw.
+function clockAndAgo(iso) {
+  const t = Date.parse(iso || "");
+  if (!Number.isFinite(t)) return null;
+  const min = Math.max(0, Math.round((Date.now() - t) / 60000));
+  const clock = new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const ago = min < 1 ? "just now" : min < 90 ? `${min} min ago` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} ago`;
+  return { clock, ago, min };
+}
+function historyHtml(members) {
+  const lines = members.map((m) => {
+    const st = m.status;
+    if (!st || st.available == null) return null;
+    const logo = members.length > 1 ? logoHtml(brandKey(m)) : "";
+    if (st.state === "full") {
+      const t = clockAndAgo(st.fullSince || st.seenSince);
+      return `<div>${logo}<span>${t ? `<b>All in use since ${t.clock}</b> (${t.ago})` : "<b>All in use</b>, since when unknown"}</span></div>` +
+        (t && t.min >= 20 ? `<div><span class="tip">In use for a while: a charger often frees up soon.</span></div>` : "");
+    }
+    if (st.state === "likely_offline") {
+      const t = clockAndAgo(st.changedAt);
+      return `<div>${logo}<span><b>Offline</b>${t ? `, no change since ${t.clock} (${t.ago})` : ""}</span></div>`;
+    }
+    const full = clockAndAgo(st.lastFullAt);
+    const changed = clockAndAgo(st.changedAt);
+    return `<div>${logo}<span><b>${st.available} of ${st.total} free.</b> ${full ? `Last full at ${full.clock} (${full.ago}).` : "Not seen full by this app recently."}</span></div>` +
+      (changed ? `<div><span class="muted">Last change at the site: ${changed.clock} (${changed.ago})</span></div>` : "");
+  }).filter(Boolean);
+  return lines.join("");
+}
+function closeNavSheet() { $("navSheet").hidden = true; $("navBackdrop").hidden = true; }
+$("navCancel").addEventListener("click", closeNavSheet);
+$("navBackdrop").addEventListener("click", closeNavSheet);
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
+  try { // older fallback
+    const t = document.createElement("textarea");
+    t.value = text; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0";
+    document.body.appendChild(t); t.select(); const ok = document.execCommand("copy"); t.remove(); return ok;
+  } catch (_) { return false; }
+}
+$("navList").addEventListener("click", async (e) => {
+  const btn = e.target.closest(".navbtn");
+  if (!btn || !navTarget) return;
+  const p = navTarget, key = btn.dataset.nav;
+  const coords = `${p.lat}, ${p.lon}`;
+  if (key === "copy") {
+    closeNavSheet();
+    toast((await copyText(coords)) ? "Coordinates copied" : "Couldn’t copy");
+    return;
+  }
+  if (key === "share") {
+    closeNavSheet();
+    try { await navigator.share({ title: p.full, text: `${p.full}\n${coords}`, url: NAV_APPS[0].url(p) }); } catch (_) {}
+    return;
+  }
+  const app = NAV_APPS.find((a) => a.key === key);
+  try { localStorage.setItem(NAV_KEY, key); } catch (_) {}
+  closeNavSheet();
+  if (!app.url) { // Flitsmeister on iPhone
+    toast((await copyText(coords)) ? "Coordinates copied: paste them in Flitsmeister" : "Couldn’t copy", 4000);
+    return;
+  }
+  if (app.app) {
+    // Google Maps app if installed; otherwise the web link after a moment.
+    const fallback = setTimeout(() => { if (document.visibilityState === "visible") location.href = app.url(p); }, 1200);
+    document.addEventListener("visibilitychange", () => clearTimeout(fallback), { once: true });
+    location.href = app.app(p);
+    return;
+  }
+  location.href = app.url(p);
+});
+$("more").addEventListener("click", () => {
+  const list = $("list");
+  list.scrollTo({ top: list.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+});
+
+function syncMySide() {
+  $("mySide").setAttribute("aria-pressed", String(state.mySideOnly));
+}
+$("mySide").addEventListener("click", () => {
+  state.mySideOnly = !state.mySideOnly;
+  try { localStorage.setItem(MY_SIDE_KEY, state.mySideOnly ? "1" : "0"); } catch (_) {}
+  syncMySide();
+  state.stickToBottom = true;
+  if (state.mySideOnly) fetchDetours(detourCandidates()); // before showing anything new
+  render();
+  refreshWhenSettled(); // other chargers may have come into view
+});
+syncMySide();
+
+$("newRoute").addEventListener("click", () => {
+  state.stickToBottom = true;
+  stopTracking();
+  localStorage.removeItem(STORE_KEY);
+  state.route = null; state.stations = [];
+  state.arrived = false; state.wasAway = false;
+  letSleep();
+  $("drive").hidden = true; $("start").hidden = false;
+  $("offRoute").hidden = true;
+});
+
+function showBanner(text, { ok = false, retry = false, hideAfter = 0 } = {}) {
+  clearTimeout(state.bannerTimer);
+  $("offRouteText").textContent = text;
+  $("offRoute").classList.toggle("ok", ok);
+  $("recalc").hidden = !retry;
+  $("offRoute").hidden = false;
+  if (hideAfter) state.bannerTimer = setTimeout(() => { $("offRoute").hidden = true; }, hideAfter);
+}
+
+// Road numbers look like that country's signs: motorways white on blue in Germany, Austria and
+// Belgium, white on red in the Netherlands and France; national roads yellow (Austria: blue).
+//   Germany   A: blue shield with cut corners      B: yellow, black number
+//   Austria   A/S: blue                           B: blue
+//   Netherl.  A: red                              N: yellow, black number
+//   Belgium   A: blue                             N: blue
+//   Luxemb.   A: blue                             N: yellow
+//   France    A: red                              N: red,  D: yellow
+//   Switzerl. A: red                              main roads: blue
+//   E-roads everywhere: green
+function roadBadge(ref, country) {
+  const letter = ref[0];
+  if (letter === "E") return `<span class="rb e">${esc(ref)}</span>`;
+  const motorway = letter === "A" || letter === "S";
+  let style;
+  if (motorway) style = ["DE", "AT", "BE", "LU"].includes(country) ? "blue" : "red";
+  else if (country === "AT" || country === "BE" || country === "CH") style = "blue";
+  else if (country === "FR" && letter === "N") style = "red";
+  else style = "yellow";
+  if (motorway && country === "DE") return `<span class="rb shield"><span>${esc(ref)}</span></span>`;
+  return `<span class="rb ${style}">${esc(ref)}</span>`;
+}
+const roadPartBadge = (r) => roadBadge(r.ref, r.country || countryAt(r.fromKm ?? r.toKm, r.toKm));
+
+function roadsAhead(limit = 4) {
+  const parts = (state.route?.roads || []).filter((r) => r.toKm > state.user.km + 1);
+  return parts.filter((r, i) => r.ref !== parts[i - 1]?.ref).slice(0, limit);
+}
+
+// Which country a stretch of road is in, judged from the chargers on or near it.
+function countryAt(fromKm, toKm) {
+  const st = (state.stations || []).filter((s) => s.country);
+  const inside = st.filter((s) => s.alongKm >= fromKm && s.alongKm <= toKm);
+  if (inside.length) {
+    const n = {};
+    for (const s of inside) n[s.country] = (n[s.country] || 0) + 1;
+    return Object.entries(n).sort((a, b) => b[1] - a[1])[0][0];
+  }
+  const mid = (fromKm + toKm) / 2;
+  let best = null, gap = 60; // only trust a charger within 60 km
+  for (const s of st) {
+    const d = Math.min(Math.abs(s.alongKm - fromKm), Math.abs(s.alongKm - toKm), Math.abs(s.alongKm - mid));
+    if (d < gap) { gap = d; best = s.country; }
+  }
+  return best;
+}
+
+// You've left the route: plan a new one from where you are, and say so.
+async function reroute() {
+  state.rerouting = true;
+  state.lastRerouteAt = Date.now();
+  showBanner("You’ve left the route. Rerouting…");
+  try {
+    const from = state.user.lonlat || await currentPosition();
+    await plan(from);
+    state.stickToBottom = true;
+    const roads = roadsAhead();
+    showBanner(roads.length ? `New route via ${roads.map((r) => r.ref).join(" › ")}` : "New route planned", { ok: true, hideAfter: 8000 });
+  } catch (e) {
+    showBanner(`Couldn’t reroute: ${e.message}`, { retry: true });
+  } finally {
+    state.rerouting = false;
+    render();
+  }
+}
+$("recalc").addEventListener("click", () => { state.lastRerouteAt = 0; reroute(); });
+
+// ------------------------------------------------------------- rendering
+
+function upcoming() {
+  return state.stations.filter((s) => s.alongKm > state.user.km - PASSED_KM);
+}
+
+// "Easy to reach": chargers on your side, plus any you can get to and back from with a short
+// detour. A charger on the other side with a small detour sits at an exit you can use both ways;
+// one that needs a turn-around at the next junction has a big detour and stays hidden.
+function onMySide(s) {
+  return reachOf(s) !== "roundtrip";
+}
+
+// How you get to a charger:
+//   "route"     pull straight in (on your side, next to the motorway, or on the route itself)
+//   "exit"      leave at an exit and rejoin in the same direction (short detour)
+//   "roundtrip" you have to turn around and come back, or it's far off (long detour)
+function reachOf(s) {
+  const dm = detourOf(s);
+  const side = sideOf(s), exit = s._exitSide;
+  const short = dm == null || dm <= MY_SIDE_MAX_DETOUR;
+  if (side === "right") return short ? "route" : "roundtrip";
+  if (side === "left") return dm != null && dm <= MY_SIDE_MAX_DETOUR ? "exit" : "roundtrip";
+  if (exit) return short ? "exit" : "roundtrip";
+  // Right on the route line: the detour decides.
+  return dm == null || dm <= SHOW_DETOUR_FROM ? "route" : short ? "exit" : "roundtrip";
+}
+
+function fmtKm(km) { return km < 10 ? Math.max(0, km).toFixed(1) : Math.round(km); }
+function fmtMin(m) {
+  m = Math.max(0, Math.round(m));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+}
+function clock(minFromNow) {
+  return new Date(Date.now() + minFromNow * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+// Drop the brand from the name (the logo says it) and words like "Raststätte".
+const BRAND_WORDS = /^(ionity|fastned( snelladen| fast charging)?|tesla( supercharger)?|supercharger|enbw( hypercharger| schnellladepark)?|aral( pulse)?|shell( recharge)?|total(energies)?|electra|izivia|powerdot|allego)\b[\s:–-]*/i;
+function shortName(n) {
+  const out = String(n || "").replace(BRAND_WORDS, "").replace(/^(Raststätte|Rastanlage|Rasthof|Autohof)\s+/i, "").trim();
+  return out || String(n || "Charger");
+}
+
+function statusInfo(s) {
+  const st = s.status;
+  // Kept short: the station name gets the room. Colour says free (green) or full (orange).
+  if (!st) return { cls: "nodata", text: `<span title="${s.country === "NL" ? "Status not found" : "No live data"}">–</span>` };
+  if (st.available == null) return { cls: "nodata", text: `<span title="Status unknown">?</span>` };
+  const frac = (a, t) => `${a}<span class="sl">/</span><span class="tot">${t}</span>`;
+  if (st.state === "free") return { cls: "free", text: `<strong title="${st.available} of ${st.total} free">${frac(st.available, st.total)}</strong>` };
+  if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Offline</strong>` };
+  return { cls: "full", text: `<strong title="All in use">${frac(0, st.total)}</strong>` };
+}
+
+// Road changes drawn on the timeline: the road you'll be on from a point between two chargers.
+function roadParts() {
+  const parts = state.route?.roads || [];
+  return parts.filter((r, i) => r.ref !== parts[i - 1]?.ref);
+}
+function roadNow() {
+  const k = state.user.km;
+  const parts = roadParts();
+  return parts.filter((r) => r.fromKm <= k + 0.5).at(-1) || parts[0] || null;
+}
+// The road you're on at a given km (before the first numbered road: that first road).
+function roadAt(km) {
+  const parts = roadParts();
+  return parts.filter((r) => r.fromKm <= km + 0.5).at(-1) || parts[0] || null;
+}
+// A badge between two points only when the road really differs there: a short stretch under
+// another number (an interchange) that ends back on the same road is no change.
+function roadChange(fromKm, toKm) {
+  const before = roadAt(Math.max(fromKm, state.user.km)), after = roadAt(toKm);
+  return after && after.ref !== before?.ref ? after : null;
+}
+const tlBadge = (r, where) => r ? `<span class="tl-road ${where}" title="From ${Math.round(r.fromKm - state.user.km)} km">${roadPartBadge(r)}</span>` : "";
+
+const BOLT = `<svg viewBox="0 0 12 18" aria-hidden="true"><path d="M7.5 0 0 10.5h4.5L3.5 18 12 6.5H7z" fill="currentColor"/></svg>`;
+// Next to the charger's dot: nothing when you pull straight in, a grey exit arrow when you
+// leave and rejoin at an exit, a red repeat arrow when it's a round trip (turn around, come back).
+function reachMark(reach, dir) {
+  if (reach === "route") return "";
+  if (reach === "exit") {
+    const r = dir !== "left";
+    const title = "Via an exit: leave and rejoin in the same direction";
+    return `<span class="sidemark r exit" title="${title}" role="img" aria-label="${title}"><svg viewBox="0 0 10 16" aria-hidden="true">
+      <path d="${r ? "M2 15 C2 9 4 6 8 3" : "M8 15 C8 9 6 6 2 3"}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      <polyline points="${r ? "4,2.5 8.5,2.5 8.5,7" : "6,2.5 1.5,2.5 1.5,7"}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+  }
+  const title = "Round trip: turn around and come back";
+  return `<span class="sidemark r round" title="${title}" role="img" aria-label="${title}"><svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2.5 7.5 A5.5 5.5 0 0 1 12.6 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <polyline points="12.9,1.2 12.9,4.9 9.3,4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M13.5 8.5 A5.5 5.5 0 0 1 3.4 11.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <polyline points="3.1,14.8 3.1,11.1 6.7,11.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+// (older) Next to the charger's dot on the line: a chevron for the side of the road it's on
+// (green = your side), or a little exit arrow when it's beyond an exit on that side.
+function sideMark(side, exitSide) {
+  const dir = side || exitSide;
+  if (!dir) return "";
+  const r = dir === "right";
+  const title = side ? (r ? "On your side of the road" : "On the other side of the road") : `Beyond an exit, on the ${dir}`;
+  const shape = side
+    ? `<polyline points="${r ? "2,2 8,8 2,14" : "8,2 2,8 8,14"}" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`
+    : `<path d="${r ? "M2 15 C2 9 4 6 8 3" : "M8 15 C8 9 6 6 2 3"}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+       <polyline points="${r ? "4,2.5 8.5,2.5 8.5,7" : "6,2.5 1.5,2.5 1.5,7"}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const cls = side ? (r ? "mine" : "other") : "exit";
+  return `<span class="sidemark ${r ? "r" : "l"} ${cls}" title="${title}" role="img" aria-label="${title}"><svg viewBox="0 0 10 16" aria-hidden="true">${shape}</svg></span>`;
+}
+
+// Country code to flag emoji ("DE" -> 🇩🇪).
+function flagOf(cc) {
+  return /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map((c) => 0x1f1a5 + c.charCodeAt(0))) : esc(cc);
+}
+// A small road seen from above with the charger as a dot on its left or right side.
+function sideIcon(side, title) {
+  const chevron = side === "right" ? "19,5 23,9 19,13" : "5,5 1,9 5,13";
+  return `<span class="side ${side}" title="${title}" role="img" aria-label="${title}"><svg viewBox="0 0 24 18" aria-hidden="true">
+    <rect x="7" y="0" width="10" height="18" rx="1.5" fill="currentColor" opacity=".4"/>
+    <line x1="12" y1="1" x2="12" y2="17" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 2.5" opacity=".7"/>
+    <polyline points="${chevron}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+// Off the motorway: the road with a ramp leaving towards the side the charger is on.
+function exitIcon(side) {
+  const r = side === "right";
+  const ramp = r ? "M17 16 C 21 13, 22 9, 22 4" : "M7 16 C 3 13, 2 9, 2 4";
+  const head = r ? "19.6,6.2 22,3 24,6.6" : "4.4,6.2 2,3 0,6.6";
+  const title = `Beyond an exit, on the ${side}`;
+  return `<span class="side exit" title="${title}" role="img" aria-label="${title}"><svg viewBox="0 0 24 18" aria-hidden="true">
+    <rect x="7" y="0" width="10" height="18" rx="1.5" fill="currentColor" opacity=".4"/>
+    <line x1="12" y1="1" x2="12" y2="17" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 2.5" opacity=".7"/>
+    <path d="${ramp}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    <polyline points="${head}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+// Compact duration for the second line: "3:20" (hours:minutes), or "48 min".
+function fmtClock(m) {
+  m = Math.max(0, Math.round(m));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+}
+
+// ---- brand logos: the brand's site icon via the Worker; a coloured letter if that fails
+const failedLogos = new Set();
+function initialChip(key) {
+  const b = BRAND[key] || BRAND.ionity;
+  return `<span class="logo ini" style="background:${b.color}" title="${esc(b.name)}" role="img" aria-label="${esc(b.name)}">${esc(b.name[0])}</span>`;
+}
+function logoHtml(key) {
+  const b = BRAND[key] || BRAND.ionity;
+  if (failedLogos.has(key)) return initialChip(key);
+  return `<img class="logo" src="${WORKER}/logo/${key}" alt="${esc(b.name)}" title="${esc(b.name)}" data-k="${key}" onerror="logoFail(this)">`;
+}
+window.logoFail = (img) => {
+  const key = img.dataset.k;
+  failedLogos.add(key);
+  img.outerHTML = initialChip(key);
+};
+
+// ---- sites: chargers of different brands at the same place (same side of the road) share a row
+const SITE_KM = 0.2;
+function distKm(a, b) {
+  const x = rad(b.lon - a.lon) * Math.cos(rad((a.lat + b.lat) / 2)), y = rad(b.lat - a.lat);
+  return Math.sqrt(x * x + y * y) * R;
+}
+function sitesOf(stations) {
+  const sites = [];
+  for (const s of stations) {
+    const side = sideOf(s) || s._exitSide || null;
+    const site = sites.slice(-3).find((x) =>
+      distKm(x.members[0], s) <= SITE_KM && (sideOf(x.members[0]) || x.members[0]._exitSide || null) === side);
+    if (site) site.members.push(s); else sites.push({ members: [s] });
+  }
+  for (const site of sites) {
+    // Ionity first (it's what the app is for), then by how close to the road.
+    site.members.sort((a, b) => (brandKey(b) === "ionity") - (brandKey(a) === "ionity") || (a.offRouteKm ?? 0) - (b.offRouteKm ?? 0));
+    site.primary = site.members[0];
+    site.alongKm = Math.min(...site.members.map((m) => m.alongKm));
+    site.alongMin = Math.min(...site.members.map((m) => m.alongMin));
+  }
+  return sites;
+}
+
+// Status of one charger as shown: free / full / offline / stale / nodata, plus its text.
+function shownStatus(s) {
+  let info = statusInfo(s);
+  const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
+  const stale = !s.statusAt || Date.now() - s.statusAt > STALE_MS;
+  // While updating: keep what's there, just grey. It changes only when the answer differs.
+  if (loading) info = { cls: "stale", text: s.status ? info.text : `<span title="Updating">↻</span>` };
+  else if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="Tap to check">↻</span>` };
+  return info;
+}
+const CLS_ORDER = ["free", "full", "offline", "stale", "nodata"];
+
+function stationRow(site, change, after) {
+  const s = site.primary, members = site.members;
+  const infos = members.map(shownStatus);
+  const cls = CLS_ORDER.find((c) => infos.some((i) => i.cls === c)) || "nodata";
+  const kw = Math.max(0, ...members.map((m) => m.status?.maxKw || m.maxKw || 0)) || null;
+  // The quickest one to reach decides the detour shown.
+  const withDetour = members.filter((m) => detourOf(m) != null);
+  const quick = withDetour.length ? withDetour.reduce((a, b) => (detourOf(b) < detourOf(a) ? b : a)) : s;
+  const dm = detourOf(quick);
+  const reach = reachOf(quick);
+  const { km, min } = wayTo(quick);
+  const detour = dm != null && dm >= SHOW_DETOUR_FROM
+    ? `<span class="dmin${reach === "roundtrip" ? " round" : ""}" title="${dm} minutes extra to get there and back">+${dm}</span>` : "";
+  const country = s.country ? `<span class="flag" title="${esc(s.country)}">${flagOf(s.country)}</span>` : "";
+  const side = reachMark(reach, sideOf(quick) || quick._exitSide);
+  const manyBrands = shownBrands().length > 1;
+  let avail, nameLogo = "";
+  if (members.length === 1) {
+    if (manyBrands) nameLogo = logoHtml(brandKey(s));
+    avail = `<div class="avail"><span class="stat">${infos[0].text}</span></div>`;
+  } else {
+    if (manyBrands) nameLogo = `<span class="logo spacer" aria-hidden="true"></span>`; // names line up with the rows that have a logo
+    const shown = members.slice(0, 3);
+    const more = members.length - shown.length;
+    avail = `<div class="avail multi${shown.length >= 3 ? " n3" : ""}">${shown.map((m, i) =>
+      `<span class="ml ${infos[i].cls}">${logoHtml(brandKey(m))}<span class="stat">${infos[i].text}</span></span>`).join("")}${
+      more ? `<span class="more">+${more} more</span>` : ""}</div>`;
+  }
+  const title = members.length > 1 ? `${members.map((m) => (BRAND[brandKey(m)] || {}).name).join(", ")}. Tap to update` : "Tap to update this charger";
+  return `<div class="row st ${cls}" data-ids="${esc(members.map((m) => m.id).join(" "))}" role="button" title="${esc(title)}">
+    ${tlBadge(change, "below")}${tlBadge(after, "above")}
+    <span class="marker" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
+    <div><div class="name">${nameLogo}<span class="label">${esc(shortName(s.name))}</span></div>
+      <div class="sub meta"><span class="when"><b>${fmtKm(km)}</b>&nbsp;km&ensp;${fmtClock(min)}</span>${s.road ? "" : country}${kw && cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
+    ${avail}
+  </div>`;
+}
+
+function renderBrandsBtn() {
+  const shown = shownBrands();
+  const logos = shown.slice(0, 3).map(logoHtml).join("");
+  setHtml($("brandsBtn"), `${logos}${shown.length > 3 ? `<span class="n">+${shown.length - 3}</span>` : ""}`);
+  $("brandsBtn").title = `Showing ${shown.map((k) => BRAND[k].name).join(", ")}`;
+}
+
+// Only touch what changed, so nothing blinks (logos are not reloaded, rows not rebuilt).
+const htmlOf = new WeakMap();
+function setHtml(el, html) {
+  if (htmlOf.get(el) === html) return;
+  el.innerHTML = html;
+  htmlOf.set(el, html);
+}
+function patchList(list, parts) {
+  const kids = [...list.children];
+  const same = kids.length === parts.length && kids.every((el, i) => el.dataset.k === parts[i].key);
+  if (!same) {
+    list.innerHTML = parts.map((p) => p.html).join("");
+    [...list.children].forEach((el, i) => { el.dataset.k = parts[i].key; htmlOf.set(el, parts[i].html); });
+    return;
+  }
+  parts.forEach((p, i) => {
+    const el = kids[i];
+    if (htmlOf.get(el) === p.html) return;
+    const t = document.createElement("template");
+    t.innerHTML = p.html;
+    const n = t.content.firstElementChild;
+    n.dataset.k = p.key;
+    htmlOf.set(n, p.html);
+    el.replaceWith(n);
+  });
+}
+
+function render() {
+  if (!state.route) return;
+  renderBrandsBtn();
+  const r = state.route, u = state.user;
+  const leftKm = r.distanceKm - u.km;
+  const leftMin = r.min[r.min.length - 1] - u.min;
+
+  setHtml($("destRow"), `<span class="marker" aria-hidden="true"></span>
+    <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
+      <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead(8).length ? `<div class="sub roads"><span>via&nbsp;</span>${roadsAhead(8).map(roadPartBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
+    <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`);
+  fitRoads($("destRow").querySelector(".sub.roads"));
+
+  const gps = u.at == null ? "Waiting for your location…"
+    : u.acc != null && u.acc > 100 ? `Location rough (±${Math.round(u.acc)} m)` : "On route";
+  setHtml($("youRow"), `<span class="marker" aria-hidden="true"></span>
+    <div><div class="name">You</div><div class="sub">${gps}${roadNow() ? `&ensp;${roadPartBadge(roadNow())}` : ""}</div></div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`);
+
+  // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
+  const all = upcomingShown();
+  const ahead = sitesOf(visibleAhead());
+  const checking = state.mySideOnly && all.some(detourPending);
+  const hiddenCount = sitesOf(all.filter((s) => !detourPending(s))).length - ahead.length;
+  const list = $("list");
+  const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+  const note = checking ? `<div class="empty">Checking detours${ahead.length ? " further ahead" : ""}…</div>` : "";
+  const parts = ahead.length
+    ? [...(note ? [{ key: "note", html: note }] : []), ...ahead.map((site, i) => ({
+        key: site.members.map((m) => m.id).join(" "),
+        html: stationRow(site,
+          roadChange(i ? ahead[i - 1].alongKm : -Infinity, site.alongKm),
+          i === ahead.length - 1 ? roadChange(site.alongKm, Infinity) : null).trim(),
+      })).reverse()]
+    : [{ key: "empty", html: checking ? note
+      : hiddenCount
+        ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
+        : `<div class="empty">No more chargers within 5 km of your route.</div>` }];
+  patchList(list, parts);
+  // Stay at the bottom, or keep your place if you've scrolled up.
+  list.scrollTop = state.stickToBottom ? list.scrollHeight : list.scrollHeight - list.clientHeight - fromBottom;
+  updateScrollUi();
+
+  const busy = statusBusy();
+  $("age").classList.toggle("busy", busy);
+  if (busy) {
+    setHtml($("age"), `<span class="spinner" aria-hidden="true"></span><span class="txt">Updating</span>`);
+  } else if (state.statusError) {
+    setHtml($("age"), "Couldn’t update status");
+  } else if (state.statusAt) {
+    const ago = Math.round((Date.now() - state.statusAt) / 60000);
+    setHtml($("age"), ago < 1 ? "Status<br>now" : `Status<br>${ago} min old`);
+  }
+}
+
+window.addEventListener("resize", render);
+setInterval(() => { if (!$("drive").hidden) render(); }, 30000);
+
+// ------------------------------------------------------------- saving between visits
+
+function save() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      to: state.to, vias: state.vias || [], route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
+      planBrands: state.planBrands, arrived: !!state.arrived,
+    }));
+  } catch (_) { /* storage full or blocked; the app still works */ }
+}
+
+function restore() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if (!saved?.route) return;
+    Object.assign(state, { to: saved.to, vias: saved.vias || (saved.via ? [saved.via] : []), route: saved.route, stations: saved.stations, statusAt: saved.statusAt,
+      planBrands: saved.planBrands || ["ionity"], arrived: !!saved.arrived });
+    $("sim").checked = !!saved.sim;
+    startDriving();
+    refreshStatus();
+  } catch (_) { localStorage.removeItem(STORE_KEY); }
+}
+
+// ------------------------------------------------------------- updates
+// A home-screen web app keeps serving its cached copy, and has no pull-to-refresh.
+// So the app asks GitHub for the latest file itself, and reloads when the version changed.
+// Your planned route is saved, so it comes back after the reload.
+async function checkForUpdate(manual) {
+  try {
+    const res = await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" });
+    const latest = (await res.text()).match(/APP_VERSION = "([^"]+)"/)?.[1];
+    if (latest && latest !== APP_VERSION) {
+      if (sessionStorage.getItem("evailability-reloaded-for") === latest) return; // don't loop on a stale cache
+      sessionStorage.setItem("evailability-reloaded-for", latest);
+      location.replace(location.pathname + "?v=" + encodeURIComponent(latest));
+    } else if (manual) {
+      $("checkUpdate").textContent = "Up to date";
+    }
+  } catch (_) {
+    if (manual) $("checkUpdate").textContent = "Couldn’t check, try again later";
+  }
+}
+$("version").textContent = APP_VERSION;
+$("checkUpdate").addEventListener("click", () => checkForUpdate(true));
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(false); });
+checkForUpdate(false);
+
+
+// ------------------------------------------------------------- introduction and help
+// Small pieces of the real screen, drawn with the same styles, for the intro and the manual.
+const demoDot = (cls) => `<span class="marker" aria-hidden="true"></span>`;
+function demoRow({ cls = "free", name, km, min, kw, stat, reach = "", detour = "", logo = "", note = "" }) {
+  return `<div class="row st ${cls}">
+    ${demoDot(cls)}${reach || detour ? `<span class="reach">${reach}${detour}</span>` : ""}
+    <div><div class="name">${logo}<span class="label">${name}</span></div>
+      <div class="sub meta"><span class="when"><b>${km}</b>&nbsp;km&ensp;${min}</span>${kw ? `<span class="kw">${BOLT}${kw}</span>` : ""}</div></div>
+    <div class="avail"><span class="stat">${stat}</span>${note ? `<div class="note">${note}</div>` : ""}</div>
+  </div>`;
+}
+const demoDest = `<div class="row dest"><span class="marker" aria-hidden="true"></span><div><div class="name">Munich</div><div class="sub">Arrive 17:40</div></div><div class="dist"><div class="km">612<small>km</small></div></div></div>`;
+const demoYou = `<div class="row you"><span class="marker" aria-hidden="true"></span><div><div class="name">You</div><div class="sub">On route</div></div><div class="age">Status<br>now</div></div>`;
+const exitMark = () => reachMark("exit", "right");
+const roundMark = () => reachMark("roundtrip", "left");
+
+const SLIDES = [
+  {
+    title: "Every fast charger ahead",
+    text: `<p>Your route as one road: <b>your destination at the top</b>, <b>you at the bottom</b>, and the chargers in between in the order you reach them.</p>
+      <p>The nearest one sits right above you, so you can decide at any moment: charge now, or drive on.</p>`,
+    demo: () => `${demoDest}${demoRow({ name: "Aachen-Land", km: 142, min: "1:31", kw: 350, stat: "<strong>4/6</strong>" })}
+      ${demoRow({ name: "Venlo", km: 38, min: "26 min", kw: 350, stat: "<strong>2/4</strong>" })}${demoYou}`,
+  },
+  {
+    title: "Free right now",
+    text: `<p><b>Green</b>: chargers free right now, out of the total. <b>Orange</b>: all in use. <b>Grey</b>: probably out of order.</p>
+      <p>Live in the Netherlands, Germany and Austria, updated every minute for the chargers on screen. Tap a charger to update it straight away.</p>`,
+    demo: () => `${demoRow({ name: "Free", km: 12, min: "8 min", kw: 350, stat: "<strong>3/6</strong>" })}
+      ${demoRow({ cls: "full", name: "All in use", km: 47, min: "31 min", kw: 300, stat: "<strong>0/4</strong>" })}
+      ${demoRow({ cls: "offline", name: "Out of order", km: 88, min: "58 min", stat: "<strong>Offline</strong>" })}`,
+  },
+  {
+    title: "Worth the detour?",
+    text: `<p>Chargers off the motorway show the <b>extra minutes</b> to get there and back, like <b>+7</b>.</p>
+      <p>A grey arrow means you leave at an exit and carry on in the same direction. A <b>red</b> arrow means a round trip: you have to turn around.</p>
+      <p><b>Easy to reach</b> at the top hides the round trips.</p>`,
+    demo: () => `${demoRow({ name: "Autohof Lohfelden", km: 23, min: "15 min", kw: 300, stat: "<strong>5/8</strong>", reach: exitMark(), detour: `<span class="dmin">+4</span>` })}
+      ${demoRow({ name: "Other side", km: 31, min: "20 min", kw: 350, stat: "<strong>2/6</strong>", reach: roundMark(), detour: `<span class="dmin round">+14</span>` })}`,
+  },
+  {
+    title: "Your brands",
+    text: `<p>Pick the brands you want before you plan: Ionity, Fastned, Tesla and more.</p>
+      <p>While driving, tap the <b>logos</b> at the top to hide or show brands straight away, or to add another brand to your route.</p>`,
+    top: () => `<div class="brands" style="margin:0 0 18px">${["ionity", "fastned", "tesla"].map((k, i) =>
+        `<span class="brand-btn" aria-pressed="${i < 2}">${logoHtml(k)}${esc(BRAND[k].name)}</span>`).join("")}</div>`,
+    demo: () => `${`<div class="row st free"><span class="marker" aria-hidden="true"></span><div><div class="name"><span class="label">Best</span></div>
+        <div class="sub meta"><span class="when"><b>18</b>&nbsp;km&ensp;12 min</span></div></div>
+        <div class="avail multi"><span class="ml free">${logoHtml("ionity")}<span class="stat"><strong>2/6</strong></span></span><span class="ml full">${logoHtml("fastned")}<span class="stat"><strong>0/4</strong></span></span></div></div>`}`,
+  },
+  {
+    title: "On the road",
+    text: `<p>The list follows your GPS. Leave the route and it <b>plans a new one</b> by itself.</p>
+      <p><b>Tap the destination</b> to compare other routes from where you are. Scroll up to look further ahead; the blue button brings you back.</p>
+      <p><b>Press and hold</b> a charger to navigate there in your navigation app. Help is always behind the <b>?</b> at the top.</p>`,
+    top: () => `<div class="banner ok" style="margin:0 0 14px"><span>New route via A3 › A5</span></div>`,
+    demo: () => `<div class="row dest"><span class="marker" aria-hidden="true"></span><div><div class="name">Munich</div><div class="sub">Arrive 17:40</div>
+      <div class="sub roads"><span>via&nbsp;</span>${roadBadge("A3", "DE")}<span class="sep">›</span>${roadBadge("A5", "DE")}<span class="sep">›</span>${roadBadge("A8", "DE")}</div></div>
+      <div class="dist"><div class="km">612<small>km</small></div><div class="min">6 h 10</div></div></div>${demoYou}`,
+  },
+];
+
+const INTRO_KEY = "evailability-intro-seen";
+function showIntro() {
+  $("slides").innerHTML = SLIDES.map((sl, i) =>
+    `<section class="slide" aria-label="${i + 1} of ${SLIDES.length}">${sl.top ? `<div>${sl.top()}</div>` : ""}${sl.demo() ? `<div class="demo">${sl.demo()}</div>` : ""}<div><h2>${sl.title}</h2>${sl.text}</div></section>`).join("");
+  $("dots").innerHTML = SLIDES.map(() => "<span></span>").join("");
+  $("intro").hidden = false;
+  $("slides").scrollLeft = 0;
+  updateIntro();
+}
+function introIndex() {
+  const el = $("slides");
+  return Math.round(el.scrollLeft / (el.clientWidth || 1));
+}
+function updateIntro() {
+  const i = introIndex();
+  [...$("dots").children].forEach((d, k) => d.classList.toggle("on", k === i));
+  $("introNext").textContent = i >= SLIDES.length - 1 ? "Get started" : "Next";
+}
+function closeIntro() {
+  $("intro").hidden = true;
+  try { localStorage.setItem(INTRO_KEY, "1"); } catch (_) {}
+}
+$("slides").addEventListener("scroll", () => requestAnimationFrame(updateIntro), { passive: true });
+$("introSkip").addEventListener("click", closeIntro);
+$("introNext").addEventListener("click", () => {
+  const i = introIndex();
+  if (i >= SLIDES.length - 1) return closeIntro();
+  const el = $("slides");
+  el.scrollTo({ left: (i + 1) * el.clientWidth, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+});
+
+function helpHtml() {
+  const dot = (c) => `<span class="dot" style="background:var(--${c})"></span>`;
+  return `
+  <p>Fast chargers along your route, with how many are free and how much of a detour each one is.</p>
+
+  <h3>Planning a route</h3>
+  <ul>
+    <li><b>To</b>: a town or address. <b>From</b> left empty means where you are now. The <b>×</b> empties a field.</li>
+    <li><b>+</b> next to To adds a <b>via</b> point (up to two), to choose your own way, for example via Luxembourg instead of Brussels. The × on a via removes it.</li>
+    <li>Without a via, you get <b>route options</b> to choose from, with their main roads and the cities on the way.</li>
+    <li><b>Chargers</b>: the brands to look for. Only fast chargers (50 kW and up) are shown. Live free counts in the Netherlands, Germany and Austria; elsewhere location and detour only.</li>
+    <li><b>Simulate the drive</b>: drives the route for you, sped up, to try the app at home.</li>
+  </ul>
+
+  <h3>The screen while driving</h3>
+  <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit, including the drive from the motorway to it), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
+  <p>Road numbers on the line show where you change roads, styled like that country's signs.</p>
+
+  <h3>Free or not</h3>
+  <div class="legend">
+    <div class="k">${dot("free")}</div><div class="v"><b class="kv" style="color:var(--free)">3/6</b>&ensp;3 of 6 chargers free right now.</div>
+    <div class="k">${dot("full")}</div><div class="v"><b class="kv" style="color:var(--full)">0/4</b>&ensp;All in use.</div>
+    <div class="k">${dot("offline")}</div><div class="v"><b>Offline</b>: reported out of order, or nothing has changed for hours.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. <b>…</b> updating. Grey numbers are more than 3 minutes old.</div>
+    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
+  </div>
+  <p>Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>
+  <p>A free charger now is no guarantee it is still free when you arrive.</p>
+
+  <h3>Detours</h3>
+  <div class="legend">
+    <div class="k"><span class="dmin">+7</span></div><div class="v">7 minutes extra to get there and back onto your route.</div>
+    <div class="k" style="color:var(--muted)">${reachMark("exit", "right")}</div><div class="v">Via an exit: leave and rejoin in the same direction.</div>
+    <div class="k">${reachMark("roundtrip", "left")}</div><div class="v">Round trip: you have to turn around and come back (detour in red).</div>
+  </div>
+  <p>A charger right next to the motorway on your side has no mark: you just pull in. Detours appear a moment after a charger comes on screen.</p>
+  <p><b>Easy to reach</b> hides the round trips and keeps chargers on your side plus those with a short detour.</p>
+
+  <h3>Brands</h3>
+  <p>Places with several brands share one row, with a line per brand on the right. Tap the <b>logos</b> at the top to hide or show the brands on your route straight away. Adding a brand that wasn't on the route plans the route again from where you are.</p>
+
+  <h3>On the way</h3>
+  <ul>
+    <li><b>Scroll up</b> to see chargers further ahead. The blue arrow brings you back to the next ones.</li>
+    <li><b>Tap the destination</b> to compare other routes from where you are.</li>
+    <li><b>Tap a charger</b> to update its status (at most once a minute). <b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to navigate there with Apple Maps, Google Maps, Waze or Flitsmeister, or to copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
+    <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
+    <li>The screen stays on while you drive. ${esc(awakeText())} If it still turns off, check that Low Power Mode is off.</li>
+    <li>When you arrive, there's a small celebration, and the screen may turn off again.</li>
+    <li><b>New route</b> takes you back to the start screen.</li>
+  </ul>
+
+  <div class="help-actions">
+    <button type="button" class="link" id="replayIntro">Show the introduction again</button>
+    <button type="button" class="link" id="splashToggle">${splashOff() ? "Show the splash screen at start" : "Don’t show the splash screen at start"}</button>
+  </div>`;
+}
+const SPLASH_OFF_KEY = "evailability-splash-off";
+function splashOff() { try { return !!localStorage.getItem(SPLASH_OFF_KEY); } catch (_) { return false; } }
+function openHelp() {
+  $("helpBody").innerHTML = helpHtml();
+  $("help").hidden = false;
+  $("help").scrollTop = 0;
+  $("replayIntro").addEventListener("click", () => { $("help").hidden = true; showIntro(); });
+  $("splashToggle").addEventListener("click", (e) => {
+    try { splashOff() ? localStorage.removeItem(SPLASH_OFF_KEY) : localStorage.setItem(SPLASH_OFF_KEY, "1"); } catch (_) {}
+    e.target.textContent = splashOff() ? "Show the splash screen at start" : "Don’t show the splash screen at start";
+  });
+}
+$("helpStart").addEventListener("click", openHelp);
+$("helpDrive").addEventListener("click", openHelp);
+$("helpClose").addEventListener("click", () => { $("help").hidden = true; });
+
+// While driving: show or hide the brands on this route straight away; adding new ones replans.
+let pendingAdd = new Set();
+function renderBrandSheet() {
+  const planned = state.planBrands || ["ionity"];
+  $("brandsShown").innerHTML = planned.map((k) =>
+    `<button type="button" class="brand-btn" data-k="${k}" aria-pressed="${!state.hidden.has(k)}">${logoHtml(k)}${esc(BRAND[k].name)}</button>`).join("");
+  const others = BRANDS.filter((b) => !planned.includes(b.key));
+  $("addWrap").hidden = !others.length;
+  $("brandsAdd").innerHTML = others.map((b) =>
+    `<button type="button" class="brand-btn add" data-k="${b.key}" aria-pressed="${pendingAdd.has(b.key)}">${logoHtml(b.key)}${esc(b.name)}</button>`).join("");
+  $("addBrandsBtn").hidden = !pendingAdd.size;
+  $("addBrandsBtn").textContent = pendingAdd.size === 1 ? "Add and replan" : `Add ${pendingAdd.size} and replan`;
+}
+function closeBrandSheet() {
+  pendingAdd.clear();
+  $("brandSheet").hidden = true;
+  $("brandSheetError").hidden = true;
+}
+$("brandsBtn").addEventListener("click", () => {
+  pendingAdd.clear();
+  renderBrandSheet();
+  $("brandSheet").hidden = false;
+});
+$("brandSheetClose").addEventListener("click", closeBrandSheet);
+$("brandsShown").addEventListener("click", (e) => {
+  const btn = e.target.closest(".brand-btn");
+  if (!btn) return;
+  const k = btn.dataset.k;
+  if (!state.hidden.has(k) && shownBrands().length === 1) return; // keep at least one
+  if (state.hidden.has(k)) state.hidden.delete(k); else state.hidden.add(k);
+  saveHidden();
+  renderBrandSheet();
+  state.stickToBottom = true;
+  render();
+  refreshWhenSettled(); // chargers that just appeared get their status and detour
+});
+$("brandsAdd").addEventListener("click", (e) => {
+  const btn = e.target.closest(".brand-btn");
+  if (!btn) return;
+  const k = btn.dataset.k;
+  if (pendingAdd.has(k)) pendingAdd.delete(k); else pendingAdd.add(k);
+  renderBrandSheet();
+});
+$("addBrandsBtn").addEventListener("click", async () => {
+  const btn = $("addBrandsBtn");
+  const add = [...pendingAdd];
+  const brands = BRANDS.map((b) => b.key).filter((k) => (state.planBrands || []).includes(k) || add.includes(k));
+  btn.disabled = true; btn.textContent = "Replanning…"; $("brandSheetError").hidden = true;
+  try {
+    const from = state.user.lonlat || await currentPosition();
+    await plan(from, brands);
+    for (const k of add) state.hidden.delete(k);
+    saveHidden();
+    // Next time you plan from the start screen, these are selected too.
+    state.brands = brands;
+    try { localStorage.setItem(BRANDS_KEY, JSON.stringify(brands)); } catch (_) {}
+    renderBrandPicker();
+    closeBrandSheet();
+    state.stickToBottom = true;
+    render();
+    setTimeout(() => refreshStatus(false), 300);
+  } catch (e) {
+    $("brandSheetError").textContent = `Couldn’t replan: ${e.message}`;
+    $("brandSheetError").hidden = false;
+  } finally {
+    btn.disabled = false; renderBrandSheet();
+  }
+});
+
+// Brand picker: at least one stays on. Applies to the next route you plan.
+function renderBrandPicker() {
+  $("brands").innerHTML = BRANDS.map((b) =>
+    `<button type="button" class="brand-btn" data-k="${b.key}" aria-pressed="${state.brands.includes(b.key)}">${logoHtml(b.key)}${esc(b.name)}</button>`).join("");
+}
+$("brands").addEventListener("click", (e) => {
+  const btn = e.target.closest(".brand-btn");
+  if (!btn) return;
+  const k = btn.dataset.k;
+  const on = state.brands.includes(k);
+  if (on && state.brands.length === 1) return;
+  state.brands = on ? state.brands.filter((x) => x !== k) : BRANDS.map((b) => b.key).filter((x) => x === k || state.brands.includes(x));
+  try { localStorage.setItem(BRANDS_KEY, JSON.stringify(state.brands)); } catch (_) {}
+  btn.setAttribute("aria-pressed", String(!on));
+});
+renderBrandPicker();
+
+wireSearch("to", "toResults", "to");
+wireSearch("from", "fromResults", "from");
+wireSearch("via1", "via1Results", "via1");
+wireSearch("via2", "via2Results", "via2");
+
+// + next to To: show the next via row (max two). On a via, the x removes the row.
+function syncAddVia() { $("addVia").disabled = !$("via1Row").hidden && !$("via2Row").hidden; }
+$("addVia").addEventListener("click", () => {
+  const n = $("via1Row").hidden ? 1 : 2;
+  $(`via${n}Row`).hidden = false;
+  syncAddVia();
+  $(`via${n}`).focus();
+});
+for (const n of [1, 2]) {
+  document.querySelector(`.clear-btn[data-for="via${n}"]`).addEventListener("click", (e) => {
+    e.stopImmediatePropagation();
+    // Removing via 1 while via 2 is in use: move 2 up.
+    if (n === 1 && !$("via2Row").hidden) {
+      $("via1").value = $("via2").value; state.via1 = state.via2;
+      $("via2").value = ""; state.via2 = null; $("via2Row").hidden = true;
+    } else {
+      $(`via${n}`).value = ""; state[`via${n}`] = null; $(`via${n}Row`).hidden = true;
+    }
+    $("via1Results").innerHTML = ""; $("via2Results").innerHTML = "";
+    syncAddVia(); updatePlanBtn();
+  }, true);
+}
+let booted = false;
+function boot() {
+  booted = true;
+  restore();
+  if (!localStorage.getItem(INTRO_KEY)) showIntro();
+}
+$("lockBtn").addEventListener("click", unlock);
+$("lockCode").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
+if (accessToken()) boot(); else showLock();
+</script>
+</body>
+</html>

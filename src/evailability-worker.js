@@ -1396,9 +1396,24 @@ async function fetchWithTimeout(url, init, ms) {
   try { return await fetch(url, { ...init, signal: ctl.signal }); } finally { clearTimeout(t); }
 }
 let overpassGood = 0;
+// "Shell 't Hol" -> "'t Hol"; "Fastned Keizershof" -> "Keizershof"; "Shell" or "Tango" -> nothing.
+const FUEL_BRANDS = /\b(shell( recharge)?|bp( pulse)?|esso|total(energies)?|tango|texaco|tinq|avia|q8|gulf|argos|tamoil|firezone|makro|lukoil|aral( pulse)?|omv|jet|agip|eni|fastned|ionity|tesla( supercharger)?|allego|enbw|electra|powerdot|izivia|ev[- ]?box|vattenfall|eneco|greenflux|laadpunt|charging station|snellaadstation|laadstation|tankstation|express|station)\b/gi;
+function placeFromStationName(name, tags = {}) {
+  let n = String(name).replace(FUEL_BRANDS, " ");
+  for (const k of ["brand", "operator", "network"]) if (tags[k]) n = n.replace(new RegExp(tags[k].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), " ");
+  n = n.replace(AREA_RE, " ").replace(/\b[AN]\d{1,3}\b/g, " ").replace(/[()]/g, " ").replace(/^[\s:–\-,]+|[\s:–\-,]+$/g, "").replace(/\s+/g, " ").trim();
+  if (n.length < 3 || !/[a-z]{2}/i.test(n) || /\d{2,}/.test(n)) return null;
+  return n;
+}
 async function serviceAreasNear(points) {
-  const parts = points.map((x) => `nwr[highway~"^(services|rest_area)$"][name](around:800,${x.lat.toFixed(5)},${x.lon.toFixed(5)});`).join("");
-  const q = `[out:json][timeout:10];(${parts});out geom 40;`;
+  // Service areas (often not mapped or not named in the Netherlands), plus the fuel and charging
+  // stations right next to the charger, which usually carry the place in their name
+  // ("Shell 't Hol", "Fastned Keizershof", "Tango Hoezaar").
+  const parts = points.map((x) => {
+    const at = `${x.lat.toFixed(5)},${x.lon.toFixed(5)}`;
+    return `nwr[highway~"^(services|rest_area)$"][name](around:800,${at});nwr[amenity~"^(fuel|charging_station)$"][name](around:200,${at});`;
+  }).join("");
+  const q = `[out:json][timeout:12];(${parts});out geom 80;`;
   let data = null, lastErr = null;
   // Start with the mirror that answered last time (this copy of the Worker remembers it).
   const order = [...OVERPASS_MIRRORS.slice(overpassGood), ...OVERPASS_MIRRORS.slice(0, overpassGood)];
@@ -1421,17 +1436,22 @@ async function serviceAreasNear(points) {
     }
   }
   if (!data) throw lastErr || new Error("Overpass unavailable");
-  // Per charger: the area whose outline is nearest (0 when inside it), within 800 m.
+  // Per charger: the service area whose outline is nearest (0 when inside it), within 800 m;
+  // without one, the nearest fuel or charging station within 250 m whose name says more than
+  // its brand ("Shell 't Hol" -> "'t Hol").
   const out = {};
   for (const x of points) {
-    let best = null, bestD = 0.8;
+    let area = null, areaD = 0.8, station = null, stationD = 0.2; // 200 m: the station on your side, not across the road
     for (const el of data.elements || []) {
       const name = el.tags?.name;
       if (!name) continue;
       const d = distanceToElement(el, x.lat, x.lon);
-      if (d <= bestD) { bestD = d; best = name; }
+      if (el.tags.highway) { if (d <= areaD) { areaD = d; area = name; } continue; }
+      const place = placeFromStationName(name, el.tags);
+      if (place && d <= stationD) { stationD = d; station = place; }
     }
-    out[x.id] = best ? best.replace(AREA_RE, "").replace(/^[\s:–-]+/, "").trim() || best : null;
+    const a = area ? area.replace(AREA_RE, "").replace(/^[\s:–-]+/, "").trim() || area : null;
+    out[x.id] = a ? { name: a, src: "service area" } : station ? { name: station, src: "station name" } : null;
   }
   return out;
 }
@@ -1465,7 +1485,7 @@ function distanceToElement(el, lat, lon) {
 
 // A place name for chargers named only by their brand: the service area (OpenStreetMap), else
 // the town (geocoder). Kept 30 days per spot (about 100 m) for everyone.
-const placeKey = (x) => `pl5:${x.lat.toFixed(3)},${x.lon.toFixed(3)}`;
+const placeKey = (x) => `pl6:${x.lat.toFixed(3)},${x.lon.toFixed(3)}`;
 async function handlePlaces(request, env) {
   const body = await request.json().catch(() => ({}));
   const pts = (Array.isArray(body.points) ? body.points : [])
@@ -1485,7 +1505,7 @@ async function handlePlaces(request, env) {
     const towns = await Promise.all(misses.map((x) => placeName(env, [x.lon, x.lat]).catch(() => null)));
     for (let i = 0; i < misses.length; i++) {
       const x = misses[i];
-      const res = { area: areas[x.id] || null, town: towns[i] || null, v: 5, ok };
+      const res = { area: areas[x.id]?.name || null, src: areas[x.id]?.src || null, town: towns[i] || null, v: 6, ok };
       places[x.id] = res;
       memoSet(placeKey(x), res, (ok ? 24 : 0.25) * 3600 * 1000);
       // Not kept when the service-area lookup failed: tried again later.

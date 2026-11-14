@@ -282,6 +282,7 @@ The app, files, texts and device storage are renamed. The Worker still runs as `
 - App `.54`: names are looked up only for rows that are shown: the rows on screen plus the next 6 further ahead in the list (`namesToFetch()`), never for hidden chargers (brand off, too slow, not easy to reach). No more whole-route name runs. "Easy to reach" is on by default (until switched off on a device).
 - App `.55`: default minimum power is Extra fast (150 kW+) on devices that never chose one (`DEFAULT_KW`); a saved choice is kept.
 - App `.56`: the fixed road badge above the down button no longer follows rows. Road badges on the line slide over it (the overlapped part is clipped from the fixed one with `clip-path`), and when one sits exactly on it, they swap: the fixed badge shows that road and the moving one is hidden below that point (`updateStickyRoad`, badges carry `data-km`). Check on the phone that it feels smooth both ways.
+- App `.58`: press-and-hold opens the charger on the map in Apple Maps, Google Maps or Waze (`NAV_MODE = "show"`) instead of starting a route, so the owner can check the spot first and tap Route/Go there. Set `NAV_MODE = "route"` to go back to routing straight away.
 - Smoothness of the list after the keyed `patchList` and scroll anchoring.
 - "Overpass" vs "Overpass errors" on the usage page.
 

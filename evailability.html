@@ -844,7 +844,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.57";
+const APP_VERSION = "2026-11-14.58";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1933,12 +1933,21 @@ $("list").addEventListener("contextmenu", (e) => {
 // ---- navigation apps
 const NAV_KEY = "evailability-nav";
 const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+// "show": the app opens with the charger on the map, and you tap Route (or Go) there yourself, so
+// you can check the spot first. "route": the app starts the route straight away.
+const NAV_MODE = "show";
+const show = NAV_MODE === "show";
 const NAV_APPS = [
-  { key: "apple", name: "Apple Maps", color: "#1f8bf4", ico: isIOS ? "\uF8FF" : "A", url: (p) => `https://maps.apple.com/?daddr=${p.lat},${p.lon}&dirflg=d` },
+  { key: "apple", name: "Apple Maps", color: "#1f8bf4", ico: isIOS ? "\uF8FF" : "A",
+    url: (p) => show ? `https://maps.apple.com/?ll=${p.lat},${p.lon}&q=${encodeURIComponent(p.name)}&z=16`
+      : `https://maps.apple.com/?daddr=${p.lat},${p.lon}&dirflg=d` },
   { key: "google", name: "Google Maps", color: "#34a853", ico: "G",
-    url: (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=driving`,
-    app: (p) => `comgooglemaps://?daddr=${p.lat},${p.lon}&directionsmode=driving` },
-  { key: "waze", name: "Waze", color: "#33ccff", ico: "W", url: (p) => `https://waze.com/ul?ll=${p.lat},${p.lon}&navigate=yes` },
+    url: (p) => show ? `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`
+      : `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}&travelmode=driving`,
+    app: (p) => show ? `comgooglemaps://?q=${p.lat},${p.lon}&center=${p.lat},${p.lon}&zoom=16`
+      : `comgooglemaps://?daddr=${p.lat},${p.lon}&directionsmode=driving` },
+  { key: "waze", name: "Waze", color: "#33ccff", ico: "W",
+    url: (p) => `https://waze.com/ul?ll=${p.lat},${p.lon}${show ? "&z=16" : "&navigate=yes"}` },
   // Flitsmeister has no public link to start navigation on iPhone: copy the coordinates to paste there.
   // On Android, a geo: link offers it (and any other navigation app).
   { key: "flitsmeister", name: "Flitsmeister", color: "#ff7a00", ico: "F",
@@ -2758,7 +2767,7 @@ const SLIDES = [
     title: "On the road",
     text: `<p>The list follows your GPS. Leave the route and it <b>plans a new one</b> by itself.</p>
       <p><b>Tap the destination</b> to compare other routes from where you are. Scroll up to look further ahead; the blue button brings you back.</p>
-      <p><b>Press and hold</b> a charger to navigate there in your navigation app. Help is always behind the <b>?</b> at the top.</p>`,
+      <p><b>Press and hold</b> a charger to see it in your map or navigation app, where you can start the route. Help is always behind the <b>?</b> at the top.</p>`,
     top: () => `<div class="banner ok" style="margin:0 0 14px"><span>You’ve left the route. New route planned.</span></div>`,
     demo: () => `<div class="row dest"><span class="marker" aria-hidden="true"></span><div><div class="name">Munich</div><div class="sub">Arrive 17:40</div>
       <div class="sub roads"><span>via&nbsp;</span>${roadBadge("A3", "DE")}<span class="sep">›</span>${roadBadge("A5", "DE")}<span class="sep">›</span>${roadBadge("A8", "DE")}</div></div>
@@ -2847,7 +2856,7 @@ function helpHtml() {
   <ul>
     <li><b>Scroll up</b> to see chargers further ahead. The blue arrow brings you back to the next ones.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
-    <li><b>Tap a charger</b> to update its status (at most once a minute). <b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to navigate there with Apple Maps, Google Maps, Waze or Flitsmeister, or to copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
+    <li><b>Tap a charger</b> to update its status (at most once a minute). <b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps or Waze (tap Route or Go there to drive to it) or Flitsmeister, or to copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${esc(awakeText())} If it still turns off, check that Low Power Mode is off.</li>
     <li>When you arrive, there's a small celebration, and the screen may turn off again.</li>

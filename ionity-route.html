@@ -152,6 +152,7 @@
     column-gap: 14px; height: var(--row-h); padding: 8px 0;
   }
   .row > div { min-width: 0; }
+  .row > div:not(.dist):first-of-type { margin-left: 12px; } /* room for the reach symbol next to the dot */
   .marker {
     justify-self: center; width: 30px; height: 30px; border-radius: 50%;
     border: 5px solid var(--asphalt); background: var(--offline); z-index: 1;
@@ -167,7 +168,14 @@
   .country { font-size: .85rem; font-weight: 600; color: var(--muted); }
   .dmin { margin-left: 6px; color: var(--full); font-weight: 800; }
   .dmin.round { color: var(--danger); }
-  .sidemark.round { width: 18px; height: 18px; left: 40px; color: var(--danger); }
+  /* Reachability symbol with the extra minutes underneath, just right of the dot */
+  .reach {
+    position: absolute; left: 40px; top: 50%; transform: translateY(-50%); z-index: 2;
+    display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 20px;
+  }
+  .reach .sidemark { position: static; transform: none; }
+  .reach .dmin { margin: 0; font-size: .82rem; line-height: 1; }
+  .sidemark.round { width: 18px; height: 18px; color: var(--danger); }
   .detour {
     font-size: 1.05rem; font-weight: 800; padding: 1px 8px 0; border-radius: 6px;
     border: 2px solid var(--full); color: var(--full);
@@ -333,7 +341,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.15";
+const APP_VERSION = "2026-11-14.16";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -1026,10 +1034,10 @@ function stationRow(s, change, after) {
   const side = reachMark(reach, sd || s._exitSide);
   return `<div class="row st ${info.cls}" data-id="${esc(s.id)}" role="button" title="Tap to update this charger">
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
-    <span class="marker" aria-hidden="true"></span>${side}
+    <span class="marker" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
     <div><div class="name"><span class="label">${esc(shortName(s.name))}</span><span class="stat">${info.text}</span></div>
       <div class="sub meta">${country}${kw && info.cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
-    <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}${detour}</div></div>
+    <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}</div></div>
   </div>`;
 }
 

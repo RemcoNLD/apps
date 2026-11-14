@@ -773,10 +773,16 @@ function roadNow() {
   const parts = roadParts();
   return parts.filter((r) => r.fromKm <= k + 0.5).at(-1) || parts[0] || null;
 }
-// The last road that starts after fromKm and at or before toKm (only what's ahead of you).
+// The road you're on at a given km (before the first numbered road: that first road).
+function roadAt(km) {
+  const parts = roadParts();
+  return parts.filter((r) => r.fromKm <= km + 0.5).at(-1) || parts[0] || null;
+}
+// A badge between two points only when the road really differs there: a short stretch under
+// another number (an interchange) that ends back on the same road is no change.
 function roadChange(fromKm, toKm) {
-  const k = state.user.km;
-  return roadParts().filter((r) => r.fromKm > Math.max(fromKm, k + 0.5) && r.fromKm <= toKm).at(-1) || null;
+  const before = roadAt(Math.max(fromKm, state.user.km)), after = roadAt(toKm);
+  return after && after.ref !== before?.ref ? after : null;
 }
 const tlBadge = (r, where) => r ? `<span class="tl-road ${where}" title="From ${Math.round(r.fromKm - state.user.km)} km">${roadPartBadge(r)}</span>` : "";
 

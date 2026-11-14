@@ -206,6 +206,12 @@
   }
   .rb.e { background: #0f7a3f; }
   .rb.n { background: #f2c200; color: #1b1b1b; box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.35); }
+  /* Road badge sitting on the timeline where the road changes */
+  .tl-road { position: absolute; left: 24px; transform: translate(-50%, 50%); z-index: 2; line-height: 1; }
+  .tl-road.below { bottom: 0; }
+  .tl-road.above { top: 0; transform: translate(-50%, -50%); }
+  .tl-road { border-radius: 6px; box-shadow: 0 0 0 3px var(--asphalt); }
+  .tl-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
   .rb.blue { background: #1d4fa3; color: #fff; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.7); }
   .sub.roads .rb { font-size: .9rem; margin-right: 2px; }
   .sub.roads .sep { color: var(--muted); margin: 0 3px; }
@@ -683,7 +689,23 @@ function statusInfo(s) {
   return { cls: "full", text: `<strong title="All in use">0/${st.total}</strong>` };
 }
 
-function stationRow(s) {
+// Road changes drawn on the timeline: the road you'll be on from a point between two chargers.
+function roadParts() {
+  const parts = state.route?.roads || [];
+  return parts.filter((r, i) => r.ref !== parts[i - 1]?.ref);
+}
+function roadNow() {
+  const k = state.user.km;
+  return roadParts().filter((r) => r.fromKm <= k + 0.5).at(-1) || null;
+}
+// The last road that starts after fromKm and at or before toKm (only what's ahead of you).
+function roadChange(fromKm, toKm) {
+  const k = state.user.km;
+  return roadParts().filter((r) => r.fromKm > Math.max(fromKm, k + 0.5) && r.fromKm <= toKm).at(-1) || null;
+}
+const tlBadge = (r, where) => r ? `<span class="tl-road ${where}" title="From ${Math.round(r.fromKm - state.user.km)} km">${roadPartBadge(r)}</span>` : "";
+
+function stationRow(s, change, after) {
   let info = statusInfo(s);
   const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
   const stale = !state.autoIds?.has(s.id) && (!s.statusAt || Date.now() - s.statusAt > STALE_MS);
@@ -701,6 +723,7 @@ function stationRow(s) {
   const side = sd === "right" ? `<span class="side right" title="On your side of the road">Right</span>`
     : sd === "left" ? `<span class="side left" title="On the other side of the road">Left</span>` : "";
   return `<div class="row st ${info.cls}" data-id="${esc(s.id)}" role="button" title="Tap to update this charger">
+    ${tlBadge(change, "below")}${tlBadge(after, "above")}
     <span class="marker" aria-hidden="true"></span>
     <div><div class="name"><span class="label">${esc(shortName(s.name))}</span><span class="stat">${info.text}</span></div>
       <div class="sub meta">${side}${detour}${country}${kw && info.cls !== "offline" ? `<span>${kw} kW</span>` : ""}</div></div>
@@ -722,7 +745,7 @@ function render() {
   const gps = u.at == null ? "Waiting for your location…"
     : u.acc != null && u.acc > 100 ? `Location rough (±${Math.round(u.acc)} m)` : "On route";
   $("youRow").innerHTML = `<span class="marker" aria-hidden="true"></span>
-    <div><div class="name">You</div><div class="sub">${gps}</div></div><div></div>`;
+    <div><div class="name">You</div><div class="sub">${gps}${roadNow() ? `&ensp;${roadPartBadge(roadNow())}` : ""}</div></div><div></div>`;
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcoming();
@@ -732,7 +755,9 @@ function render() {
   const list = $("list");
   const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
   list.innerHTML = ahead.length
-    ? ahead.slice().reverse().map(stationRow).join("")
+    ? ahead.map((s, i) => stationRow(s,
+        roadChange(i ? ahead[i - 1].alongKm : -Infinity, s.alongKm),
+        i === ahead.length - 1 ? roadChange(s.alongKm, Infinity) : null)).reverse().join("")
     : hiddenCount
       ? `<div class="empty">No more Ionity chargers on your side. ${hiddenCount} on the other side or further off are hidden.</div>`
       : `<div class="empty">No more Ionity chargers within 5 km of your route.</div>`;

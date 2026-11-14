@@ -841,7 +841,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.53";
+const APP_VERSION = "2026-11-14.54";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -922,7 +922,7 @@ const state = {
   user: { km: 0, min: 0, offKm: 0, acc: null, at: null },
   offCount: 0,
   stickToBottom: true,
-  mySideOnly: localStorage.getItem(MY_SIDE_KEY) === "1",
+  mySideOnly: localStorage.getItem(MY_SIDE_KEY) !== "0", // on unless switched off on this device
   brands: loadBrands(),
   hidden: loadHidden(),   // brands on this route you've switched off for now (no replanning)           // follow the nearest chargers unless you've scrolled up
   watchId: null, simTimer: null, statusTimer: null, wakeLock: null,
@@ -1123,7 +1123,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.offCount = 0;
   save();
   addNdwSites(data.ndwTiles || [], state.planBrands); // in the background: the route shows straight away
-  fetchPlaces(state.stations); // names for chargers called only by their brand, nearest first
+  // Names follow once rows are on screen (refreshStatus after the first render).
 }
 
 // Second source of chargers in the Netherlands (NDW), for sites Open Charge Map doesn't have
@@ -1156,7 +1156,7 @@ async function addNdwSites(tiles, brands) {
       });
       added++;
     }
-    if (added) { state.stations.sort((a, b) => a.alongKm - b.alongKm); save(); render(); refreshWhenSettled(); fetchPlaces(state.stations); }
+    if (added) { state.stations.sort((a, b) => a.alongKm - b.alongKm); save(); render(); refreshWhenSettled(); }
   }
 }
 
@@ -1708,7 +1708,7 @@ async function refreshStatus(force = true) {
   const busy = (s) => s.loadingAt && now - s.loadingAt < 20000;
   const inView = stationsInView();
   fetchDetours(detourCandidates(inView));
-  fetchPlaces([...inView, ...upcomingShown().slice(0, 12)]);
+  fetchPlaces(); // rows on screen and the next few above them
   const todo = inView.filter((s) => !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
   if (!todo.length) return;
   for (const s of todo) s.loadingAt = now;
@@ -2274,28 +2274,29 @@ function placeOf(s) {
 // not dropped: it runs again for the whole route once the running one is done.
 let placesBusy = 0, placesAgain = false;
 const PLACES_TIMEOUT_MS = 25000;
-// Names for the whole route are looked up only 100 km ahead (further ones as you get closer, or
-// when their row is on screen): every lookup costs geocoder quota (shared with the address search)
-// and an OpenStreetMap query, and a 500 km route can have 300 brand-only chargers.
-const PLACES_AHEAD_KM = 100;
-let placesWait = null;
-async function fetchPlaces(stations) {
-  // The detours decide which rows are shown, so they go first.
-  if (detourBusy && (stations === state.stations || stations._all)) { clearTimeout(placesWait); placesWait = setTimeout(() => fetchPlaces(state.stations), 3000); return; }
+// Names are looked up only for rows you see or are about to see: the rows on screen, plus the
+// next few further ahead in the list (the direction you scroll), so they're there when you get to
+// them. Chargers that are hidden (brand off, too slow, not easy to reach) are never looked up.
+const PLACES_PRELOAD = 6;
+function namesToFetch() {
+  if (!state.route) return [];
+  const inView = stationsInView();
+  const furthest = Math.max(state.user.km, ...inView.map((s) => s.alongKm));
+  const next = visibleAhead().filter((s) => s.alongKm > furthest).slice(0, PLACES_PRELOAD);
+  return [...inView, ...next];
+}
+async function fetchPlaces(stations = namesToFetch()) {
   if (placesBusy && Date.now() - placesBusy < PLACES_TIMEOUT_MS + 5000) { placesAgain = true; return; }
   // v2: with the service-area name from OpenStreetMap (older answers had the town only).
   // An answer whose service-area lookup failed (ok: false) is asked again after 10 minutes.
   const now = Date.now();
   const stale = (s) => placeOf(s)?.v !== PLACE_V || (s.place.ok === false && now - (s.placeAt || 0) > 10 * 60 * 1000);
   const needs = (s) => { siteName(s); return s._needsPlace; }; // works it out also for rows not drawn yet
-  const whole = stations === state.stations || stations._all;
-  const ahead = (s) => !(s.alongKm < (state.user?.km || 0) - 1) // not for chargers already passed
-    && (!whole || s.alongKm <= (state.user?.km || 0) + PLACES_AHEAD_KM);
+  const ahead = (s) => !(s.alongKm < (state.user?.km || 0) - 1); // not for chargers already passed
   const todo = stations.filter((s) => ahead(s) && needs(s) && stale(s) && !(s.placeTriedAt && now - s.placeTriedAt < 10 * 60 * 1000)).slice(0, 8);
   if (!todo.length) return;
   placesBusy = now; placesAgain = false;
   for (const s of todo) s.placeTriedAt = now;
-  let more = whole; // right after planning: carry on, 8 per call
   try {
     const { places } = await api("/places", { points: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon })) }, PLACES_TIMEOUT_MS);
     for (const s of todo) if (places?.[s.id]) {
@@ -2309,8 +2310,8 @@ async function fetchPlaces(stations) {
     for (const s of todo) { s.placeTriedAt = now - 9 * 60 * 1000; s.placeFailAt = now; }
   }
   finally { if (placesBusy === now) placesBusy = 0; }
-  if (placesAgain) { placesAgain = false; more = true; stations = state.stations; }
-  if (more) setTimeout(() => fetchPlaces(stations), 300);
+  // Asked for while this one ran, or more rows on screen than one call takes (8): carry on.
+  if (placesAgain || todo.length === 8) { placesAgain = false; setTimeout(() => fetchPlaces(), 300); }
   updateNavSrc();
 }
 
@@ -2657,7 +2658,6 @@ function restore() {
     $("sim").checked = !!saved.sim;
     startDriving();
     refreshStatus();
-    fetchPlaces(state.stations); // names still missing after a reload, nearest first
   } catch (_) { localStorage.removeItem(STORE_KEY); }
 }
 

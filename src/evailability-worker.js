@@ -21,6 +21,7 @@
 //   GET  /debug/de?lat=&lon=    raw German answer (MobiData BW OCPDB, AFIR data) plus what we parse from it
 //   GET  /debug/fr-range[?part=&parts=&ids=]  France: does the national live file allow partial downloads (Range)?
 //                               With part: fetches that piece only and looks for ids in it (CPU test)
+//                               With whole=1: reads the whole file as a stream (CPU test for the free plan)
 //
 // Secrets (Cloudflare > Worker > Settings > Variables and Secrets)
 //   ORS_API_KEY   OpenRouteService / HeiGIT key
@@ -1012,6 +1013,38 @@ async function frPiece(total, part, parts, ids, url = FR_DYNAMIC_URL) {
   return { part, parts, bytes: { from, to, start, end }, lines, cut, rows };
 }
 
+// The whole live file, read as a stream (no Range needed): rows for the wanted ids, newest horodatage wins.
+async function frWhole(ids, url = FR_DYNAMIC_URL) {
+  countCall("PAN FR");
+  const res = await fetch(url);
+  if (!res.ok || !res.body) throw new HttpError(502, `French live file: HTTP ${res.status}`);
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  const rows = {};
+  let rest = "", lines = 0, bytes = 0;
+  const take = (line) => {
+    const comma = line.indexOf(",");
+    if (comma <= 0) return;
+    const id = line.slice(0, comma);
+    if (!ids.has(id)) return;
+    const [etat, occupation, horodatage] = line.slice(comma + 1).replace(/\r$/, "").split(",");
+    const prev = rows[id];
+    if (!prev || String(horodatage) > String(prev.horodatage)) rows[id] = { etat, occupation, horodatage };
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.length;
+    const text = rest + dec.decode(value, { stream: true });
+    let pos = 0, nl;
+    while ((nl = text.indexOf("\n", pos)) >= 0) { take(text.slice(pos, nl)); lines++; pos = nl + 1; }
+    rest = text.slice(pos);
+  }
+  rest += dec.decode();
+  if (rest) { take(rest); lines++; }
+  return { bytes, lines, rows };
+}
+
 async function liveStatus(station, env) {
   if (!LIVE_COUNTRIES.has(station.country)) return null;
   const brand = brandOf(station.brand);
@@ -1996,14 +2029,20 @@ async function route(request, env) {
     // /debug/fr-range                      → does Range work, how big is the file
     // /debug/fr-range?part=3&parts=10      → read piece 3 of 10 only (check this call's CPU time in the Cloudflare logs)
     // &ids=FRIOYE413102,FRIOYE413103       → ids to look for (default: Ionity Village Catalan Est)
+    const ids = new Set((url.searchParams.get("ids") ||
+      "FRIOYE413102,FRIOYE413103,FRIOYE413104,FRIOYE413105,FRIOYE413152,FRIOYE413153,FRIOYE413202,FRIOYE413203,FRIOYE413204,FRIOYE413205,FRIOYE413252,FRIOYE413253")
+      .split(",").map((s) => s.trim()).filter(Boolean));
+    if (url.searchParams.get("whole") === "1") {
+      // The whole file in one call: its CPU time in the Cloudflare logs says whether the free plan can carry it.
+      const t0 = Date.now();
+      const whole = await frWhole(ids);
+      return json(request, { wallMs: Date.now() - t0, ...whole });
+    }
     const probe = await frProbe();
     const partParam = url.searchParams.get("part");
     if (partParam == null || !probe.rangeWorks) return json(request, { probe });
     const parts = Math.min(50, Math.max(1, Number(url.searchParams.get("parts")) || 10));
     const part = Math.min(parts - 1, Math.max(0, Number(partParam) || 0));
-    const ids = new Set((url.searchParams.get("ids") ||
-      "FRIOYE413102,FRIOYE413103,FRIOYE413104,FRIOYE413105,FRIOYE413152,FRIOYE413153,FRIOYE413202,FRIOYE413203,FRIOYE413204,FRIOYE413205,FRIOYE413252,FRIOYE413253")
-      .split(",").map((s) => s.trim()).filter(Boolean));
     const t0 = Date.now();
     const piece = await frPiece(probe.total, part, parts, ids);
     return json(request, { probe: { total: probe.total, lastModified: probe.headers["last-modified"] }, wallMs: Date.now() - t0, ...piece });

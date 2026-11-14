@@ -1,5 +1,5 @@
 # Cloudflare Worker for EVailability (evailability.html). Still named "ionity" until its secrets are
-# copied to a Worker named "evailability"; then change name below and WORKER in the app and admin page. (Worker deploys run on wrangler.toml changes until the workflow path is updated; last: /debug/fr-range, France Range test.)
+# copied to a Worker named "evailability"; then change name below and WORKER in the app and admin page. (Worker deploys run on wrangler.toml changes until the workflow path is updated; last: /debug/fr-range whole=1, France whole-file CPU test.)
 # Deployed by .github/workflows/deploy-worker.yml. Secrets (API keys) live in Cloudflare only.
 name = "ionity"
 main = "src/evailability-worker.js"

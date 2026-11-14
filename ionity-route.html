@@ -176,7 +176,14 @@
   .side.left { color: var(--muted); }
   .flag { font-size: 1.15rem; line-height: 1; }
   .kw { display: inline-flex; align-items: center; gap: 3px; }
-  .kw svg { width: 10px; height: 15px; }
+  .kw svg { width: 10px; height: 15px; color: #f2c200; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .kw svg { color: #d9a400; } }
+  .sidemark { position: absolute; top: 50%; transform: translateY(-50%); width: 10px; height: 16px; z-index: 2; line-height: 0; }
+  .sidemark svg { width: 100%; height: 100%; }
+  .sidemark.r { left: 42px; }
+  .sidemark.l { left: -1px; }
+  .sidemark.mine { color: var(--free); }
+  .sidemark.other, .sidemark.exit { color: var(--muted); }
   .sub { margin-top: 4px; font-size: 1.1rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sub strong { font-weight: 800; }
   .dist { text-align: right; line-height: 1.05; }
@@ -324,7 +331,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.13";
+const APP_VERSION = "2026-11-14.14";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -583,8 +590,9 @@ function pointAtKm(k) {
 // Which side of the road a station is on, seen in your driving direction.
 // Only for stations close to the route (service areas); further away it's a detour either way.
 const SIDE_WITHIN_KM = 0.5;
+const SIDE_V = 2;
 function sideOf(s) {
-  if (s._side !== undefined) return s._side;
+  if (s._sideV === SIDE_V) return s._side; // older saved routes recalculate
   const { coords } = state.route;
   const ref = s.lat, p = xy([s.lon, s.lat], ref);
   let best = { d: Infinity, i: 0 };
@@ -593,12 +601,16 @@ function sideOf(s) {
     if (r.d < best.d) best = { d: r.d, i };
   }
   let side = null;
-  if (best.d <= SIDE_WITHIN_KM && best.d > 0.015) { // right on the line: can't tell
+  s._exitSide = null;
+  if (best.d > 0.015) { // right on the line: can't tell
     const a = xy(coords[best.i], ref), b = xy(coords[best.i + 1], ref);
     const cross = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
-    side = cross < 0 ? "right" : "left";
+    const which = cross < 0 ? "right" : "left";
+    // Further away it's beyond an exit: "left/right of the motorway" doesn't apply, the exit does.
+    if (best.d <= SIDE_WITHIN_KM) side = which; else s._exitSide = which;
   }
   s._side = side;
+  s._sideV = SIDE_V;
   return side;
 }
 
@@ -920,6 +932,21 @@ function roadChange(fromKm, toKm) {
 const tlBadge = (r, where) => r ? `<span class="tl-road ${where}" title="From ${Math.round(r.fromKm - state.user.km)} km">${roadPartBadge(r)}</span>` : "";
 
 const BOLT = `<svg viewBox="0 0 12 18" aria-hidden="true"><path d="M7.5 0 0 10.5h4.5L3.5 18 12 6.5H7z" fill="currentColor"/></svg>`;
+// Next to the charger's dot on the line: a chevron for the side of the road it's on
+// (green = your side), or a little exit arrow when it's beyond an exit on that side.
+function sideMark(side, exitSide) {
+  const dir = side || exitSide;
+  if (!dir) return "";
+  const r = dir === "right";
+  const title = side ? (r ? "On your side of the road" : "On the other side of the road") : `Beyond an exit, on the ${dir}`;
+  const shape = side
+    ? `<polyline points="${r ? "2,2 8,8 2,14" : "8,2 2,8 8,14"}" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`
+    : `<path d="${r ? "M2 15 C2 9 4 6 8 3" : "M8 15 C8 9 6 6 2 3"}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+       <polyline points="${r ? "4,2.5 8.5,2.5 8.5,7" : "6,2.5 1.5,2.5 1.5,7"}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const cls = side ? (r ? "mine" : "other") : "exit";
+  return `<span class="sidemark ${r ? "r" : "l"} ${cls}" title="${title}" role="img" aria-label="${title}"><svg viewBox="0 0 10 16" aria-hidden="true">${shape}</svg></span>`;
+}
+
 // Country code to flag emoji ("DE" -> 🇩🇪).
 function flagOf(cc) {
   return /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map((c) => 0x1f1a5 + c.charCodeAt(0))) : esc(cc);
@@ -931,6 +958,19 @@ function sideIcon(side, title) {
     <rect x="7" y="0" width="10" height="18" rx="1.5" fill="currentColor" opacity=".4"/>
     <line x1="12" y1="1" x2="12" y2="17" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 2.5" opacity=".7"/>
     <polyline points="${chevron}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+// Off the motorway: the road with a ramp leaving towards the side the charger is on.
+function exitIcon(side) {
+  const r = side === "right";
+  const ramp = r ? "M17 16 C 21 13, 22 9, 22 4" : "M7 16 C 3 13, 2 9, 2 4";
+  const head = r ? "19.6,6.2 22,3 24,6.6" : "4.4,6.2 2,3 0,6.6";
+  const title = `Beyond an exit, on the ${side}`;
+  return `<span class="side exit" title="${title}" role="img" aria-label="${title}"><svg viewBox="0 0 24 18" aria-hidden="true">
+    <rect x="7" y="0" width="10" height="18" rx="1.5" fill="currentColor" opacity=".4"/>
+    <line x1="12" y1="1" x2="12" y2="17" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 2.5" opacity=".7"/>
+    <path d="${ramp}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    <polyline points="${head}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
 }
 
 function stationRow(s, change, after) {
@@ -948,13 +988,12 @@ function stationRow(s, change, after) {
   const country = s.road ? roadBadge(s.road, s.country)
     : s.country ? `<span class="flag" title="${esc(s.country)}">${flagOf(s.country)}</span>` : "";
   const sd = sideOf(s);
-  const side = sd === "right" ? sideIcon("right", "On your side of the road")
-    : sd === "left" ? sideIcon("left", "On the other side of the road") : "";
+  const side = sideMark(sd, s._exitSide);
   return `<div class="row st ${info.cls}" data-id="${esc(s.id)}" role="button" title="Tap to update this charger">
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
-    <span class="marker" aria-hidden="true"></span>
+    <span class="marker" aria-hidden="true"></span>${side}
     <div><div class="name"><span class="label">${esc(shortName(s.name))}</span><span class="stat">${info.text}</span></div>
-      <div class="sub meta">${side}${country}${kw && info.cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
+      <div class="sub meta">${country}${kw && info.cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
     <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}${detour}</div></div>
   </div>`;
 }

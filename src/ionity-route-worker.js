@@ -371,12 +371,14 @@ async function getRoute(env, points) {
   const { km, min } = cumulativeProfile(coords, segments);
   const steps = segments.flatMap((s) => s.steps || []);
   // With a via point there are two segments; the via is where the first one ends.
-  const firstEnd = segments.length > 1 ? segments[0].steps?.at(-1)?.way_points?.[1] : null;
+  const ends = segments.slice(0, -1).map((sg) => sg.steps?.at(-1)?.way_points?.[1]).filter((i) => i != null);
+  const firstEnd = ends.length ? ends[0] : null;
   // Which country each part of the route is in (routing service's own country IDs).
   const countrySegs = f.properties?.extras?.countryinfo?.values || [];
   return {
     coords, km, min, steps, countrySegs, idIso: {},
     viaKm: firstEnd != null ? km[firstEnd] : null,
+    viaKms: ends.map((i) => km[i]), // one per via point, in order
     distanceKm: (f.properties?.summary?.distance || 0) / 1000,
     durationMin: (f.properties?.summary?.duration || 0) / 60,
   };
@@ -922,12 +924,14 @@ async function handlePlan(request, env) {
   const corridorKm = Math.min(Math.max(Number(body.corridorKm) || 5, 1), 15);
   const valid = (p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
   if (!valid(from) || !valid(to)) throw new HttpError(400, "Send from and to as [lon, lat]");
-  if (via != null && !valid(via)) throw new HttpError(400, "Send via as [lon, lat]");
+  // via: one point [lon, lat] or a list of up to 3 points
+  const vias = via == null ? [] : valid(via) ? [via] : Array.isArray(via) ? via : null;
+  if (!vias || vias.length > 3 || !vias.every(valid)) throw new HttpError(400, "Send via as [lon, lat] or a list of up to 3 of them");
 
   const brands = [...new Set((Array.isArray(body.brands) ? body.brands : ["ionity"]).filter((k) => BRAND[k]))];
   if (!brands.length) brands.push("ionity");
 
-  const route = await getRoute(env, via ? [from, via, to] : [from, to]);
+  const route = await getRoute(env, [from, ...vias, to]);
   const pois = await sitesAlongRoute(env, route, corridorKm, brands);
   learnCountries(route, pois.map((p) => ({
     index: projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).index,
@@ -977,6 +981,7 @@ async function handlePlan(request, env) {
       distanceKm: Math.round(route.distanceKm * 10) / 10,
       durationMin: Math.round(route.durationMin),
       viaKm: route.viaKm != null ? Math.round(route.viaKm * 10) / 10 : null,
+      viaKms: (route.viaKms || []).map((k) => Math.round(k * 10) / 10),
       roads: roadsAlong(route),
       // A sample of the raw street names, to check the road numbers come through in each country
       borders: (route.countrySegs || []).map(([a, b, id]) => ({ fromKm: Math.round(route.km[a]), toKm: Math.round(route.km[b]), id, iso: route.idIso[id] || null })),

@@ -59,8 +59,8 @@
   [hidden] { display: none !important; }
 
   /* ---------- start screen ---------- */
-  #start { max-width: 560px; margin: 0 auto; padding: 28px 20px 40px; }
-  #start h1 { font-size: 2rem; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.01em; }
+  #start { max-width: 560px; margin: 0 auto; padding: 10px 16px 24px; }
+  #start h1 { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; flex: 1; }
   #start .lede { color: var(--muted); margin: 0 0 28px; line-height: 1.5; }
   label.field { display: block; font-weight: 600; margin: 18px 0 6px; }
   .input {
@@ -362,8 +362,31 @@
     border-radius: 50%; border: 2px solid var(--muted) !important; color: var(--muted); background: none;
     font-weight: 800; font-size: 1.1rem; line-height: 1;
   }
-  .start-top { display: flex; align-items: center; justify-content: space-between; margin: 0 0 10px; }
-  .start-top .apps-back { margin: 0; }
+  .start-top { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+  .start-top .apps-back { margin: 0; font-size: 1.9rem; line-height: 1; padding: 0 6px 4px 0; }
+  /* Compact address rows: a short tag on the left, the field, and (for To) a + for via points */
+  .fld { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .fld .tag { width: 40px; flex-shrink: 0; color: var(--muted); font-weight: 700; font-size: .95rem; }
+  .fld .input-wrap { flex: 1; min-width: 0; }
+  #start .input { padding: 10px 46px 10px 12px; font-size: 1.05rem; border-radius: 9px; }
+  #start .clear-btn { width: 36px; height: 36px; right: 4px; }
+  #via1Row .clear-btn, #via2Row .clear-btn { display: grid; } /* on a via, the x removes it */
+  .add-via {
+    width: 42px; height: 42px; flex-shrink: 0; display: grid; place-items: center; padding: 0;
+    border-radius: 9px; border: 2px solid var(--sign-blue); background: none; color: var(--sign-blue);
+  }
+  .add-via svg { width: 22px; height: 22px; }
+  .add-via:disabled { opacity: .3; }
+  .fld:not(#toRow) .input-wrap { margin-right: 50px; } /* line up with the To field next to its + */
+  #start .results { margin: 4px 0 0 48px; }
+  #start .results button { padding: 9px 12px; }
+  .brands-head { display: flex; align-items: baseline; justify-content: space-between; margin: 16px 0 8px; font-weight: 700; }
+  .brands-head .hint { margin: 0; font-weight: 400; font-size: .85rem; }
+  #start .brands { gap: 6px; }
+  #start .brand-btn { padding: 5px 10px 5px 5px; font-size: .9rem; gap: 6px; }
+  #start .brand-btn .logo { width: 20px; height: 20px; }
+  #start .check { margin: 14px 0 0; font-size: .95rem; }
+  #start .primary { margin-top: 14px; padding: 14px; }
   /* Status age, bottom right in your own row */
   .you .age { text-align: right; color: var(--muted); font-size: .95rem; line-height: 1.25; white-space: nowrap; }
   .you .age.err { color: var(--danger); white-space: normal; max-width: 9em; }
@@ -423,35 +446,40 @@
 
 <section id="start">
   <div class="start-top">
-    <a class="apps-back" href="./">‹ Apps</a>
+    <a class="apps-back" href="./" aria-label="Back to apps">‹</a>
+    <h1>Ionity route</h1>
     <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
   </div>
-  <h1>Ionity route</h1>
-  <p class="lede">Fast chargers along your route, Ionity and any others you pick, with how many are free and how much of a detour each one is.</p>
 
-  <label class="field" for="to">Destination</label>
-  <div class="input-wrap"><input id="to" class="input" type="search" placeholder="Town or address" autocomplete="off"><button type="button" class="clear-btn" data-for="to" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+  <div class="fld" id="toRow">
+    <label class="tag" for="to">To</label>
+    <div class="input-wrap"><input id="to" class="input" type="search" placeholder="Destination" autocomplete="off" aria-label="Destination"><button type="button" class="clear-btn" data-for="to" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+    <button type="button" class="add-via" id="addVia" aria-label="Add a via point" title="Add a via point"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
+  </div>
   <ul id="toResults" class="results"></ul>
-
-  <label class="field" for="via">Via (optional)</label>
-  <div class="input-wrap"><input id="via" class="input" type="search" placeholder="A town to drive through" autocomplete="off"><button type="button" class="clear-btn" data-for="via" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
-  <div class="hint">Choose your own way, for example via Luxembourg instead of Brussels.</div>
-  <ul id="viaResults" class="results"></ul>
-
-  <label class="field" for="from">Start</label>
-  <div class="input-wrap"><input id="from" class="input" type="search" placeholder="Your current location" autocomplete="off"><button type="button" class="clear-btn" data-for="from" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
-  <div class="hint">Leave empty to start from where you are now.</div>
+  <div class="fld" id="via1Row" hidden>
+    <label class="tag" for="via1">Via</label>
+    <div class="input-wrap"><input id="via1" class="input" type="search" placeholder="Town to drive through" autocomplete="off" aria-label="First via point"><button type="button" class="clear-btn" data-for="via1" aria-label="Remove via point" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+  </div>
+  <ul id="via1Results" class="results"></ul>
+  <div class="fld" id="via2Row" hidden>
+    <label class="tag" for="via2">Via</label>
+    <div class="input-wrap"><input id="via2" class="input" type="search" placeholder="Town to drive through" autocomplete="off" aria-label="Second via point"><button type="button" class="clear-btn" data-for="via2" aria-label="Remove via point" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+  </div>
+  <ul id="via2Results" class="results"></ul>
+  <div class="fld" id="fromRow">
+    <label class="tag" for="from">From</label>
+    <div class="input-wrap"><input id="from" class="input" type="search" placeholder="Your location" autocomplete="off" aria-label="Start"><button type="button" class="clear-btn" data-for="from" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
+  </div>
   <ul id="fromResults" class="results"></ul>
 
-  <span class="field" id="brandsLabel" style="display:block;font-weight:600;margin:18px 0 8px">Chargers to show</span>
+  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT</span></div>
   <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
-  <div class="hint">Live free counts in the Netherlands, Germany and Austria. Elsewhere: location and detour only.</div>
 
-  <label class="check"><input id="sim" type="checkbox"> Simulate the drive, for testing at home</label>
+  <label class="check"><input id="sim" type="checkbox"> Simulate the drive</label>
 
   <button id="planBtn" class="primary" disabled>Plan route</button>
   <p id="startError" class="error" hidden></p>
-  <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
 </section>
 
 <div class="sheet" id="options" hidden role="dialog" aria-modal="true" aria-labelledby="optionsTitle">
@@ -483,6 +511,7 @@
     <button type="button" class="link" id="helpClose">Close</button>
   </div>
   <div id="helpBody"></div>
+  <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
 </div>
 
 <div class="intro" id="intro" hidden role="dialog" aria-modal="true" aria-label="Introduction">
@@ -515,7 +544,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.24";
+const APP_VERSION = "2026-11-14.25";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -631,7 +660,8 @@ function wireSearch(inputId, listId, key) {
     } catch (e) { list.innerHTML = `<li class="error">${esc(e.message)}</li>`; }
   }, 350);
   const clear = document.querySelector(`.clear-btn[data-for="${inputId}"]`);
-  const syncClear = () => { clear.hidden = !input.value; };
+  const isVia = /^via/.test(inputId); // on a via the x is always there: it removes the via
+  const syncClear = () => { clear.hidden = isVia ? false : !input.value; };
   input.addEventListener("input", () => { syncClear(); search(); });
   clear.addEventListener("click", () => {
     input.value = "";
@@ -646,7 +676,7 @@ function wireSearch(inputId, listId, key) {
 
 function updatePlanBtn() {
   const fromOk = !$("from").value.trim() || state.from;
-  const viaOk = !$("via").value.trim() || state.via;
+  const viaOk = [1, 2].every((n) => $(`via${n}Row`).hidden || !$(`via${n}`).value.trim() || state[`via${n}`]);
   $("planBtn").disabled = !(state.to && fromOk && viaOk);
 }
 
@@ -665,7 +695,7 @@ function currentPosition() {
 // Rerouting and switching routes keep the brands of the current route; the start screen passes its own.
 async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   const body = { from: fromLonLat, to: [state.to.lon, state.to.lat], brands };
-  if (state.via) body.via = [state.via.lon, state.via.lat];
+  if (state.vias?.length) body.via = state.vias.map((v) => [v.lon, v.lat]);
   const data = await api("/plan", body);
   state.route = data.route;
   state.stations = data.stations;
@@ -741,8 +771,9 @@ function showOptionsLoading(title) {
   $("options").hidden = false;
 }
 
+// A chosen route option becomes the trip's via point (replacing any you typed).
 function useOption(o) {
-  state.via = o.via ? { label: "Chosen route", lon: o.via[0], lat: o.via[1], auto: true } : null;
+  state.vias = o.via ? [{ label: "Chosen route", lon: o.via[0], lat: o.via[1], auto: true }] : [];
 }
 
 // While driving: tap the destination to compare routes from where you are now.
@@ -778,9 +809,9 @@ $("planBtn").addEventListener("click", async () => {
   btn.disabled = true; btn.textContent = "Planning…"; showStartError("");
   try {
     const from = state.from ? [state.from.lon, state.from.lat] : await currentPosition();
-    // With your own via point, plan that; otherwise offer the options found.
-    if (!state.via || state.via.auto) {
-      state.via = null;
+    // With your own via points, plan those; otherwise offer the options found.
+    state.vias = [state.via1, state.via2].filter((v, i) => v && !$(`via${i + 1}Row`).hidden);
+    if (!state.vias.length) {
       btn.textContent = "Finding routes…";
       let options = [];
       try { options = (await api("/alternatives", { from, to: [state.to.lon, state.to.lat] })).options || []; }
@@ -911,9 +942,13 @@ function onPosition(lonlat, accuracy) {
   state.user = { km: pr.km, min: pr.min, offKm: pr.d, acc: accuracy, at: Date.now(), lonlat };
   const reliable = accuracy == null || accuracy < 100;
   state.offCount = reliable && pr.d > OFF_ROUTE_KM ? state.offCount + 1 : 0;
-  // Once past the via point, it no longer matters for a new route.
-  if (state.via && state.route.viaKm != null && pr.km > state.route.viaKm && pr.d < OFF_ROUTE_KM) {
-    state.via = null; save();
+  // Once past a via point, it no longer matters for a new route.
+  const viaKms = state.route.viaKms || (state.route.viaKm != null ? [state.route.viaKm] : []);
+  if (state.vias?.length && viaKms.length && pr.km > viaKms[0] && pr.d < OFF_ROUTE_KM) {
+    state.vias.shift();
+    state.route.viaKms = viaKms.slice(1);
+    state.route.viaKm = state.route.viaKms[0] ?? null;
+    save();
   }
   if (state.offCount >= 3 && !state.rerouting && Date.now() - state.lastRerouteAt > 60000) reroute();
   render();
@@ -1483,7 +1518,7 @@ setInterval(() => { if (!$("drive").hidden) render(); }, 30000);
 function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
-      to: state.to, via: state.via, route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
+      to: state.to, vias: state.vias || [], route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
       planBrands: state.planBrands,
     }));
   } catch (_) { /* storage full or blocked; the app still works */ }
@@ -1493,7 +1528,7 @@ function restore() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (!saved?.route) return;
-    Object.assign(state, { to: saved.to, via: saved.via || null, route: saved.route, stations: saved.stations, statusAt: saved.statusAt,
+    Object.assign(state, { to: saved.to, vias: saved.vias || (saved.via ? [saved.via] : []), route: saved.route, stations: saved.stations, statusAt: saved.statusAt,
       planBrands: saved.planBrands || ["ionity"] });
     $("sim").checked = !!saved.sim;
     startDriving();
@@ -1626,10 +1661,10 @@ function helpHtml() {
 
   <h3>Planning a route</h3>
   <ul>
-    <li><b>Destination</b>: a town or address. <b>Start</b> left empty means where you are now.</li>
-    <li><b>Via</b> (optional): a town to drive through, to choose your own way.</li>
+    <li><b>To</b>: a town or address. <b>From</b> left empty means where you are now. The <b>×</b> empties a field.</li>
+    <li><b>+</b> next to To adds a <b>via</b> point (up to two), to choose your own way, for example via Luxembourg instead of Brussels. The × on a via removes it.</li>
     <li>Without a via, you get <b>route options</b> to choose from, with their main roads and the cities on the way.</li>
-    <li><b>Chargers to show</b>: the brands to look for. Only fast chargers (50 kW and up) are shown.</li>
+    <li><b>Chargers</b>: the brands to look for. Only fast chargers (50 kW and up) are shown. Live free counts in the Netherlands, Germany and Austria; elsewhere location and detour only.</li>
     <li><b>Simulate the drive</b>: drives the route for you, sped up, to try the app at home.</li>
   </ul>
 
@@ -1671,7 +1706,6 @@ function helpHtml() {
 
   <div class="help-actions">
     <button type="button" class="link" id="replayIntro">Show the introduction again</button>
-    <span class="hint">Version ${APP_VERSION}</span>
   </div>`;
 }
 function openHelp() {
@@ -1772,7 +1806,31 @@ renderBrandPicker();
 
 wireSearch("to", "toResults", "to");
 wireSearch("from", "fromResults", "from");
-wireSearch("via", "viaResults", "via");
+wireSearch("via1", "via1Results", "via1");
+wireSearch("via2", "via2Results", "via2");
+
+// + next to To: show the next via row (max two). On a via, the x removes the row.
+function syncAddVia() { $("addVia").disabled = !$("via1Row").hidden && !$("via2Row").hidden; }
+$("addVia").addEventListener("click", () => {
+  const n = $("via1Row").hidden ? 1 : 2;
+  $(`via${n}Row`).hidden = false;
+  syncAddVia();
+  $(`via${n}`).focus();
+});
+for (const n of [1, 2]) {
+  document.querySelector(`.clear-btn[data-for="via${n}"]`).addEventListener("click", (e) => {
+    e.stopImmediatePropagation();
+    // Removing via 1 while via 2 is in use: move 2 up.
+    if (n === 1 && !$("via2Row").hidden) {
+      $("via1").value = $("via2").value; state.via1 = state.via2;
+      $("via2").value = ""; state.via2 = null; $("via2Row").hidden = true;
+    } else {
+      $(`via${n}`).value = ""; state[`via${n}`] = null; $(`via${n}Row`).hidden = true;
+    }
+    $("via1Results").innerHTML = ""; $("via2Results").innerHTML = "";
+    syncAddVia(); updatePlanBtn();
+  }, true);
+}
 restore();
 if (!localStorage.getItem(INTRO_KEY)) showIntro();
 </script>

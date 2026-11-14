@@ -1207,7 +1207,12 @@ async function handleNdwSites(request, env) {
 
 // The routing service only gives alternatives below 100 km, so we make our own: plan through
 // points left and right of the fastest route, keep the ones that use different main roads.
-const ALT_DEFAULTS = { fractions: [0.33, 0.66], offsetKm: 40, maxSlower: 1.25, mainRoadKm: 30 };
+// Points left and right of the fastest route are tried at several places along it. Their distance
+// to the route, and how long a road must be to count as a "main road" of an option, grow with the
+// trip: on a 100 km trip a 40 km side step is never within 25% (it found nothing for Utrecht-Bergen
+// op Zoom, while N3/A59/A17/A58 variants exist).
+const ALT_DEFAULTS = { fractions: [0.25, 0.5, 0.75], wideAt: [0.5], offsetShare: 0.12, offsetMinKm: 6, offsetMaxKm: 40,
+  maxSlower: 1.25, mainRoadShare: 0.1, mainRoadMinKm: 8, mainRoadMaxKm: 30, maxOptions: 3 };
 
 // Big cities, so a card says "Frankfurt" rather than the village at the junction.
 const MAJOR_CITIES = [ // [tier (1 = largest), name, lat, lon]
@@ -1352,7 +1357,45 @@ async function placeName(env, [lon, lat]) {
   return name;
 }
 
-async function describeOption(env, route, via, pois, maxCities = 4) {
+// A place name for a charger whose own name is only its brand ("Shell Recharge"): the service
+// area if a nearby place is named like one, otherwise the town. Looked up once per spot (about
+// 100 m) and kept 30 days for everyone.
+const AREA_RE = /\b(verzorgingsplaats|parkeerplaats|rasthof|raststätte|rastanlage|autohof|aire de|aire d'|service area|servicestation)\b/i;
+async function placeFor(env, lat, lon) {
+  const key = `pl1:${lat.toFixed(3)},${lon.toFixed(3)}`;
+  const hit = memoGet(key);
+  if (hit !== undefined) return hit;
+  if (env.USAGE) {
+    try { const kv = JSON.parse((await kvGet(env, key)) || "null"); if (kv) { memoSet(key, kv, 24 * 3600 * 1000); return kv; } } catch (_) {}
+  }
+  let area = null, town = null;
+  try {
+    const url = `${PELIAS_BASE}/reverse?point.lat=${lat}&point.lon=${lon}&size=10&layers=venue&boundary.circle.radius=0.4`;
+    const data = await fetchJson(url, { headers: orsHeaders(env) }, "Geocoder");
+    for (const f of data.features || []) {
+      const p = f.properties || {};
+      town = town || p.locality || p.localadmin || null;
+      if (!area && AREA_RE.test(p.name || "")) area = String(p.name).replace(AREA_RE, "").replace(/^[\s:–-]+/, "").trim() || null;
+    }
+  } catch (_) {}
+  if (!town) town = await placeName(env, [lon, lat]);
+  const out = { area, town };
+  memoSet(key, out, 24 * 3600 * 1000);
+  if (env.USAGE && (area || town)) {
+    try { await env.USAGE.put(key, JSON.stringify(out), { expirationTtl: 30 * 24 * 3600 }); countCall("KV writes"); } catch (_) {}
+  }
+  return out;
+}
+async function handlePlaces(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const pts = (Array.isArray(body.points) ? body.points : [])
+    .filter((x) => x && typeof x.id === "string" && Number.isFinite(x.lat) && Number.isFinite(x.lon)).slice(0, 8);
+  const places = {};
+  for (const x of pts) places[x.id] = await placeFor(env, x.lat, x.lon);
+  return json(request, { places });
+}
+
+async function describeOption(env, route, via, pois, maxCities = 4, mainRoadKm = 30) {
   learnCountries(route, pois.map((p) => ({
     index: projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).index,
     iso: p.AddressInfo?.Country?.ISOCode,
@@ -1377,7 +1420,7 @@ async function describeOption(env, route, via, pois, maxCities = 4) {
     distanceKm: Math.round(route.distanceKm),
     durationMin: Math.round(route.durationMin),
     roads: parts.map((r) => ({ ref: r.ref, country: r.country, cities: r.cities || [] })),
-    signature: mainRoads(route.steps, ALT_DEFAULTS.mainRoadKm),
+    signature: mainRoads(route.steps, mainRoadKm),
   };
 }
 
@@ -1389,11 +1432,15 @@ async function handleAlternatives(request, env) {
   const t = { ...ALT_DEFAULTS, ...(body.tune || {}) };
 
   const fastest = await getRoute(env, [from, to]);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const offKm = t.offsetKm ?? clamp(fastest.distanceKm * t.offsetShare, t.offsetMinKm, t.offsetMaxKm);
+  t.mainRoadKm = t.mainRoadKm ?? clamp(fastest.distanceKm * t.mainRoadShare, t.mainRoadMinKm, t.mainRoadMaxKm);
   const baseSig = mainRoads(fastest.steps, t.mainRoadKm);
 
-  // Try points left and right of the fastest route.
+  // Try points left and right of the fastest route, close by at several places and further out halfway.
   const tries = [];
-  for (const f of t.fractions) for (const side of [1, -1]) tries.push(offsetPoint(fastest, f, side * t.offsetKm));
+  for (const f of t.fractions) for (const side of [1, -1]) tries.push(offsetPoint(fastest, f, side * offKm));
+  for (const f of t.wideAt || []) for (const side of [1, -1]) tries.push(offsetPoint(fastest, f, side * offKm * 2));
   const rough = await Promise.all(tries.map((p) => roughRoute(env, [from, p, to]).then((r) => ({ r, p })).catch(() => null)));
 
   // Keep corridors that use different main roads and aren't much slower; best first.
@@ -1407,7 +1454,7 @@ async function handleAlternatives(request, env) {
     if (!via) continue;
     seen.add(sig);
     picks.push(via);
-    if (picks.length >= 2) break;
+    if (picks.length >= t.maxOptions) break;
   }
 
   // Plan the kept ones properly through the snapped point.
@@ -1424,7 +1471,7 @@ async function handleAlternatives(request, env) {
   const options = [];
   for (const { r, v } of all) {
     if (v && r.durationMin > fastest.durationMin * t.maxSlower) continue;
-    const o = await describeOption(env, r, v, pois);
+    const o = await describeOption(env, r, v, pois, 4, t.mainRoadKm);
     if (v && options.some((x) => x.signature === o.signature)) continue; // snapping made it the same road after all
     options.push(o);
   }
@@ -1599,6 +1646,7 @@ async function route(request, env) {
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
   if (path === "/detours" && request.method === "POST") return handleDetours(request, env);
   if (path === "/ndw-sites" && request.method === "POST") return handleNdwSites(request, env);
+  if (path === "/places" && request.method === "POST") return handlePlaces(request, env);
   if (path === "/brands" && request.method === "GET") {
     return json(request, { brands: BRANDS.map(({ key, name, color }) => ({ key, name, color })) });
   }

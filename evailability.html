@@ -229,6 +229,14 @@
   .st .sub.meta .flag { font-size: 1rem; }
   .when b { color: var(--line); font-weight: 800; }
   .stat strong { font-weight: 800; }
+  /* A value that just changed: a short pop and glow, once */
+  .stat.changed { display: inline-block; animation: changed 1.3s ease-out; border-radius: 10px; }
+  @keyframes changed {
+    0% { transform: scale(1); background: transparent; }
+    18% { transform: scale(1.18); background: rgba(127,127,127,.28); }
+    100% { transform: scale(1); background: transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) { .stat.changed { animation: none; } }
   /* "24/40": free count full size, the total smaller and tucked under the slash */
   .stat .sl { margin-right: -.16em; }
   .stat .tot { font-size: .6em; letter-spacing: 0; }
@@ -732,7 +740,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.33";
+const APP_VERSION = "2026-11-14.34";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1309,8 +1317,18 @@ async function fetchStatus(stations) {
     for (const r of res) Object.assign(status, r.status);
   }
   const now = Date.now();
-  for (const s of state.stations) if (s.id in status) { s.status = status[s.id]; s.statusAt = now; }
+  let changed = false;
+  const sig = (st) => (st ? `${st.state}|${st.available}|${st.total}` : "");
+  for (const s of state.stations) {
+    if (!(s.id in status)) continue;
+    // A short flash only when the number or state really changed (not on the first value).
+    if (s.status && sig(s.status) !== sig(status[s.id])) { s.flashAt = now; changed = true; }
+    s.status = status[s.id]; s.statusAt = now;
+  }
+  if (changed) setTimeout(render, FLASH_MS + 100); // take the flash class off again
 }
+const FLASH_MS = 1400;
+const flashCls = (s) => (s.flashAt && Date.now() - s.flashAt < FLASH_MS ? " changed" : "");
 
 // Tap a charger to refresh just that one.
 // Any charger being looked up right now (the 1-minute round, a tap, or after scrolling).
@@ -2001,9 +2019,9 @@ function shownStatus(s) {
   let info = statusInfo(s);
   const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
   const stale = !s.statusAt || Date.now() - s.statusAt > STALE_MS;
-  // While updating: keep what's there, just grey. It changes only when the answer differs.
-  if (loading) info = { cls: "stale", text: s.status ? info.text : `<span title="Updating">↻</span>` };
-  else if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="Tap to check">↻</span>` };
+  // Updating a recent value: nothing changes on screen until the answer differs.
+  // Grey only when the value is old (or there's none yet).
+  if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="${loading ? "Updating" : "Tap to check"}">↻</span>` };
   return info;
 }
 const CLS_ORDER = ["free", "full", "offline", "stale", "nodata"];
@@ -2027,13 +2045,13 @@ function stationRow(site, change, after) {
   let avail, nameLogo = "";
   if (members.length === 1) {
     if (manyBrands) nameLogo = logoHtml(brandKey(s));
-    avail = `<div class="avail"><span class="stat">${infos[0].text}</span></div>`;
+    avail = `<div class="avail"><span class="stat${flashCls(s)}">${infos[0].text}</span></div>`;
   } else {
     if (manyBrands) nameLogo = `<span class="logo spacer" aria-hidden="true"></span>`; // names line up with the rows that have a logo
     const shown = members.slice(0, 3);
     const more = members.length - shown.length;
     avail = `<div class="avail multi${shown.length >= 3 ? " n3" : ""}">${shown.map((m, i) =>
-      `<span class="ml ${infos[i].cls}">${logoHtml(brandKey(m))}<span class="stat">${infos[i].text}</span></span>`).join("")}${
+      `<span class="ml ${infos[i].cls}">${logoHtml(brandKey(m))}<span class="stat${flashCls(m)}">${infos[i].text}</span></span>`).join("")}${
       more ? `<span class="more">+${more} more</span>` : ""}</div>`;
   }
   const title = members.length > 1 ? `${members.map((m) => (BRAND[brandKey(m)] || {}).name).join(", ")}. Tap to update` : "Tap to update this charger";
@@ -2302,7 +2320,7 @@ function helpHtml() {
     <div class="k">${dot("free")}</div><div class="v"><b class="kv" style="color:var(--free)">3/6</b>&ensp;3 of 6 chargers free right now.</div>
     <div class="k">${dot("full")}</div><div class="v"><b class="kv" style="color:var(--full)">0/4</b>&ensp;All in use.</div>
     <div class="k">${dot("offline")}</div><div class="v"><b>Offline</b>: reported out of order, or nothing has changed for hours.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. <b>…</b> updating. Grey numbers are more than 3 minutes old.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old. A number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>

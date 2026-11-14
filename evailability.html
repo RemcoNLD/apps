@@ -841,7 +841,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.55";
+const APP_VERSION = "2026-11-14.56";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1815,34 +1815,46 @@ function fitRoads(box) {
   }
 }
 
+// The road badge above the down button (while scrolled up) shows the road at that spot on the line.
+// Road badges on the line slide over it like any row: one coming down covers it (the part it
+// overlaps is cut from the fixed badge) and, the moment it sits exactly on it, takes its place
+// (the fixed badge now shows that road, the moving one is hidden from there on). Scrolling the
+// other way, it reappears at exactly that spot and slides up, uncovering the road before it.
 function updateStickyRoad() {
   const el = $("stickyRoad");
   const badges = [...$("list").querySelectorAll(".tl-road")];
-  // Road badges on the line that scroll under the down button (or the road badge above it) are
-  // hidden there, so they don't overlap it; the badge above the button shows the road instead.
-  const btn = !$("more").hidden && $("more").getBoundingClientRect();
+  const off = () => { el.hidden = true; el.style.clipPath = ""; for (const b of badges) b.classList.remove("under-fab"); };
+  if (state.stickToBottom || !state.route || $("more").hidden) return off();
+  const fab = $("more").getBoundingClientRect();
+  // Where the fixed badge sits: its CSS puts its bottom edge 14 px above the button.
+  const h = el.hidden ? 0 : el.getBoundingClientRect().height;
+  const sBottom = fab.top - 14, sTop = sBottom - (h || 26), sMid = (sTop + sBottom) / 2;
+  let below = null, above = null; // nearest badge at/below the spot, nearest one above it
   for (const b of badges) {
-    const r = b.getBoundingClientRect();
-    b.classList.toggle("under-fab", !!btn && r.bottom > btn.top - 52 && r.top < btn.bottom + 4);
+    const r = b.getBoundingClientRect(), mid = (r.top + r.bottom) / 2;
+    const under = mid >= sMid - 0.5;
+    b.classList.toggle("under-fab", under);
+    if (under) { if (!below || mid < below.mid) below = { b, mid, r }; }
+    else if (!above || mid > above.mid) above = { b, mid, r };
   }
-  const hide = () => { el.hidden = true; };
-  if (state.stickToBottom || !state.route) return hide();
-  const y = $("more").getBoundingClientRect().top - 24; // where the badge sits
-  const rows = [...$("list").querySelectorAll(".row.st[data-ids]")];
-  const row = rows.find((r) => r.getBoundingClientRect().bottom >= y);
-  if (!row) return hide();
-  // The row's own change badge is right there: let that one show instead.
-  // A road badge on the line is right there: let that one show instead.
-  for (const b of badges) {
-    if (b.classList.contains("under-fab")) continue;
-    const r = b.getBoundingClientRect();
-    if (r.bottom > y - 30 && r.top < y + 30) return hide();
+  const parts = roadParts();
+  const byKm = (x) => parts.find((p) => Math.abs(p.fromKm - Number(x.b.dataset.km)) < 0.01);
+  let road = null;
+  if (below) road = byKm(below); // the road that starts at the last change you passed on the line
+  else if (above) { const r = byKm(above); road = r && parts.filter((p) => p.fromKm < r.fromKm).at(-1); }
+  else {
+    // No change on screen: the road of the row at that spot.
+    const row = [...$("list").querySelectorAll(".row.st[data-ids]")].find((x) => x.getBoundingClientRect().bottom >= sMid);
+    const s = row && state.stations.find((x) => x.id === row.dataset.ids.split(" ")[0]);
+    road = s && parts.filter((r) => r.fromKm <= s.alongKm).at(-1);
   }
-  const s = state.stations.find((x) => x.id === row.dataset.ids.split(" ")[0]);
-  const road = s && roadParts().filter((r) => r.fromKm <= s.alongKm).at(-1);
-  if (!road) return hide();
-  el.innerHTML = `<span>${roadPartBadge(road)}</span>`;
+  if (!road) return off();
+  setHtml(el, `<span>${roadPartBadge(road)}</span>`);
   el.hidden = false;
+  // A badge coming down covers the fixed one: cut away the part it overlaps.
+  const top = el.getBoundingClientRect().top;
+  const cover = above ? Math.min(Math.max(above.r.bottom - top, 0), el.getBoundingClientRect().height) : 0;
+  el.style.clipPath = cover > 0 ? `inset(${cover}px 0 0 0)` : "";
 }
 $("list").addEventListener("scroll", () => {
   if (selfScroll) selfScroll = false; else lastUserScroll = Date.now();
@@ -2350,7 +2362,7 @@ function roadChange(fromKm, toKm) {
   const before = roadAt(Math.max(fromKm, state.user.km)), after = roadAt(toKm);
   return after && after.ref !== before?.ref ? after : null;
 }
-const tlBadge = (r, where) => r ? `<span class="tl-road ${where}" title="From ${Math.round(r.fromKm - state.user.km)} km">${roadPartBadge(r)}</span>` : "";
+const tlBadge = (r, where) => r ? `<span class="tl-road ${where}" data-km="${r.fromKm}" title="From ${Math.round(r.fromKm - state.user.km)} km">${roadPartBadge(r)}</span>` : "";
 
 const BOLT = `<svg viewBox="0 0 12 18" aria-hidden="true"><path d="M7.5 0 0 10.5h4.5L3.5 18 12 6.5H7z" fill="currentColor"/></svg>`;
 // Next to the charger's dot: nothing when you pull straight in, a grey exit arrow when you

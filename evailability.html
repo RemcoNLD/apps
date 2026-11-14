@@ -838,7 +838,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.46";
+const APP_VERSION = "2026-11-14.47";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1237,7 +1237,7 @@ $("destRow").addEventListener("click", async () => {
     await plan(from);
     closeOptions();
     state.stickToBottom = true;
-    showBanner(`New route via ${roadsAhead().map((r) => r.ref).join(" › ")}`, { ok: true, hideAfter: 8000 });
+    showBanner("New route planned", { ok: true, hideAfter: 6000 }); // its roads show at the top
     render();
   } catch (e) {
     $("optionsBody").classList.remove("busy");
@@ -1265,7 +1265,7 @@ $("planBtn").addEventListener("click", async () => {
       // Say why there was nothing to choose from, after the route is shown.
       state.altNote = options.length > 1 ? null
         : altError ? `Couldn’t compare routes (${altError}). Planned the fastest.`
-        : "Only one sensible route found, so no choice this time.";
+        : "Only one sensible route here, so no choice this time.";
       if (options.length > 1) {
         const pick = await chooseRoute(options, { hint: "Tap the route you want to drive." });
         if (!pick) return;
@@ -1277,7 +1277,8 @@ $("planBtn").addEventListener("click", async () => {
     await plan(from, state.brands);
     startDriving();
     closeOptions();
-    if (state.altNote) { toast(state.altNote, 6000); state.altNote = null; }
+    // Not a toast in the middle of the screen: the banner at the bottom, which goes away by itself.
+    if (state.altNote) { showBanner(state.altNote, { ok: true, hideAfter: 6000 }); state.altNote = null; }
   } catch (e) {
     closeOptions();
     showStartError(e.message);
@@ -2079,8 +2080,7 @@ async function reroute() {
     const from = state.user.lonlat || await currentPosition();
     await plan(from);
     state.stickToBottom = true;
-    const roads = roadsAhead();
-    showBanner(roads.length ? `New route via ${roads.map((r) => r.ref).join(" › ")}` : "New route planned", { ok: true, hideAfter: 8000 });
+    showBanner("You’ve left the route. New route planned.", { ok: true, hideAfter: 6000 }); // its roads show at the top
   } catch (e) {
     showBanner(`Couldn’t reroute: ${e.message}`, { retry: true });
   } finally {
@@ -2162,8 +2162,8 @@ async function fetchPlaces(stations) {
   // v2: with the service-area name from OpenStreetMap (older answers had the town only).
   // An answer whose service-area lookup failed (ok: false) is asked again after 10 minutes.
   const now = Date.now();
-  const stale = (s) => s.place?.v !== 4 || (s.place.ok === false && now - (s.placeAt || 0) > 10 * 60 * 1000);
-  const todo = stations.filter((s) => s._needsPlace && stale(s) && !(s.placeTriedAt && now - s.placeTriedAt < 10 * 60 * 1000)).slice(0, 5);
+  const stale = (s) => s.place?.v !== 5 || (s.place.ok === false && now - (s.placeAt || 0) > 10 * 60 * 1000);
+  const todo = stations.filter((s) => s._needsPlace && stale(s) && !(s.placeTriedAt && now - s.placeTriedAt < 10 * 60 * 1000)).slice(0, 8);
   if (!todo.length) return;
   placesBusy = true;
   for (const s of todo) s.placeTriedAt = now;
@@ -2573,7 +2573,7 @@ const SLIDES = [
     text: `<p>The list follows your GPS. Leave the route and it <b>plans a new one</b> by itself.</p>
       <p><b>Tap the destination</b> to compare other routes from where you are. Scroll up to look further ahead; the blue button brings you back.</p>
       <p><b>Press and hold</b> a charger to navigate there in your navigation app. Help is always behind the <b>?</b> at the top.</p>`,
-    top: () => `<div class="banner ok" style="margin:0 0 14px"><span>New route via A3 › A5</span></div>`,
+    top: () => `<div class="banner ok" style="margin:0 0 14px"><span>You’ve left the route. New route planned.</span></div>`,
     demo: () => `<div class="row dest"><span class="marker" aria-hidden="true"></span><div><div class="name">Munich</div><div class="sub">Arrive 17:40</div>
       <div class="sub roads"><span>via&nbsp;</span>${roadBadge("A3", "DE")}<span class="sep">›</span>${roadBadge("A5", "DE")}<span class="sep">›</span>${roadBadge("A8", "DE")}</div></div>
       <div class="dist"><div class="km">612<small>km</small></div><div class="min">6 h 10</div></div></div>${demoYou}`,

@@ -1388,38 +1388,50 @@ const OVERPASS_MIRRORS = [
   "https://overpass.private.coffee/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
-async function serviceAreaNear(lat, lon) {
-  const q = `[out:json][timeout:8];nwr[highway~"^(services|rest_area)$"][name](around:800,${lat},${lon});out geom 6;`;
+// One Overpass request for all chargers of a batch (not one per charger): service areas near
+// each, with their outlines. A mirror that refuses or hangs is skipped after a few seconds.
+async function fetchWithTimeout(url, init, ms) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try { return await fetch(url, { ...init, signal: ctl.signal }); } finally { clearTimeout(t); }
+}
+async function serviceAreasNear(points) {
+  const parts = points.map((x) => `nwr[highway~"^(services|rest_area)$"][name](around:800,${x.lat.toFixed(5)},${x.lon.toFixed(5)});`).join("");
+  const q = `[out:json][timeout:10];(${parts});out geom 40;`;
   let data = null, lastErr = null;
   for (const url of OVERPASS_MIRRORS) {
     countCall("Overpass");
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithTimeout(url, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "evailability personal app (github.com/RemcoNLD)", Accept: "application/json" },
         body: "data=" + encodeURIComponent(q),
-      });
+      }, 7000);
       if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
       data = await res.json();
       break;
     } catch (e) {
       lastErr = e;
       countCall("Overpass errors"); // shows on the usage page: if this grows, the mirrors refuse us
+      console.log("Overpass failed", url, e.message);
     }
   }
   if (!data) throw lastErr || new Error("Overpass unavailable");
-  // Pick by the area's outline, not its centre: a charger lies inside (or right at the edge of)
-  // the service area on its own side, while the one across the road is a carriageway away.
-  // By centre, a long service area on your side could lose to a short one opposite.
-  let best = null, bestD = Infinity;
-  for (const el of data.elements || []) {
-    const name = el.tags?.name;
-    if (!name) continue;
-    const d = distanceToElement(el, lat, lon);
-    if (d < bestD) { bestD = d; best = name; }
+  // Per charger: the area whose outline is nearest (0 when inside it), within 800 m.
+  const out = {};
+  for (const x of points) {
+    let best = null, bestD = 0.8;
+    for (const el of data.elements || []) {
+      const name = el.tags?.name;
+      if (!name) continue;
+      const d = distanceToElement(el, x.lat, x.lon);
+      if (d <= bestD) { bestD = d; best = name; }
+    }
+    out[x.id] = best ? best.replace(AREA_RE, "").replace(/^[\s:–-]+/, "").trim() || best : null;
   }
-  return best ? best.replace(AREA_RE, "").replace(/^[\s:–-]+/, "").trim() || best : null;
+  return out;
 }
+
 // Distance in km from a point to an Overpass element: 0 inside a closed outline, otherwise to the
 // nearest edge (ways, relation members) or to the node itself.
 function distanceToElement(el, lat, lon) {
@@ -1447,39 +1459,37 @@ function distanceToElement(el, lat, lon) {
   return el.center ? haversineKm([el.center.lon, el.center.lat], [lon, lat]) : Infinity;
 }
 
-async function placeFor(env, lat, lon) {
-  const key = `pl4:${lat.toFixed(3)},${lon.toFixed(3)}`;
-  const hit = memoGet(key);
-  if (hit !== undefined) return hit;
-  if (env.USAGE) {
-    try { const kv = JSON.parse((await kvGet(env, key)) || "null"); if (kv) { memoSet(key, kv, 24 * 3600 * 1000); return kv; } } catch (_) {}
-  }
-  let area = null, town = null, ok = true;
-  try { area = await serviceAreaNear(lat, lon); } catch (e) { ok = false; console.log("Overpass failed", e.message); }
-  try {
-    const url = `${PELIAS_BASE}/reverse?point.lat=${lat}&point.lon=${lon}&size=10&layers=venue&boundary.circle.radius=0.4`;
-    const data = await fetchJson(url, { headers: orsHeaders(env) }, "Geocoder");
-    for (const f of data.features || []) {
-      const p = f.properties || {};
-      town = town || p.locality || p.localadmin || null;
-      if (!area && AREA_RE.test(p.name || "")) area = String(p.name).replace(AREA_RE, "").replace(/^[\s:–-]+/, "").trim() || null;
-    }
-  } catch (_) {}
-  if (!town) town = await placeName(env, [lon, lat]);
-  const out = { area, town, v: 4, ok };
-  memoSet(key, out, (ok ? 24 : 1) * 3600 * 1000);
-  // Kept 30 days for everyone, but not when the service-area lookup failed (try again later).
-  if (env.USAGE && ok && (area || town)) {
-    try { await env.USAGE.put(key, JSON.stringify(out), { expirationTtl: 30 * 24 * 3600 }); countCall("KV writes"); } catch (_) {}
-  }
-  return out;
-}
+// A place name for chargers named only by their brand: the service area (OpenStreetMap), else
+// the town (geocoder). Kept 30 days per spot (about 100 m) for everyone.
+const placeKey = (x) => `pl5:${x.lat.toFixed(3)},${x.lon.toFixed(3)}`;
 async function handlePlaces(request, env) {
   const body = await request.json().catch(() => ({}));
   const pts = (Array.isArray(body.points) ? body.points : [])
-    .filter((x) => x && typeof x.id === "string" && Number.isFinite(x.lat) && Number.isFinite(x.lon)).slice(0, 5);
-  const places = {};
-  for (const x of pts) places[x.id] = await placeFor(env, x.lat, x.lon);
+    .filter((x) => x && typeof x.id === "string" && Number.isFinite(x.lat) && Number.isFinite(x.lon)).slice(0, 8);
+  const places = {}, misses = [];
+  for (const x of pts) {
+    let hit = memoGet(placeKey(x));
+    if (hit === undefined && env.USAGE) {
+      try { hit = JSON.parse((await kvGet(env, placeKey(x))) || "null") || undefined; } catch (_) { hit = undefined; }
+      if (hit) memoSet(placeKey(x), hit, 24 * 3600 * 1000);
+    }
+    if (hit) places[x.id] = hit; else misses.push(x);
+  }
+  if (misses.length) {
+    let areas = {}, ok = true;
+    try { areas = await serviceAreasNear(misses); } catch (_) { ok = false; }
+    const towns = await Promise.all(misses.map((x) => placeName(env, [x.lon, x.lat]).catch(() => null)));
+    for (let i = 0; i < misses.length; i++) {
+      const x = misses[i];
+      const res = { area: areas[x.id] || null, town: towns[i] || null, v: 5, ok };
+      places[x.id] = res;
+      memoSet(placeKey(x), res, (ok ? 24 : 0.25) * 3600 * 1000);
+      // Not kept when the service-area lookup failed: tried again later.
+      if (env.USAGE && ok && (res.area || res.town)) {
+        try { await env.USAGE.put(placeKey(x), JSON.stringify(res), { expirationTtl: 30 * 24 * 3600 }); countCall("KV writes"); } catch (_) {}
+      }
+    }
+  }
   return json(request, { places });
 }
 

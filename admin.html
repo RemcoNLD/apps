@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Usage · Ionity route</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+<style>
+  :root {
+    --bg: #1d2429; --card: #263038; --text: #f3f1ea; --muted: #93a0a8; --line: #3a464f;
+    --ok: #43b96d; --warn: #f0a43a; --bad: #e0574f; --blue: #2f63b8; color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #eef1f3; --card: #fff; --text: #1b2328; --muted: #5c6970; --line: #dde3e7;
+      --ok: #23914b; --warn: #c47a12; --bad: #c43d35; --blue: #1f55ad; color-scheme: light; }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0 auto; max-width: 720px; color: var(--text); background: var(--bg);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: calc(env(safe-area-inset-top, 0px) + 18px) 16px calc(env(safe-area-inset-bottom, 0px) + 28px);
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.15rem; margin: 26px 0 10px; }
+  .muted { color: var(--muted); }
+  .login { display: flex; gap: 8px; margin: 14px 0; }
+  input {
+    flex: 1; min-width: 0; padding: 12px; font: inherit; color: var(--text);
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  }
+  button {
+    padding: 12px 16px; font: inherit; font-weight: 700; color: #fff;
+    background: var(--blue); border: 0; border-radius: 10px; cursor: pointer;
+  }
+  .card { background: var(--card); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .name { font-weight: 700; }
+  .num { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+  .bar { height: 10px; border-radius: 6px; background: var(--line); margin: 8px 0 6px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; border-radius: 6px; background: var(--ok); }
+  .bar > span.warn { background: var(--warn); }
+  .bar > span.bad { background: var(--bad); }
+  .small { font-size: .9rem; }
+  .note { border-left: 4px solid var(--warn); }
+  .error { color: var(--bad); }
+  .table-wrap { overflow-x: auto; background: var(--card); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 9px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--card); }
+  thead th { color: var(--muted); font-weight: 600; font-size: .9rem; }
+  tr:last-child td { border-bottom: 0; }
+</style>
+</head>
+<body>
+<h1>Usage</h1>
+<p class="muted">How much of the free tiers the Ionity route app uses, per data source.</p>
+
+<form class="login" id="login">
+  <input id="pw" type="password" placeholder="Admin password" autocomplete="current-password" aria-label="Admin password">
+  <button type="submit">Show</button>
+</form>
+<p id="msg" class="error" hidden></p>
+<div id="out"></div>
+
+<script>
+const WORKER = "https://ionity.remco-dv.workers.dev";
+const KEY = "ionity-admin-token";
+
+// Free-tier limits we know for sources that don't report them (per day).
+// OpenRouteService reports its own limits, so those come live from the Worker.
+const KNOWN_LIMITS = {
+  "Worker requests": { limit: 100000, note: "Cloudflare Workers free plan" },
+  "KV writes": { limit: 1000, note: "Cloudflare KV free plan" },
+};
+const LABELS = {
+  "Routing": "OpenRouteService routes", "Matrix": "OpenRouteService detours", "Geocoder": "Place search & names",
+  "Open Charge Map": "Open Charge Map", "NDW": "NDW (Netherlands live)", "E-Control": "E-Control (Austria live)",
+  "MobiData BW": "MobiData BW (Germany live)", "Nominatim": "Nominatim (backup search)",
+  "Worker requests": "Worker requests", "KV writes": "Usage saves (KV writes)",
+};
+const ORS_LABELS = { directions: "Routes", matrix: "Detours (matrix)", "geocode/search": "Place search", "geocode/reverse": "Place names" };
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n) => Number(n).toLocaleString("en-GB");
+
+function bar(used, limit) {
+  const pct = limit ? Math.min(100, (used / limit) * 100) : 0;
+  const cls = pct >= 90 ? "bad" : pct >= 70 ? "warn" : "";
+  return `<div class="bar"><span class="${cls}" style="width:${pct.toFixed(1)}%"></span></div>`;
+}
+function resetText(reset) {
+  if (!reset) return "";
+  const ms = reset > 1e12 ? reset : reset * 1000; // seconds or milliseconds
+  const d = new Date(ms);
+  if (isNaN(d)) return "";
+  return `resets ${d.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}`;
+}
+function ago(iso) {
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+}
+
+function render(d) {
+  const todayRec = d.days.find((x) => x.day === d.today) || { calls: {}, ors: {} };
+  // Today = saved + not yet saved.
+  const calls = { ...todayRec.calls };
+  for (const [k, n] of Object.entries(d.unsaved.calls || {})) calls[k] = (calls[k] || 0) + n;
+  const ors = { ...todayRec.ors };
+  for (const [k, v] of Object.entries(d.unsaved.ors || {})) if (!ors[k] || ors[k].at < v.at) ors[k] = v;
+
+  let html = "";
+  if (!d.stored) {
+    html += `<div class="card note small">Counts aren't saved yet, so they reset whenever Cloudflare restarts the Worker.
+      Add the KV namespace (binding <b>USAGE</b>) to keep them.</div>`;
+  }
+
+  html += `<h2>OpenRouteService quota</h2>`;
+  const orsKeys = Object.keys(ors);
+  if (!orsKeys.length) {
+    html += `<div class="card small muted">No quota reported yet today. It appears after the next route is planned.</div>`;
+  }
+  for (const k of orsKeys) {
+    const q = ors[k];
+    const used = q.limit != null && q.remaining != null ? q.limit - q.remaining : null;
+    html += `<div class="card">
+      <div class="row"><span class="name">${esc(ORS_LABELS[k] || k)}</span>
+        <span class="num">${used != null ? `${fmt(used)} / ${fmt(q.limit)}` : q.remaining != null ? `${fmt(q.remaining)} left` : "?"}</span></div>
+      ${used != null ? bar(used, q.limit) : ""}
+      <div class="small muted">${[resetText(q.reset), `as of ${ago(q.at)}`].filter(Boolean).join(" · ")}</div>
+    </div>`;
+  }
+
+  html += `<h2>Today</h2>`;
+  const order = Object.keys(LABELS).filter((k) => calls[k] != null);
+  for (const k of Object.keys(calls)) if (!order.includes(k)) order.push(k);
+  if (!order.length) html += `<div class="card small muted">Nothing counted yet today.</div>`;
+  for (const k of order) {
+    const lim = KNOWN_LIMITS[k];
+    html += `<div class="card">
+      <div class="row"><span class="name">${esc(LABELS[k] || k)}</span>
+        <span class="num">${fmt(calls[k])}${lim ? ` / ${fmt(lim.limit)}` : ""}</span></div>
+      ${lim ? bar(calls[k], lim.limit) + `<div class="small muted">${esc(lim.note)}</div>` : `<div class="small muted">${["Routing", "Matrix", "Geocoder"].includes(k) ? "Limit: see quota above" : "No daily limit published"}</div>`}
+    </div>`;
+  }
+
+  if (d.days.length > 1) {
+    const days = d.days.slice().reverse();
+    const keys = [...new Set(days.flatMap((x) => Object.keys(x.calls || {})))];
+    html += `<h2>Last 7 days</h2><div class="table-wrap"><table>
+      <thead><tr><th>Source</th>${days.map((x) => `<th>${new Date(x.day).toLocaleDateString([], { weekday: "short", day: "numeric" })}</th>`).join("")}</tr></thead>
+      <tbody>${keys.map((k) => `<tr><td>${esc(LABELS[k] || k)}</td>${days.map((x) => `<td>${x.calls?.[k] != null ? fmt(x.calls[k]) : "–"}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table></div>`;
+  }
+  html += `<p class="small muted" style="margin-top:18px">Days run in UTC. Cloudflare can run several copies of the Worker;
+    each saves its own count, so Worker and source counts are close, not exact. OpenRouteService figures come from ORS itself.</p>`;
+  $("out").innerHTML = html;
+}
+
+async function load() {
+  const token = $("pw").value.trim();
+  if (!token) return;
+  $("msg").hidden = true;
+  $("out").innerHTML = `<p class="muted">Loading…</p>`;
+  try {
+    const res = await fetch(`${WORKER}/admin/usage`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    try { localStorage.setItem(KEY, token); } catch (_) {}
+    render(data);
+  } catch (e) {
+    $("out").innerHTML = "";
+    $("msg").textContent = e.message;
+    $("msg").hidden = false;
+  }
+}
+
+$("login").addEventListener("submit", (e) => { e.preventDefault(); load(); });
+try { const t = localStorage.getItem(KEY); if (t) { $("pw").value = t; load(); } } catch (_) {}
+</script>
+</body>
+</html>

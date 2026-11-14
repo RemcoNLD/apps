@@ -8,6 +8,7 @@
 //   POST /status                {stations:[{id, lat, lon, country}]}
 //                               -> live availability per station (NL only in phase 1)
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
+//   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /debug/ndw?lat=&lon=   raw Dutch (NDW) data around a point, to tune the parser
 //   GET  /debug/ocm-operator    shows which Open Charge Map operator ID is used for Ionity
 //   GET  /debug/ocm-ionity      Ionity sites Open Charge Map knows in a box (default: NL)
@@ -18,6 +19,9 @@
 //   ORS_API_KEY   OpenRouteService / HeiGIT key
 //   OCM_API_KEY   Open Charge Map key
 //   ECONTROL_API_KEY  Austrian charging register (E-Control) key
+//   ADMIN_TOKEN   password for the usage page (admin.html)
+// Optional KV binding
+//   USAGE         keeps the usage counts per day (without it they live in memory only)
 // Optional plain variable
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails
 
@@ -70,7 +74,7 @@ function corsHeaders(request) {
   return {
     "Access-Control-Allow-Origin": allowed ? origin : ALLOWED_ORIGINS[0],
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Vary": "Origin",
   };
 }
@@ -86,8 +90,80 @@ class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
+// ---------------------------------------------------------------- usage counting
+// Counts calls per data source and keeps the quota OpenRouteService reports with each answer.
+// Saved to KV (binding USAGE) at most every 2 minutes, to stay well within KV's free write limit.
+const USAGE_FLUSH_MS = 2 * 60 * 1000;
+const usage = { pending: {}, ors: {}, lastFlush: Date.now(), kvWrites: 0 };
+const today = () => new Date().toISOString().slice(0, 10);
+function countCall(source, n = 1) { usage.pending[source] = (usage.pending[source] || 0) + n; }
+
+function orsService(url) {
+  const m = String(url).match(/\/v2\/(directions|matrix|isochrones)|\/pelias\/v1\/(search|reverse|autocomplete)/);
+  return m ? (m[1] || `geocode/${m[2]}`) : null;
+}
+function noteQuota(url, res) {
+  const svc = orsService(url);
+  if (!svc) return;
+  const limit = res.headers.get("x-ratelimit-limit"), remaining = res.headers.get("x-ratelimit-remaining");
+  if (limit == null && remaining == null) return;
+  const reset = res.headers.get("x-ratelimit-reset");
+  usage.ors[svc] = {
+    limit: limit != null ? Number(limit) : null,
+    remaining: remaining != null ? Number(remaining) : null,
+    reset: reset != null ? Number(reset) : null, // as ORS reports it (epoch seconds)
+    at: new Date().toISOString(),
+  };
+}
+
+async function readUsageDay(env, day) {
+  if (!env.USAGE) return null;
+  try { return JSON.parse((await env.USAGE.get(`usage:${day}`)) || "null"); } catch { return null; }
+}
+async function flushUsage(env, force = false) {
+  if (!env.USAGE) return;
+  if (!force && Date.now() - usage.lastFlush < USAGE_FLUSH_MS) return;
+  const pending = usage.pending, ors = usage.ors;
+  if (!Object.keys(pending).length && !Object.keys(ors).length) return;
+  usage.pending = {}; usage.lastFlush = Date.now();
+  const day = today();
+  const rec = (await readUsageDay(env, day)) || { day, calls: {}, ors: {} };
+  for (const [k, n] of Object.entries(pending)) rec.calls[k] = (rec.calls[k] || 0) + n;
+  for (const [k, v] of Object.entries(ors)) if (!rec.ors[k] || rec.ors[k].at < v.at) rec.ors[k] = v;
+  rec.calls["KV writes"] = (rec.calls["KV writes"] || 0) + 1;
+  try {
+    await env.USAGE.put(`usage:${day}`, JSON.stringify(rec), { expirationTtl: 40 * 24 * 3600 });
+  } catch (e) {
+    // Put the counts back so they're not lost.
+    for (const [k, n] of Object.entries(pending)) countCall(k, n);
+    console.log("Usage save failed", e.message);
+  }
+}
+
+async function handleUsage(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!env.ADMIN_TOKEN) throw new HttpError(503, "ADMIN_TOKEN is not set in the Worker");
+  if (auth !== `Bearer ${env.ADMIN_TOKEN}`) throw new HttpError(401, "Wrong password");
+  await flushUsage(env, true);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    const rec = await readUsageDay(env, d);
+    if (rec) days.push(rec);
+  }
+  return json(request, {
+    stored: !!env.USAGE,
+    today: today(),
+    days,
+    // Not saved yet (or no KV): this copy of the Worker's own tally since it started.
+    unsaved: { calls: usage.pending, ors: usage.ors },
+  });
+}
+
 async function fetchJson(url, init = {}, label = "upstream") {
+  countCall(label);
   const res = await fetch(url, init);
+  noteQuota(url, res);
   const text = await res.text();
   if (!res.ok) throw new HttpError(502, `${label} returned ${res.status}: ${text.slice(0, 300)}`);
   try { return JSON.parse(text); }
@@ -1027,6 +1103,7 @@ async function route(request, env) {
     if (!q) throw new HttpError(400, "Add ?q=<place>");
     return json(request, { results: await geocode(env, q) });
   }
+  if (path === "/admin/usage" && request.method === "GET") return handleUsage(request, env);
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
@@ -1160,7 +1237,9 @@ async function route(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
+    if (request.method !== "OPTIONS") countCall("Worker requests");
+    ctx?.waitUntil?.(flushUsage(env).catch(() => {}));
     try {
       return await route(request, env);
     } catch (e) {

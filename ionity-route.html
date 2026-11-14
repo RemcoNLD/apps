@@ -159,6 +159,10 @@
   .st.full .stat strong { color: var(--full); }
   .st.offline .marker { background: var(--offline); }
   .st.offline .name, .st.offline .dist { opacity: .55; }
+  .st.stale .marker { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
+  .st.stale .stat, .st.stale .stat strong { color: var(--muted); font-weight: 700; }
+  .row.st { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .row.st:active { opacity: .7; }
   .st.nodata .marker { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
 
   .dest .marker {
@@ -257,6 +261,8 @@ const APP_VERSION = "2026-11-14.8";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
+const AUTO_STATUS = 5;              // only the next 5 chargers refresh by themselves
+const STALE_MS = 3 * 60 * 1000;     // further ones turn grey after 3 minutes; tap to refresh
 const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
 const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
@@ -347,6 +353,7 @@ async function plan(fromLonLat) {
   const data = await api("/plan", body);
   state.route = data.route;
   state.stations = data.stations;
+  for (const s of state.stations) s.statusAt = Date.now();
   state.statusAt = Date.now();
   state.user = { km: 0, min: 0, offKm: 0, acc: null, at: null };
   state.offCount = 0;
@@ -476,21 +483,40 @@ function onPosition(lonlat, accuracy) {
   render();
 }
 
+function visibleAhead() {
+  const all = upcoming();
+  return state.mySideOnly ? all.filter(onMySide) : all;
+}
+
+// Ask in small batches: each Worker call may only make a limited number of lookups.
+async function fetchStatus(stations) {
+  const list = stations.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, country: s.country }));
+  const batches = [];
+  for (let i = 0; i < list.length; i += STATUS_BATCH) batches.push(list.slice(i, i + STATUS_BATCH));
+  const status = {};
+  for (let i = 0; i < batches.length; i += 3) { // 3 batches at a time
+    const res = await Promise.all(batches.slice(i, i + 3).map((b) => api("/status", { stations: b })));
+    for (const r of res) Object.assign(status, r.status);
+  }
+  const now = Date.now();
+  for (const s of state.stations) if (s.id in status) { s.status = status[s.id]; s.statusAt = now; }
+}
+
+// Tap a charger to refresh just that one.
+async function refreshOne(id) {
+  const s = state.stations.find((x) => x.id === id);
+  if (!s || (s.loadingAt && Date.now() - s.loadingAt < 20000)) return;
+  s.loadingAt = Date.now(); render();
+  try { await fetchStatus([s]); } catch (e) { /* keeps the old (grey) value */ }
+  s.loadingAt = null; save(); render();
+}
+
 async function refreshStatus() {
-  const ahead = upcoming();
+  // Only the next few chargers refresh by themselves; further ones on request.
+  const ahead = visibleAhead().slice(0, AUTO_STATUS);
   if (!ahead.length) return;
   try {
-    // Ask in small batches: each Worker call may only make a limited number of lookups,
-    // so one big request left the far-away stations without status.
-    const list = ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, country: s.country }));
-    const batches = [];
-    for (let i = 0; i < list.length; i += STATUS_BATCH) batches.push(list.slice(i, i + STATUS_BATCH));
-    const status = {};
-    for (let i = 0; i < batches.length; i += 3) { // 3 batches at a time
-      const res = await Promise.all(batches.slice(i, i + 3).map((b) => api("/status", { stations: b })));
-      for (const r of res) Object.assign(status, r.status);
-    }
-    for (const s of state.stations) if (s.id in status) s.status = status[s.id];
+    await fetchStatus(ahead);
     state.statusAt = Date.now();
     save();
     render();
@@ -518,6 +544,10 @@ function updateScrollUi() {
   list.classList.toggle("more-above", list.scrollTop > 4);
 }
 $("list").addEventListener("scroll", updateScrollUi, { passive: true });
+$("list").addEventListener("click", (e) => {
+  const row = e.target.closest(".row.st[data-id]");
+  if (row) refreshOne(row.dataset.id);
+});
 $("more").addEventListener("click", () => {
   const list = $("list");
   list.scrollTo({ top: list.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -621,7 +651,11 @@ function statusInfo(s) {
 }
 
 function stationRow(s) {
-  const info = statusInfo(s);
+  let info = statusInfo(s);
+  const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
+  const stale = !state.autoIds?.has(s.id) && (!s.statusAt || Date.now() - s.statusAt > STALE_MS);
+  if (loading) info = { cls: "stale", text: `<span title="Updating">…</span>` };
+  else if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="Tap to check">↻</span>` };
   const km = s.alongKm - state.user.km;
   const min = s.alongMin - state.user.min;
   const kw = s.status?.maxKw || s.maxKw;
@@ -633,7 +667,7 @@ function stationRow(s) {
   const sd = sideOf(s);
   const side = sd === "right" ? `<span class="side right" title="On your side of the road">Right</span>`
     : sd === "left" ? `<span class="side left" title="On the other side of the road">Left</span>` : "";
-  return `<div class="row st ${info.cls}">
+  return `<div class="row st ${info.cls}" data-id="${esc(s.id)}" role="button" title="Tap to update this charger">
     <span class="marker" aria-hidden="true"></span>
     <div><div class="name"><span class="label">${esc(shortName(s.name))}</span><span class="stat">${info.text}</span></div>
       <div class="sub meta">${side}${detour}${country}${kw && info.cls !== "offline" ? `<span>${kw} kW</span>` : ""}</div></div>
@@ -659,7 +693,8 @@ function render() {
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcoming();
-  const ahead = state.mySideOnly ? all.filter(onMySide) : all;
+  const ahead = visibleAhead();
+  state.autoIds = new Set(ahead.slice(0, AUTO_STATUS).map((s) => s.id));
   const hiddenCount = all.length - ahead.length;
   const list = $("list");
   const fromBottom = list.scrollHeight - list.scrollTop - list.clientHeight;

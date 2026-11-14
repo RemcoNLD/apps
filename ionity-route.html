@@ -160,8 +160,8 @@
   .name { font-size: 1.35rem; font-weight: 800; line-height: 1.1; display: flex; align-items: baseline; gap: 10px; white-space: nowrap; overflow: hidden; }
   .name .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .name .detour, .name .country { flex-shrink: 0; }
-  .name .stat { flex-shrink: 0; margin-left: auto; font-size: 1.3rem; font-weight: 600; color: var(--muted); }
-  .name .stat strong { font-weight: 800; }
+  .stat { flex-shrink: 0; font-size: 1.3rem; font-weight: 600; color: var(--muted); line-height: 1; }
+  .stat strong { font-weight: 800; }
   .sub.meta { display: flex; align-items: center; gap: 10px; }
   .sub.meta > * { flex-shrink: 0; }
   .sub.meta .side { margin-right: 0; }
@@ -341,7 +341,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.16";
+const APP_VERSION = "2026-11-14.17";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -1035,8 +1035,8 @@ function stationRow(s, change, after) {
   return `<div class="row st ${info.cls}" data-id="${esc(s.id)}" role="button" title="Tap to update this charger">
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
     <span class="marker" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
-    <div><div class="name"><span class="label">${esc(shortName(s.name))}</span><span class="stat">${info.text}</span></div>
-      <div class="sub meta">${country}${kw && info.cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
+    <div><div class="name"><span class="label">${esc(shortName(s.name))}</span></div>
+      <div class="sub meta"><span class="stat">${info.text}</span>${s.road ? "" : country}${kw && info.cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
     <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}</div></div>
   </div>`;
 }

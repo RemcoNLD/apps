@@ -532,17 +532,21 @@ function roadAtIndex(route, index) {
 async function brandOperators(env) {
   const cached = memoGet("ocm-operators");
   if (cached) return cached;
-  let ops = null;
+  let ref = null;
   if (env.USAGE) {
-    try { ops = JSON.parse((await env.USAGE.get("ocm-operators")) || "null"); } catch { ops = null; }
+    try { ref = JSON.parse((await env.USAGE.get("ocm-ref-v2")) || "null"); } catch { ref = null; }
   }
-  if (!ops) {
+  if (!ref) {
     const data = await fetchJson(`${OCM_BASE}/referencedata/?output=json&key=${env.OCM_API_KEY}`, {}, "Open Charge Map");
-    ops = (data.Operators || []).map((o) => [o.ID, o.Title || ""]);
-    if (env.USAGE && ops.length) {
-      try { await env.USAGE.put("ocm-operators", JSON.stringify(ops), { expirationTtl: 7 * 24 * 3600 }); countCall("KV writes"); } catch (_) {}
+    ref = {
+      ops: (data.Operators || []).map((o) => [o.ID, o.Title || ""]),
+      countries: Object.fromEntries((data.Countries || []).map((c) => [c.ID, c.ISOCode])),
+    };
+    if (env.USAGE && ref.ops.length) {
+      try { await env.USAGE.put("ocm-ref-v2", JSON.stringify(ref), { expirationTtl: 7 * 24 * 3600 }); countCall("KV writes"); } catch (_) {}
     }
   }
+  const ops = ref.ops;
   const byBrand = {};
   for (const b of BRANDS) byBrand[b.key] = ops.filter(([, t]) => b.ocm.test(t)).map(([id, t]) => ({ id, title: t }));
   if (env.OCM_IONITY_OPERATOR_ID) byBrand.ionity = [{ id: Number(env.OCM_IONITY_OPERATOR_ID), title: "IONITY (set by hand)" }];
@@ -555,7 +559,7 @@ async function brandOperators(env) {
   }
   const idToBrand = {};
   for (const [k, list] of Object.entries(byBrand)) for (const o of list) idToBrand[o.id] ??= k;
-  const out = { byBrand, idToBrand };
+  const out = { byBrand, idToBrand, countries: ref.countries || {} };
   memoSet("ocm-operators", out, 24 * 3600 * 1000);
   return out;
 }
@@ -572,16 +576,25 @@ function isFastPoi(p) {
 let ocmLastCall = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function sitesInBox(env, box, brands = ["ionity"]) {
-  const { byBrand, idToBrand } = await brandOperators(env);
+  const { byBrand, idToBrand, countries } = await brandOperators(env);
   const ids = [...new Set(brands.flatMap((k) => (byBrand[k] || []).map((o) => o.id)))].sort((a, b) => a - b);
   if (!ids.length) return [];
   // Round outward to 0.05° so nearby lookups (route options, rerouting) reuse the same answer.
   const r = (v, up) => (up ? Math.ceil(v * 20) : Math.floor(v * 20)) / 20;
   const [minLon, minLat, maxLon, maxLat] = [r(box[0]), r(box[1]), r(box[2], true), r(box[3], true)];
-  const key = `ocm:${ids.join(",")}:${minLon},${minLat},${maxLon},${maxLat}`;
+  const key = `ocm2:${ids.join(",")}:${minLon},${minLat},${maxLon},${maxLat}`;
   const cached = memoGet(key);
   if (cached !== undefined) return cached;
-  const url = `${OCM_BASE}/poi/?output=json&compact=false&verbose=false&maxresults=2000` +
+  // Also kept a day in KV, already trimmed: a fresh copy of the Worker then doesn't download
+  // and parse thousands of chargers again (that is what runs out of the free plan's CPU and memory).
+  if (env.USAGE) {
+    try {
+      const kv = JSON.parse((await env.USAGE.get(key)) || "null");
+      if (kv) { memoSet(key, kv, 60 * 60 * 1000); return kv; }
+    } catch (_) {}
+  }
+  // compact=true leaves out the repeated reference data (operator, country objects…): far less to parse.
+  const url = `${OCM_BASE}/poi/?output=json&compact=true&verbose=false&maxresults=2000` +
     `&operatorid=${ids.join(",")}` +
     `&boundingbox=(${maxLat},${minLon}),(${minLat},${maxLon})&key=${env.OCM_API_KEY}`;
   for (let attempt = 0; ; attempt++) {
@@ -590,10 +603,25 @@ async function sitesInBox(env, box, brands = ["ionity"]) {
     ocmLastCall = Date.now();
     try {
       const data = await fetchJson(url, {}, "Open Charge Map");
-      const list = (Array.isArray(data) ? data : [])
-        .map((p) => ({ ...p, _brand: idToBrand[p.OperatorID] || null }))
-        .filter((p) => p._brand && (p._brand === "ionity" || isFastPoi(p)));
+      // Keep only what the app uses, in the same shape as before.
+      const list = [];
+      for (const p of Array.isArray(data) ? data : []) {
+        const brand = idToBrand[p.OperatorID];
+        if (!brand || (brand !== "ionity" && !isFastPoi(p))) continue;
+        const a = p.AddressInfo || {};
+        list.push({
+          ID: p.ID, OperatorID: p.OperatorID, NumberOfPoints: p.NumberOfPoints || null, _brand: brand,
+          AddressInfo: {
+            Title: a.Title, AddressLine1: a.AddressLine1, Town: a.Town, Latitude: a.Latitude, Longitude: a.Longitude,
+            Country: { ISOCode: a.Country?.ISOCode || countries[a.CountryID] || null },
+          },
+          Connections: (p.Connections || []).map((c) => ({ PowerKW: c.PowerKW ?? null })),
+        });
+      }
       memoSet(key, list, 60 * 60 * 1000);
+      if (env.USAGE) {
+        try { await env.USAGE.put(key, JSON.stringify(list), { expirationTtl: 24 * 3600 }); countCall("KV writes"); } catch (_) {}
+      }
       return list;
     } catch (e) {
       if (attempt < 2 && /returned 429/.test(e.message)) { await sleep(1500 * (attempt + 1)); continue; }

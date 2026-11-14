@@ -577,7 +577,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.27";
+const APP_VERSION = "2026-11-14.28";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -654,10 +654,20 @@ const state = {
 
 // ------------------------------------------------------------- API
 
+// A dropped connection (Safari: "Load failed") gets one more try after a short pause.
+// If the server is busy, a second try usually works.
 async function api(path, body) {
-  const res = await fetch(WORKER + path, body
+  const opts = body
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-    : {});
+    : {};
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    try { res = await fetch(WORKER + path, opts); break; }
+    catch (e) {
+      if (attempt >= 1) throw new Error("Couldn’t reach the server. Please try again in a moment.");
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `The server answered ${res.status}`);
   return data;

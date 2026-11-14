@@ -800,6 +800,26 @@ async function route(request, env) {
       others: locs.filter((l) => !isIonityLoc(l)).map((l) => ({ name: l.name, operator: l.operator?.name, source: l.source })),
     });
   }
+  if (path === "/debug/detour" && request.method === "GET") {
+    // /debug/detour?name=dietmannsried&from=47.99,10.18&to=47.72,10.31  (from/to as lat,lon)
+    const name = (url.searchParams.get("name") || "").trim().toLowerCase();
+    const ll = (k) => (url.searchParams.get(k) || "").split(",").map(Number);
+    const [fLat, fLon] = ll("from"), [tLat, tLon] = ll("to");
+    if (!name || ![fLat, fLon, tLat, tLon].every(Number.isFinite)) throw new HttpError(400, "Add ?name=..&from=lat,lon&to=lat,lon");
+    const route = await getRoute(env, [[fLon, fLat], [tLon, tLat]]);
+    const pois = await ionityAlongRoute(env, route, 5);
+    const hit = pois.find((p) => (p.AddressInfo?.Title || "").toLowerCase().includes(name));
+    if (!hit) return json(request, { error: "Not found along this route", found: pois.map((p) => p.AddressInfo?.Title) });
+    const a = hit.AddressInfo, proj = projectOnRoute([a.Longitude, a.Latitude], route);
+    const st = { id: "x", lat: a.Latitude, lon: a.Longitude, alongKm: proj.alongKm };
+    const det = await detours(env, route, [st]);
+    return json(request, {
+      title: a.Title, lat: a.Latitude, lon: a.Longitude,
+      offRouteKm: Math.round(proj.offRouteKm * 1000) / 1000,
+      road: roadAtIndex(route, proj.index),
+      detourMinRaw: det.get("x") ?? null,
+    });
+  }
   if (path === "/debug/ocm-operator" && request.method === "GET") {
     return json(request, { ionityOperatorId: await ionityOperatorId(env) });
   }

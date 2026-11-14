@@ -269,7 +269,14 @@ const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
 // Every charging stop costs a little time to pull in and out (exit lane, slow road through the
 // service area, merging again). That isn't a detour, so it's taken off before showing "+N".
 const PULL_IN_MIN = 2;
-function detourOf(s) { return s.detourMin == null ? null : Math.max(0, s.detourMin - PULL_IN_MIN); }
+// Only for chargers right next to the motorway (a service area). A charger beyond an exit
+// (Autohof, town) costs you the exit and the way back, and that is the detour itself.
+const SERVICE_AREA_KM = 0.25;
+function detourOf(s) {
+  if (s.detourMin == null) return null;
+  const pullIn = s.offRouteKm != null && s.offRouteKm <= SERVICE_AREA_KM ? PULL_IN_MIN : 0;
+  return Math.max(0, s.detourMin - pullIn);
+}
 const OFF_ROUTE_KM = 1.0;
 const MY_SIDE_MAX_DETOUR = 5; // minutes; stations without a side badge stay visible up to this detour
 const MY_SIDE_KEY = "ionity-route-myside";

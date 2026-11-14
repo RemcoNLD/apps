@@ -68,6 +68,15 @@
     background: var(--asphalt-raised); border: 2px solid transparent; border-radius: 10px;
   }
   .input:focus { border-color: var(--sign-blue); outline: none; }
+  .input-wrap { position: relative; }
+  .input-wrap .input { padding-right: 52px; }
+  .input::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+  .clear-btn {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px;
+    display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--muted); padding: 0;
+  }
+  .clear-btn svg { width: 22px; height: 22px; }
+  .clear-btn:active { background: var(--asphalt); }
   .hint { color: var(--muted); font-size: .9rem; margin-top: 6px; }
   .results { list-style: none; margin: 6px 0 0; padding: 0; }
   .results button {
@@ -100,6 +109,17 @@
   }
   .opt.current { border-color: var(--sign-blue); }
   .opt:active { opacity: .8; }
+  /* After tapping a card: it stays, marked, while the route is planned */
+  #optionsBody.busy .opt { pointer-events: none; }
+  #optionsBody.busy .opt:not(.picked) { opacity: .4; }
+  .opt.picked { border-color: var(--sign-blue); }
+  .opt-top .tag.busy { color: var(--sign-blue); display: inline-flex; align-items: center; gap: 8px; }
+  .spinner {
+    width: 16px; height: 16px; border-radius: 50%; border: 3px solid currentColor; border-right-color: transparent;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
   .opt-top { display: flex; align-items: baseline; gap: 10px; font-size: 1.35rem; font-weight: 800; }
   .opt-top .km { color: var(--muted); font-weight: 600; font-size: 1.05rem; }
   .opt-top .tag { margin-left: auto; font-size: .95rem; font-weight: 800; }
@@ -314,8 +334,12 @@
   .name .logo { align-self: center; }
   .name { gap: 8px; }
   /* Several brands at one site: one small line per brand on the right */
-  .avail.multi { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 3px; }
-  .avail.multi .ml { display: flex; align-items: center; gap: 6px; }
+  /* Logos in one column, counts right-aligned in the next */
+  .avail.multi { display: grid; grid-template-columns: auto auto; justify-content: end; align-items: center; gap: 3px 7px; }
+  .avail.multi .ml { display: contents; }
+  .avail.multi .stat { text-align: right; }
+  .avail.multi .more { grid-column: 1 / -1; text-align: right; }
+  .logo.spacer { visibility: hidden; }
   .avail.multi .stat { font-size: 1.2rem; letter-spacing: 0; }
   .avail.multi.n3 .stat { font-size: 1.02rem; }
   .avail.multi.n3 .logo { width: 17px; height: 17px; }
@@ -406,16 +430,16 @@
   <p class="lede">Fast chargers along your route, Ionity and any others you pick, with how many are free and how much of a detour each one is.</p>
 
   <label class="field" for="to">Destination</label>
-  <input id="to" class="input" type="search" placeholder="Town or address" autocomplete="off">
+  <div class="input-wrap"><input id="to" class="input" type="search" placeholder="Town or address" autocomplete="off"><button type="button" class="clear-btn" data-for="to" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
   <ul id="toResults" class="results"></ul>
 
   <label class="field" for="via">Via (optional)</label>
-  <input id="via" class="input" type="search" placeholder="A town to drive through" autocomplete="off">
+  <div class="input-wrap"><input id="via" class="input" type="search" placeholder="A town to drive through" autocomplete="off"><button type="button" class="clear-btn" data-for="via" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
   <div class="hint">Choose your own way, for example via Luxembourg instead of Brussels.</div>
   <ul id="viaResults" class="results"></ul>
 
   <label class="field" for="from">Start</label>
-  <input id="from" class="input" type="search" placeholder="Your current location" autocomplete="off">
+  <div class="input-wrap"><input id="from" class="input" type="search" placeholder="Your current location" autocomplete="off"><button type="button" class="clear-btn" data-for="from" aria-label="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor" opacity=".25"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button></div>
   <div class="hint">Leave empty to start from where you are now.</div>
   <ul id="fromResults" class="results"></ul>
 
@@ -491,7 +515,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.23";
+const APP_VERSION = "2026-11-14.24";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -599,11 +623,25 @@ function wireSearch(inputId, listId, key) {
         b.setAttribute("aria-pressed", "true");
         state[key] = results[+b.dataset.i];
         input.value = state[key].label.split(",")[0];
+        list.innerHTML = ""; // chosen: the suggestions go away
+        input.blur();
+        syncClear();
         updatePlanBtn();
       }));
     } catch (e) { list.innerHTML = `<li class="error">${esc(e.message)}</li>`; }
   }, 350);
-  input.addEventListener("input", search);
+  const clear = document.querySelector(`.clear-btn[data-for="${inputId}"]`);
+  const syncClear = () => { clear.hidden = !input.value; };
+  input.addEventListener("input", () => { syncClear(); search(); });
+  clear.addEventListener("click", () => {
+    input.value = "";
+    state[key] = null;
+    list.innerHTML = "";
+    syncClear();
+    updatePlanBtn();
+    input.focus();
+  });
+  syncClear();
 }
 
 function updatePlanBtn() {
@@ -674,10 +712,26 @@ function chooseRoute(options, { title, hint, current } = {}) {
     $("optionsBody").innerHTML = (hint ? `<p class="hint">${hint}</p>` : "") +
       options.map((o, i) => optionCard(o, i, fastestMin, current && o.signature === current)).join("");
     $("options").hidden = false;
-    const done = (v) => { $("options").hidden = true; $("optionsBody").onclick = null; $("optionsClose").onclick = null; resolve(v); };
-    $("optionsBody").onclick = (e) => { const b = e.target.closest(".opt"); if (b) done(options[+b.dataset.i]); };
+    $("optionsBody").classList.remove("busy");
+    const done = (v) => { $("optionsBody").onclick = null; $("optionsClose").onclick = null; if (!v) closeOptions(); resolve(v); };
+    $("optionsBody").onclick = (e) => {
+      const b = e.target.closest(".opt");
+      if (!b) return;
+      // Keep the cards on screen and show this one being planned; the caller closes the sheet.
+      b.classList.add("picked");
+      const tag = b.querySelector(".tag");
+      if (tag) { tag.className = "tag busy"; tag.innerHTML = `<span class="spinner" aria-hidden="true"></span>Planning…`; }
+      $("optionsBody").classList.add("busy");
+      $("optionsClose").onclick = null;
+      done(options[+b.dataset.i]);
+    };
     $("optionsClose").onclick = () => done(null);
   });
+}
+
+function closeOptions() {
+  $("options").hidden = true;
+  $("optionsBody").classList.remove("busy");
 }
 
 function showOptionsLoading(title) {
@@ -705,15 +759,17 @@ $("destRow").addEventListener("click", async () => {
       hint: options.length > 1 ? "Your current route is outlined. Tap another to switch." : "No other sensible route found from here.",
       current: cur,
     });
-    if (!pick || pick.signature === cur) return;
+    if (!pick || pick.signature === cur) return closeOptions();
     useOption(pick);
-    showBanner("Switching route…");
     await plan(from);
+    closeOptions();
     state.stickToBottom = true;
     showBanner(`New route via ${roadsAhead().map((r) => r.ref).join(" › ")}`, { ok: true, hideAfter: 8000 });
     render();
   } catch (e) {
-    $("optionsBody").innerHTML = `<p class="error">Couldn’t find routes: ${esc(e.message)}</p>`;
+    $("optionsBody").classList.remove("busy");
+    $("optionsClose").onclick = closeOptions;
+    $("optionsBody").innerHTML = `<p class="error">Couldn’t ${$("optionsBody").querySelector(".picked") ? "switch route" : "find routes"}: ${esc(e.message)}</p>`;
   }
 });
 
@@ -739,7 +795,9 @@ $("planBtn").addEventListener("click", async () => {
     state.hidden.clear(); saveHidden();
     await plan(from, state.brands);
     startDriving();
+    closeOptions();
   } catch (e) {
+    closeOptions();
     showStartError(e.message);
   } finally {
     btn.textContent = "Plan route"; updatePlanBtn();
@@ -1350,6 +1408,7 @@ function stationRow(site, change, after) {
     if (manyBrands) nameLogo = logoHtml(brandKey(s));
     avail = `<div class="avail"><span class="stat">${infos[0].text}</span></div>`;
   } else {
+    if (manyBrands) nameLogo = `<span class="logo spacer" aria-hidden="true"></span>`; // names line up with the rows that have a logo
     const shown = members.slice(0, 3);
     const more = members.length - shown.length;
     avail = `<div class="avail multi${shown.length >= 3 ? " n3" : ""}">${shown.map((m, i) =>

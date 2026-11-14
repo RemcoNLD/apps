@@ -108,7 +108,7 @@ function resetText(reset) {
   const ms = reset > 1e12 ? reset : reset * 1000; // seconds or milliseconds
   const d = new Date(ms);
   if (isNaN(d)) return "";
-  return `resets ${d.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}`;
+  return `resets ${d.toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}`;
 }
 function ago(iso) {
   const m = Math.round((Date.now() - new Date(iso)) / 60000);
@@ -168,7 +168,7 @@ function render(d) {
     const days = d.days.slice().reverse();
     const keys = [...new Set(days.flatMap((x) => Object.keys(x.calls || {})))];
     html += `<h2>Last 7 days</h2><div class="table-wrap"><table>
-      <thead><tr><th>Source</th>${days.map((x) => `<th>${new Date(x.day).toLocaleDateString([], { weekday: "short", day: "numeric" })}</th>`).join("")}</tr></thead>
+      <thead><tr><th>Source</th>${days.map((x) => `<th>${new Date(x.day).toLocaleDateString("en-GB", { weekday: "short", day: "numeric" })}</th>`).join("")}</tr></thead>
       <tbody>${keys.map((k) => `<tr><td>${esc(LABELS[k] || k)}</td>${days.map((x) => `<td>${x.calls?.[k] != null ? fmt(x.calls[k]) : "–"}</td>`).join("")}</tr>`).join("")}</tbody>
     </table></div>`;
   }

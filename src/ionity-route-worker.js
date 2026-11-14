@@ -566,11 +566,26 @@ async function ionityAlongRoute(env, route, corridorKm) {
 }
 
 // Detour in minutes = A->S + S->B - A->B, with A and B on the route 3 km before and after the station.
+// Detour per charger and driving direction, remembered for 6 hours: replanning, rerouting and
+// switching route options then don't use the (scarce: 500 a day) matrix quota again.
+function detourKey(route, s) {
+  const a = pointAtKm(route, s.alongKm - 3), b = pointAtKm(route, s.alongKm + 3);
+  const bearing = (Math.atan2(b[0] - a[0], b[1] - a[1]) * 180 / Math.PI + 360) % 360;
+  return `det:${s.id}:${Math.round(bearing / 45) % 8}`;
+}
+
 async function detours(env, route, stations) {
   const result = new Map();
-  const chunkSize = 8; // 24 locations per matrix call
-  for (let c = 0; c < stations.length; c += chunkSize) {
-    const chunk = stations.slice(c, c + chunkSize);
+  const todo = [];
+  for (const s of stations) {
+    const hit = memoGet(detourKey(route, s));
+    if (hit !== undefined) result.set(s.id, hit); else todo.push(s);
+  }
+  // One matrix call computes every source x destination pair: 2n x 2n for n chargers.
+  // 20 chargers = 1,600 pairs, well under the public limit of 3,500.
+  const chunkSize = 20;
+  for (let c = 0; c < todo.length; c += chunkSize) {
+    const chunk = todo.slice(c, c + chunkSize);
     const locations = [], sources = [], destinations = [];
     chunk.forEach((s, k) => {
       const A = pointAtKm(route, s.alongKm - 3);
@@ -591,7 +606,9 @@ async function detours(env, route, stations) {
         const SB = m.durations?.[2 * k + 1]?.[2 * k + 1];
         const AB = m.durations?.[2 * k]?.[2 * k + 1];
         if ([AS, SB, AB].every((v) => typeof v === "number")) {
-          result.set(s.id, Math.max(0, Math.round((AS + SB - AB) / 60)));
+          const d = Math.max(0, Math.round((AS + SB - AB) / 60));
+          result.set(s.id, d);
+          memoSet(detourKey(route, s), d, 6 * 3600 * 1000);
         }
       });
     } catch (e) {

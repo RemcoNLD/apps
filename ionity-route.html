@@ -175,6 +175,8 @@
   .side.right { color: var(--free); }
   .side.left { color: var(--muted); }
   .flag { font-size: 1.15rem; line-height: 1; }
+  .kw { display: inline-flex; align-items: center; gap: 3px; }
+  .kw svg { width: 10px; height: 15px; }
   .sub { margin-top: 4px; font-size: 1.1rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sub strong { font-weight: 800; }
   .dist { text-align: right; line-height: 1.05; }
@@ -322,7 +324,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.12";
+const APP_VERSION = "2026-11-14.13";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -917,17 +919,18 @@ function roadChange(fromKm, toKm) {
 }
 const tlBadge = (r, where) => r ? `<span class="tl-road ${where}" title="From ${Math.round(r.fromKm - state.user.km)} km">${roadPartBadge(r)}</span>` : "";
 
+const BOLT = `<svg viewBox="0 0 12 18" aria-hidden="true"><path d="M7.5 0 0 10.5h4.5L3.5 18 12 6.5H7z" fill="currentColor"/></svg>`;
 // Country code to flag emoji ("DE" -> 🇩🇪).
 function flagOf(cc) {
   return /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map((c) => 0x1f1a5 + c.charCodeAt(0))) : esc(cc);
 }
 // A small road seen from above with the charger as a dot on its left or right side.
 function sideIcon(side, title) {
-  const cx = side === "right" ? 21 : 3;
+  const chevron = side === "right" ? "19,5 23,9 19,13" : "5,5 1,9 5,13";
   return `<span class="side ${side}" title="${title}" role="img" aria-label="${title}"><svg viewBox="0 0 24 18" aria-hidden="true">
     <rect x="7" y="0" width="10" height="18" rx="1.5" fill="currentColor" opacity=".4"/>
     <line x1="12" y1="1" x2="12" y2="17" stroke="currentColor" stroke-width="1.4" stroke-dasharray="3 2.5" opacity=".7"/>
-    <circle cx="${cx}" cy="9" r="3.6" fill="currentColor"/></svg></span>`;
+    <polyline points="${chevron}" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
 }
 
 function stationRow(s, change, after) {
@@ -951,7 +954,7 @@ function stationRow(s, change, after) {
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
     <span class="marker" aria-hidden="true"></span>
     <div><div class="name"><span class="label">${esc(shortName(s.name))}</span><span class="stat">${info.text}</span></div>
-      <div class="sub meta">${side}${country}${kw && info.cls !== "offline" ? `<span>${kw} kW</span>` : ""}</div></div>
+      <div class="sub meta">${side}${country}${kw && info.cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
     <div class="dist"><div class="km">${fmtKm(km)}<small>km</small></div><div class="min">${fmtMin(min)}${detour}</div></div>
   </div>`;
 }

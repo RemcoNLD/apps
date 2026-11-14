@@ -1395,11 +1395,14 @@ async function fetchWithTimeout(url, init, ms) {
   const t = setTimeout(() => ctl.abort(), ms);
   try { return await fetch(url, { ...init, signal: ctl.signal }); } finally { clearTimeout(t); }
 }
+let overpassGood = 0;
 async function serviceAreasNear(points) {
   const parts = points.map((x) => `nwr[highway~"^(services|rest_area)$"][name](around:800,${x.lat.toFixed(5)},${x.lon.toFixed(5)});`).join("");
   const q = `[out:json][timeout:10];(${parts});out geom 40;`;
   let data = null, lastErr = null;
-  for (const url of OVERPASS_MIRRORS) {
+  // Start with the mirror that answered last time (this copy of the Worker remembers it).
+  const order = [...OVERPASS_MIRRORS.slice(overpassGood), ...OVERPASS_MIRRORS.slice(0, overpassGood)];
+  for (const url of order) {
     countCall("Overpass");
     try {
       const res = await fetchWithTimeout(url, {
@@ -1409,6 +1412,7 @@ async function serviceAreasNear(points) {
       }, 7000);
       if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
       data = await res.json();
+      overpassGood = OVERPASS_MIRRORS.indexOf(url);
       break;
     } catch (e) {
       lastErr = e;

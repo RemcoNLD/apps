@@ -132,7 +132,13 @@ function render(d) {
   html += `<h2>OpenRouteService quota</h2>`;
   const orsKeys = Object.keys(ors);
   if (!orsKeys.length) {
-    html += `<div class="card small muted">No quota reported yet today. It appears after the next route is planned.</div>`;
+    const hdr = d.orsHeaders || {};
+    const keys = Object.keys(hdr);
+    html += keys.length
+      ? `<div class="card small muted">OpenRouteService answered, but without a recognised quota. What it sent:<br>${
+          keys.map((k) => `<b>${esc(ORS_LABELS[k] || k)}</b>: ${Object.keys(hdr[k].headers || {}).length
+            ? Object.entries(hdr[k].headers).map(([h, v]) => `${esc(h)} = ${esc(v)}`).join(", ") : "no quota headers"}`).join("<br>")}</div>`
+      : `<div class="card small muted">No quota reported yet today. It appears after the next route is planned.</div>`;
   }
   for (const k of orsKeys) {
     const q = ors[k];

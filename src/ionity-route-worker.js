@@ -94,7 +94,7 @@ class HttpError extends Error {
 // Counts calls per data source and keeps the quota OpenRouteService reports with each answer.
 // Saved to KV (binding USAGE) at most every 2 minutes, to stay well within KV's free write limit.
 const USAGE_FLUSH_MS = 2 * 60 * 1000;
-const usage = { pending: {}, ors: {}, lastFlush: Date.now(), kvWrites: 0 };
+const usage = { pending: {}, ors: {}, orsHeaders: {}, lastFlush: Date.now(), kvWrites: 0 };
 const today = () => new Date().toISOString().slice(0, 10);
 function countCall(source, n = 1) { usage.pending[source] = (usage.pending[source] || 0) + n; }
 
@@ -105,9 +105,15 @@ function orsService(url) {
 function noteQuota(url, res) {
   const svc = orsService(url);
   if (!svc) return;
-  const limit = res.headers.get("x-ratelimit-limit"), remaining = res.headers.get("x-ratelimit-remaining");
+  // Keep whatever quota-like headers the service sends, to see what it reports.
+  const seen = {};
+  for (const [k, v] of res.headers) if (/rate|limit|quota|remaining|reset/i.test(k)) seen[k] = v;
+  usage.orsHeaders[svc] = { headers: seen, status: res.status, at: new Date().toISOString() };
+  const h = (...names) => { for (const n of names) { const v = res.headers.get(n); if (v != null) return v; } return null; };
+  const limit = h("x-ratelimit-limit", "ratelimit-limit", "x-rate-limit-limit");
+  const remaining = h("x-ratelimit-remaining", "ratelimit-remaining", "x-rate-limit-remaining");
   if (limit == null && remaining == null) return;
-  const reset = res.headers.get("x-ratelimit-reset");
+  const reset = h("x-ratelimit-reset", "ratelimit-reset", "x-rate-limit-reset");
   usage.ors[svc] = {
     limit: limit != null ? Number(limit) : null,
     remaining: remaining != null ? Number(remaining) : null,
@@ -130,6 +136,7 @@ async function flushUsage(env, force = false) {
   const rec = (await readUsageDay(env, day)) || { day, calls: {}, ors: {} };
   for (const [k, n] of Object.entries(pending)) rec.calls[k] = (rec.calls[k] || 0) + n;
   for (const [k, v] of Object.entries(ors)) if (!rec.ors[k] || rec.ors[k].at < v.at) rec.ors[k] = v;
+  rec.orsHeaders = { ...(rec.orsHeaders || {}), ...usage.orsHeaders };
   rec.calls["KV writes"] = (rec.calls["KV writes"] || 0) + 1;
   try {
     await env.USAGE.put(`usage:${day}`, JSON.stringify(rec), { expirationTtl: 40 * 24 * 3600 });
@@ -157,6 +164,7 @@ async function handleUsage(request, env) {
     days,
     // Not saved yet (or no KV): this copy of the Worker's own tally since it started.
     unsaved: { calls: usage.pending, ors: usage.ors },
+    orsHeaders: { ...((days[0] && days[0].orsHeaders) || {}), ...usage.orsHeaders },
   });
 }
 
@@ -1263,13 +1271,17 @@ async function route(request, env) {
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== "OPTIONS") countCall("Worker requests");
-    ctx?.waitUntil?.(flushUsage(env).catch(() => {}));
+    // Save the tally after answering: straight away after planning (rare, many calls),
+    // otherwise at most every 2 minutes. A new deploy discards anything not yet saved.
+    const urgent = /^\/(plan|alternatives|geocode)/.test(new URL(request.url).pathname);
     try {
       return await route(request, env);
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
       console.log("Error", status, e.message);
       return json(request, { error: e.message }, status);
+    } finally {
+      ctx?.waitUntil?.(flushUsage(env, urgent).catch(() => {}));
     }
   },
 };

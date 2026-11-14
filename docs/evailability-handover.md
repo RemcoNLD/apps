@@ -6,7 +6,7 @@ A web app for the phone that shows the fast chargers along a driving route, with
 - **Usage page:** https://remconld.github.io/apps/admin.html
 - **Server (proxy):** https://ionity.remco-dv.workers.dev
 - **Code:** GitHub repo `RemcoNLD/apps` (branch `main`)
-- **State at the last update:** app `2026-11-14.50`, Worker deployed from commit of the same day. Open items: section 10.
+- **State at the last update:** app `2026-11-14.58`, Worker deployed from commit of the same day. Open items: section 10. France: section 11.
 
 No passwords, keys or tokens are in this document or in the repo. Where they're needed, this document names the secret and says where to set it.
 
@@ -45,6 +45,8 @@ Why a Worker: the browser can't hold API keys safely, several sources don't allo
 | `admin.html` | Usage page (calls per source per day against the free-tier limits). |
 | `index.html` | The apps page that links to the apps. |
 | `docs/evailability-handover.md` | This document. |
+| `data/fr-fast-sites.json` | France: fast sites of the app's brands with their charge-point ids (section 11). |
+| `tools/build-fr-index.py` | Builds that file from the national French charger file. |
 
 ---
 
@@ -296,3 +298,30 @@ The app, files, texts and device storage are renamed. The Worker still runs as `
 - Live status for Belgium (Eco-Movement token) and France; NDW-style second source for Germany (MobiData BW).
 - CarPlay / car display as a "secondary screen" beside the navigation is the main use case; a native wrapper would be needed for CarPlay.
 
+
+---
+
+## 11. France (in progress)
+
+**Source.** The National Access Point transport.data.gouv.fr (Licence Ouverte 2.0, attribution required) publishes two national files:
+- static, nightly: https://transport.data.gouv.fr/resources/84013/download (CSV, ~130 MB, ~180,000 charge points: position, power, operator, `id_pdc_itinerance`);
+- dynamic, live: https://transport.data.gouv.fr/resources/84098/download (CSV, ~9.5 MB, ~129,000 rows: `id_pdc_itinerance`, `etat_pdc` en_service/hors_service/inconnu, `occupation_pdc` libre/occupe/reserve/inconnu, `horodatage`). Rows can appear twice (several origins): take the newest `horodatage`. There is no geographic query: always the whole country.
+
+**Static index (done).** `data/fr-fast-sites.json`, served by GitHub Pages, is built by hand from the static file:
+1. Download the static file (and optionally the dynamic one, for a coverage report), zip them and upload them in a Claude chat, or run the script yourself.
+2. `python3 tools/build-fr-index.py <static.csv> [dynamic.csv]` (standard library only). It keeps charge points of 50 kW and up of the 11 brands in metropolitan France, recognises the brand by the start of `id_pdc_itinerance` (FRIOY/FRION Ionity, FRFAS Fastned, FRTSL Tesla, FRELC Electra, FRIZF Izivia, FRHPC/FRTCB TotalEnergies, FRALL/FREVC Allego, FRPD1 Powerdot, FRSHE Shell) or else by operator name, and merges stations of one brand within 150 m into one site.
+3. Commit the new JSON. Refresh monthly or before a trip to France.
+
+Format: `{built, source, licence, fields, sites:[[brand, lat, lon, maxKw, name, [pdcIds]]]}`.
+Build of 14 Nov 2026: 3,943 sites, 25,923 fast points, 710 kB (172 kB gzipped). Ionity 174 sites, Tesla 285, Fastned 65, TotalEnergies 411, Electra 417, Izivia 992, Powerdot 1,122, Allego 446, Shell 31.
+
+**What the files showed (14 Nov 2026, 22:38).**
+- Share of fast points present in the live feed: Fastned 100%, Shell 99%, Powerdot 98%, Electra 96%, Tesla 95%, Ionity 93%, TotalEnergies 92%, Izivia 65%, Allego 62%.
+- `horodatage` is the last change, not the last check, so a quiet free charger can be hours old. Median age: Tesla 0.5 h, Allego 3.3 h, Ionity 3.7 h, but Electra 207 h: Electra's states look frozen, so a site whose newest change is more than ~24 h old should show "not live".
+- Old ids stay in the static file without live data (e.g. Ionity Village Catalan Est: FRIONE4131/4132 next to the live FRIOYE… points). Count only points that are in the live feed.
+- Allego sometimes appears twice under FREVC… and FRALLEGO… with the same number tail, ~150–200 m apart (e.g. Perpignan Roussillon). To do: merge such twins and keep the id set that is live.
+- Brand patterns in the Worker's `BRANDS` miss French prefixes: Fastned FRFAS (has FLA), Izivia FRIZF (has IZI/CDO), Powerdot FRPD1 (has PWD), Shell FRSHE. Add these when France goes live.
+
+**CPU (the open question).** Scanning the whole dynamic file for the wanted ids took 17–30 ms (decode ~7–10 ms, scan ~10–20 ms) in Node 22 in a test container. The free Workers plan allows about 10 ms CPU per request, so one scan per minute per Worker copy will probably hit "exceeded CPU" now and then. Options: try it on the free plan and watch the logs; Workers Paid ($5/month, no practical CPU limit); or a trimmed snapshot made elsewhere (e.g. a Synology job).
+
+**Next steps.** (1) Decide the CPU option. (2) Worker: load the index (memory, a day), FR in `LIVE_COUNTRIES`, one shared scan of the dynamic file per minute, `frStatus` per site (free = en_service and libre among live points; full; "not live" when the newest change is > 24 h old), FR sites from the index as a second source like NDW (`ndwTiles`-style), brand prefixes above. (3) App: source label and attribution, PAN FR on the usage page, `APP_VERSION`. (4) Test on a drive in France.

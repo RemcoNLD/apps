@@ -128,6 +128,15 @@
   }
   .bar .toggle[aria-pressed="true"] { background: var(--free); border-color: var(--free); color: #fff; }
   #age { text-align: right; }
+  .bar .brands-btn {
+    display: inline-flex; align-items: center; gap: 0; padding: 4px 10px 4px 6px; border-radius: 999px;
+    border: 2px solid var(--muted); min-height: 36px;
+  }
+  .brands-btn .logo { width: 22px; height: 22px; margin-left: -6px; box-shadow: 0 0 0 2px var(--asphalt); }
+  .brands-btn .logo:first-child { margin-left: 0; }
+  .brands-btn .n { margin-left: 5px; font-size: .9rem; }
+  #brandSheet .group-title { color: var(--muted); font-weight: 700; margin: 18px 0 8px; font-size: .95rem; }
+  #brandSheet .brand-btn.add[aria-pressed="true"] { border-style: dashed; }
 
   /* The strip: one vertical road, destination at the top, you at the bottom. */
   .strip {
@@ -366,9 +375,25 @@
   <div id="optionsBody"></div>
 </div>
 
+<div class="sheet" id="brandSheet" hidden role="dialog" aria-modal="true" aria-labelledby="brandSheetTitle">
+  <div class="sheet-head">
+    <h2 id="brandSheetTitle">Brands</h2>
+    <button type="button" class="link" id="brandSheetClose">Done</button>
+  </div>
+  <div class="group-title">On this route: tap to show or hide</div>
+  <div class="brands" id="brandsShown"></div>
+  <div id="addWrap">
+    <div class="group-title">Add to this route (plans again from where you are)</div>
+    <div class="brands" id="brandsAdd"></div>
+    <button type="button" class="primary" id="addBrandsBtn" hidden>Add and replan</button>
+  </div>
+  <p class="error" id="brandSheetError" hidden></p>
+</div>
+
 <section id="drive" hidden>
   <div class="bar">
     <button id="newRoute">New route</button>
+    <button id="brandsBtn" class="brands-btn" type="button" aria-label="Choose which brands to show"></button>
     <button id="mySide" class="toggle" aria-pressed="false">Easy to reach</button>
     <span id="age"></span>
   </div>
@@ -386,7 +411,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.21";
+const APP_VERSION = "2026-11-14.22";
 const WORKER = "https://ionity.remco-dv.workers.dev";
 const STORE_KEY = "ionity-route-v1";
 const STATUS_EVERY_MS = 60 * 1000;
@@ -430,6 +455,12 @@ const BRANDS = [
 ];
 const BRAND = Object.fromEntries(BRANDS.map((b) => [b.key, b]));
 const brandKey = (s) => (BRAND[s.brand] ? s.brand : "ionity");
+const HIDDEN_KEY = "ionity-route-hidden";
+function loadHidden() {
+  try { return new Set((JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]") || []).filter((k) => BRAND[k])); }
+  catch (_) { return new Set(); }
+}
+function saveHidden() { try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...state.hidden])); } catch (_) {} }
 function loadBrands() {
   try {
     const v = JSON.parse(localStorage.getItem(BRANDS_KEY) || "null");
@@ -450,7 +481,8 @@ const state = {
   offCount: 0,
   stickToBottom: true,
   mySideOnly: localStorage.getItem(MY_SIDE_KEY) === "1",
-  brands: loadBrands(),           // follow the nearest chargers unless you've scrolled up
+  brands: loadBrands(),
+  hidden: loadHidden(),   // brands on this route you've switched off for now (no replanning)           // follow the nearest chargers unless you've scrolled up
   watchId: null, simTimer: null, statusTimer: null, wakeLock: null,
 };
 
@@ -512,8 +544,9 @@ function currentPosition() {
   });
 }
 
-async function plan(fromLonLat) {
-  const body = { from: fromLonLat, to: [state.to.lon, state.to.lat], brands: state.brands };
+// Rerouting and switching routes keep the brands of the current route; the start screen passes its own.
+async function plan(fromLonLat, brands = state.planBrands || state.brands) {
+  const body = { from: fromLonLat, to: [state.to.lon, state.to.lat], brands };
   if (state.via) body.via = [state.via.lon, state.via.lat];
   const data = await api("/plan", body);
   state.route = data.route;
@@ -623,7 +656,8 @@ $("planBtn").addEventListener("click", async () => {
       }
       btn.textContent = "Planning…";
     }
-    await plan(from);
+    state.hidden.clear(); saveHidden();
+    await plan(from, state.brands);
     startDriving();
   } catch (e) {
     showStartError(e.message);
@@ -747,8 +781,13 @@ function onPosition(lonlat, accuracy) {
   render();
 }
 
+// Chargers ahead of the brands you're showing right now.
+function upcomingShown() {
+  return upcoming().filter((s) => !state.hidden.has(brandKey(s)));
+}
+const shownBrands = () => (state.planBrands || ["ionity"]).filter((k) => !state.hidden.has(k));
 function visibleAhead() {
-  const all = upcoming();
+  const all = upcomingShown();
   return state.mySideOnly ? all.filter(onMySide) : all;
 }
 
@@ -1224,7 +1263,7 @@ function stationRow(site, change, after) {
     ? `<span class="dmin${reach === "roundtrip" ? " round" : ""}" title="${dm} minutes extra to get there and back">+${dm}</span>` : "";
   const country = s.country ? `<span class="flag" title="${esc(s.country)}">${flagOf(s.country)}</span>` : "";
   const side = reachMark(reach, sideOf(quick) || quick._exitSide);
-  const manyBrands = (state.planBrands || state.brands).length > 1;
+  const manyBrands = shownBrands().length > 1;
   let avail, nameLogo = "";
   if (members.length === 1) {
     if (manyBrands) nameLogo = logoHtml(brandKey(s));
@@ -1246,8 +1285,16 @@ function stationRow(site, change, after) {
   </div>`;
 }
 
+function renderBrandsBtn() {
+  const shown = shownBrands();
+  const logos = shown.slice(0, 3).map(logoHtml).join("");
+  $("brandsBtn").innerHTML = `${logos}${shown.length > 3 ? `<span class="n">+${shown.length - 3}</span>` : ""}`;
+  $("brandsBtn").title = `Showing ${shown.map((k) => BRAND[k].name).join(", ")}`;
+}
+
 function render() {
   if (!state.route) return;
+  renderBrandsBtn();
   const r = state.route, u = state.user;
   const leftKm = r.distanceKm - u.km;
   const leftMin = r.min[r.min.length - 1] - u.min;
@@ -1264,7 +1311,7 @@ function render() {
     <div><div class="name">You</div><div class="sub">${gps}${roadNow() ? `&ensp;${roadPartBadge(roadNow())}` : ""}</div></div><div></div>`;
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
-  const all = upcoming();
+  const all = upcomingShown();
   const ahead = sitesOf(visibleAhead());
   const hiddenCount = sitesOf(all).length - ahead.length;
   const list = $("list");
@@ -1335,6 +1382,75 @@ $("version").textContent = APP_VERSION;
 $("checkUpdate").addEventListener("click", () => checkForUpdate(true));
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(false); });
 checkForUpdate(false);
+
+// While driving: show or hide the brands on this route straight away; adding new ones replans.
+let pendingAdd = new Set();
+function renderBrandSheet() {
+  const planned = state.planBrands || ["ionity"];
+  $("brandsShown").innerHTML = planned.map((k) =>
+    `<button type="button" class="brand-btn" data-k="${k}" aria-pressed="${!state.hidden.has(k)}">${logoHtml(k)}${esc(BRAND[k].name)}</button>`).join("");
+  const others = BRANDS.filter((b) => !planned.includes(b.key));
+  $("addWrap").hidden = !others.length;
+  $("brandsAdd").innerHTML = others.map((b) =>
+    `<button type="button" class="brand-btn add" data-k="${b.key}" aria-pressed="${pendingAdd.has(b.key)}">${logoHtml(b.key)}${esc(b.name)}</button>`).join("");
+  $("addBrandsBtn").hidden = !pendingAdd.size;
+  $("addBrandsBtn").textContent = pendingAdd.size === 1 ? "Add and replan" : `Add ${pendingAdd.size} and replan`;
+}
+function closeBrandSheet() {
+  pendingAdd.clear();
+  $("brandSheet").hidden = true;
+  $("brandSheetError").hidden = true;
+}
+$("brandsBtn").addEventListener("click", () => {
+  pendingAdd.clear();
+  renderBrandSheet();
+  $("brandSheet").hidden = false;
+});
+$("brandSheetClose").addEventListener("click", closeBrandSheet);
+$("brandsShown").addEventListener("click", (e) => {
+  const btn = e.target.closest(".brand-btn");
+  if (!btn) return;
+  const k = btn.dataset.k;
+  if (!state.hidden.has(k) && shownBrands().length === 1) return; // keep at least one
+  if (state.hidden.has(k)) state.hidden.delete(k); else state.hidden.add(k);
+  saveHidden();
+  renderBrandSheet();
+  state.stickToBottom = true;
+  render();
+  refreshWhenSettled(); // chargers that just appeared get their status and detour
+});
+$("brandsAdd").addEventListener("click", (e) => {
+  const btn = e.target.closest(".brand-btn");
+  if (!btn) return;
+  const k = btn.dataset.k;
+  if (pendingAdd.has(k)) pendingAdd.delete(k); else pendingAdd.add(k);
+  renderBrandSheet();
+});
+$("addBrandsBtn").addEventListener("click", async () => {
+  const btn = $("addBrandsBtn");
+  const add = [...pendingAdd];
+  const brands = BRANDS.map((b) => b.key).filter((k) => (state.planBrands || []).includes(k) || add.includes(k));
+  btn.disabled = true; btn.textContent = "Replanning…"; $("brandSheetError").hidden = true;
+  try {
+    const from = state.user.lonlat || await currentPosition();
+    await plan(from, brands);
+    for (const k of add) state.hidden.delete(k);
+    saveHidden();
+    // Next time you plan from the start screen, these are selected too.
+    state.brands = brands;
+    try { localStorage.setItem(BRANDS_KEY, JSON.stringify(brands)); } catch (_) {}
+    renderBrandPicker();
+    closeBrandSheet();
+    state.stickToBottom = true;
+    render();
+    setTimeout(() => refreshStatus(false), 300);
+  } catch (e) {
+    $("brandSheetError").textContent = `Couldn’t replan: ${e.message}`;
+    $("brandSheetError").hidden = false;
+  } finally {
+    btn.disabled = false; renderBrandSheet();
+  }
+});
 
 // Brand picker: at least one stays on. Applies to the next route you plan.
 function renderBrandPicker() {

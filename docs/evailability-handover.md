@@ -80,7 +80,7 @@ Not (yet) live: Belgium (waiting for an Eco-Movement data token) and France. Cha
    - optional `OCM_IONITY_OPERATOR_ID`: only to force Ionity's Open Charge Map operator ID.
 
    `keep_vars = true` in `wrangler.toml` makes sure a deploy doesn't remove these.
-6. **Deploy pipeline.** Create a Cloudflare API token with the template *Edit Cloudflare Workers* (plus KV edit), then add repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub (Settings → Secrets and variables → Actions). Every push that changes `wrangler.toml` (and, once the workflow is updated, `src/evailability-worker.js`) or `wrangler.toml` deploys through `cloudflare/wrangler-action@v3`. It can also be started by hand (Actions → Deploy Ionity Worker → Run workflow).
+6. **Deploy pipeline.** Create a Cloudflare API token with the template *Edit Cloudflare Workers* (plus KV edit), then add repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub (Settings → Secrets and variables → Actions). Every push that changes `wrangler.toml` (and, once the workflow is updated, `src/evailability-worker.js`) deploys through `cloudflare/wrangler-action@v3`. It can also be started by hand (Actions → Deploy Ionity Worker → Run workflow).
 7. **Point the app at the Worker.** In `evailability.html` (and `admin.html`), `const WORKER = "https://ionity.<subdomain>.workers.dev"`. In the Worker, add the app's origin to `ALLOWED_ORIGINS` and set `ECONTROL_REFERER`.
 8. **Check.** Open `https://ionity.<subdomain>.workers.dev/`: it should answer `ok: true` and show which keys are set. Then open the app and enter an access code (section 6).
 

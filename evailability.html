@@ -25,6 +25,7 @@
     --offline: #6c767d;
     --danger: #e0574f;
     --row-h: 86px;
+    --you-h: 52px; /* your own row, one line: You and the status */
     color-scheme: dark;
   }
   @media (prefers-color-scheme: light) {
@@ -194,10 +195,10 @@
   .strip {
     position: relative; flex: 1; min-height: 0;
     display: flex; flex-direction: column;
-    padding: 0 16px 12px;
+    padding: 0 16px 0;
   }
   .strip::before {
-    content: ""; position: absolute; left: 38px; top: 30px; bottom: 44px; width: 8px;
+    content: ""; position: absolute; left: 38px; top: 30px; bottom: calc(var(--you-h) / 2); width: 8px;
     background: var(--sign-blue); border-radius: 4px;
   }
   .list {
@@ -346,7 +347,7 @@
   .dest .sub { margin-top: 2px; }
   /* Appears when you've scrolled up: takes you back to the next chargers. */
   .fab {
-    position: absolute; z-index: 3; left: 18px; bottom: calc(var(--row-h) + 18px);
+    position: absolute; z-index: 3; left: 18px; bottom: calc(var(--you-h) + 18px);
     width: 48px; height: 48px; display: grid; place-items: center;
     border: 0; border-radius: 50%; background: var(--sign-blue); color: #fff;
     box-shadow: 0 0 0 5px var(--asphalt), 0 6px 16px rgba(0, 0, 0, .35);
@@ -355,7 +356,7 @@
   /* While scrolled up: the road at the bottom of the view, until the next change scrolls in */
   .sticky-road {
     position: absolute; z-index: 3; left: 18px; width: 48px; display: flex; justify-content: center;
-    bottom: calc(var(--row-h) + 18px + 48px + 14px); pointer-events: none;
+    bottom: calc(var(--you-h) + 18px + 48px + 14px); pointer-events: none;
   }
   .sticky-road > span { display: block; border-radius: 8px; padding: 3px; background: var(--asphalt); }
   .sticky-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
@@ -366,11 +367,23 @@
   }
   .you .name { font-size: 1.2rem; }
   /* Your row: "You" and the status on top (an error wraps there), the location on its own full-width line under them */
-  .row.you { grid-template-columns: 48px 1fr auto; grid-template-rows: auto auto; row-gap: 6px; align-content: center; }
-  .row.you .marker { grid-row: 1 / 3; }
+  #drive .row.you { height: var(--you-h); padding: 0; }
   .row.you .name { margin-left: 12px; }
-  .row.you .age { align-self: end; }
-  .row.you .sub.loc { grid-column: 2 / 4; margin-left: 12px; }
+  .you .marker { width: 34px; height: 34px; }
+  /* Help demo: the location line under You */
+  .demo .row.you { grid-template-rows: auto auto; row-gap: 6px; align-content: center; }
+  .demo .row.you .marker { grid-row: 1 / 3; }
+  .demo .row.you .sub.loc { grid-column: 2 / 4; margin-left: 12px; }
+  /* Location at the very bottom, in the space above the home indicator (errors appear above it) */
+  .locbar {
+    display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden;
+    height: 30px; padding: 0 18px 0 32px; /* the compass sits under your arrow */
+    margin-bottom: calc(12px - env(safe-area-inset-bottom, 0px)); font-size: 1rem;
+    color: var(--muted); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .locbar > * { flex-shrink: 0; }
+  .locbar .place { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--line); font-weight: 600; }
+  .locbar .warn { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--full); }
   .you .sub { font-size: 1rem; }
 
   .banner {
@@ -507,7 +520,7 @@
   #start .primary { margin-top: 14px; padding: 14px; }
   /* Status age, bottom right in your own row */
   .you .age { text-align: right; color: var(--muted); font-size: .95rem; line-height: 1.25; white-space: nowrap; }
-  .you .age.err { color: var(--danger); white-space: normal; max-width: 9em; }
+  .you .age.err { color: var(--danger); white-space: normal; max-width: 14em; }
 
   /* ---------- introduction (first run) ---------- */
   .intro {
@@ -948,6 +961,7 @@
     <div class="row you" id="youRow"></div>
   </div>
   <div class="errtray" id="errTray" hidden role="status" aria-live="polite"></div>
+  <div class="locbar" id="locBar" role="button" aria-label="Your location, tap to update"></div>
   <div class="banner" id="offRoute" hidden role="status" aria-live="polite">
     <span id="offRouteText"></span>
     <button id="recalc" hidden>Try again</button>
@@ -955,7 +969,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.72";
+const APP_VERSION = "2026-11-15.73";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1632,6 +1646,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("pageshow", () => { if (gpsActive() && lastFixAge() > 10000) startGps(); });
 // Tapping "You" when location is missing or old asks for it straight away. A tap is a user gesture,
 // which lets iOS show the permission question again after it was dropped.
+$("locBar").addEventListener("click", () => $("youRow").click());
 $("youRow").addEventListener("click", () => {
   if (gpsActive() && lastFixAge() < GPS_STALE_MS) { updateLocation("tap", true); return; } // fresh fix: look up where you are now
   if (!gpsActive()) return;
@@ -3215,7 +3230,8 @@ function render() {
   // What we know about your position. The road badge only when you're on the route with a recent fix:
   // projected from an old or off-route position it names a road you're not on.
   setHtml($("youRow"), `<span class="marker" aria-hidden="true"></span>
-    <div class="name">You</div><div class="age${state.statusError ? " err" : ""}" id="age"></div><div class="sub loc">${locationLine()}</div>`);
+    <div class="name">You</div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`);
+  setHtml($("locBar"), locationLine());
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcomingShown();
@@ -3453,7 +3469,7 @@ function helpHtml() {
   <h3>The screen while driving</h3>
   <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. Don't want these rows? In the brands button (top left), set <b>Main roads on the line</b> to <b>Changes only</b>: then a badge sits on the line only where the road changes between chargers. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
-  <p>Your own row shows the status time on top (an error appears there too) and underneath, across the full width, a compass (pointing the way you're driving), the time of the last location update and the road badge, or on smaller roads the town and street. On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
+  <p>Your own row shows the status time (an error appears there too). The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge, or on smaller roads the town and street. On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Free or not</h3>
   <div class="legend">

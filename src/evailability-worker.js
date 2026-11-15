@@ -15,6 +15,8 @@
 //   GET  /debug/brands          which Open Charge Map operators each brand matches
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
+//   GET  /admin/settings        switches and values set on the usage page (same header)
+//   POST /admin/settings        {settings:{key: value}} saves them (one KV write); empty value = default
 //   GET  /debug/ndw?lat=&lon=   raw Dutch (NDW) data around a point, to tune the parser
 //   GET  /debug/ocm-operator    shows which Open Charge Map operator ID is used for Ionity
 //   GET  /debug/ocm-ionity      Ionity sites Open Charge Map knows in a box (default: NL)
@@ -32,7 +34,7 @@
 // Optional KV binding
 //   USAGE         keeps the usage counts per day (without it they live in memory only)
 // Optional plain variable
-//   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails
+//   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
@@ -183,10 +185,74 @@ async function flushUsage(env, force = false) {
   }
 }
 
-async function handleUsage(request, env) {
+function checkAdmin(request, env) {
   const auth = request.headers.get("Authorization") || "";
   if (!env.ADMIN_TOKEN) throw new HttpError(503, "ADMIN_TOKEN is not set in the Worker");
-  if (auth !== `Bearer ${env.ADMIN_TOKEN}`) throw new HttpError(401, "Wrong password");
+  if (!sameText(auth, `Bearer ${env.ADMIN_TOKEN}`)) throw new HttpError(401, "Wrong password");
+}
+
+// ---------------------------------------------------------------- settings
+// Switches and values that can be changed on the usage page, so there's no need to go to the
+// Cloudflare dashboard. Kept in KV under "settings"; each Worker copy reads them at most once a
+// minute, so a change takes effect within a minute. Not set = the Worker variable of the same
+// meaning (if any), else the default. Secrets (API keys, passwords) stay in Cloudflare.
+const SETTINGS = [
+  { key: "frLive", type: "bool", label: "France live (tap)", def: (env) => env.FR_LIVE !== "off",
+    help: "Off: French chargers show no live data and nothing is read. Each read costs more CPU than the free plan allows." },
+  { key: "frGapMin", type: "number", min: 1, max: 60, label: "France: minutes between updates", def: () => 3,
+    help: "A tap within this time gets the last read instead of a new one." },
+  { key: "ndwDiscovery", type: "bool", label: "Netherlands: extra chargers from NDW", def: (env) => env.NDW_DISCOVERY !== "off",
+    help: "Sites Open Charge Map doesn't have, found in NDW's live data along the route." },
+  { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
+    help: "Empty: found automatically. Only fill in if that lookup fails." },
+];
+let SET = null; // this request's settings (loaded at the start of each request, see route)
+async function loadSettings(env) {
+  let saved = memoGet("settings");
+  if (saved === undefined) {
+    saved = {};
+    try { if (env.USAGE) saved = JSON.parse((await kvGet(env, "settings")) || "{}"); } catch (_) {}
+    memoSet("settings", saved, 60 * 1000);
+  }
+  const out = {};
+  for (const d of SETTINGS) out[d.key] = saved[d.key] !== undefined && saved[d.key] !== "" ? saved[d.key] : d.def(env);
+  SET = out;
+  return { values: out, saved };
+}
+const setting = (env, key) => (SET || {})[key] ?? SETTINGS.find((d) => d.key === key)?.def(env);
+
+async function handleSettings(request, env) {
+  checkAdmin(request, env);
+  if (request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const given = body.settings || {};
+    const { saved } = await loadSettings(env);
+    const next = { ...saved };
+    for (const d of SETTINGS) {
+      if (!(d.key in given)) continue;
+      let v = given[d.key];
+      if (v === null || v === "") { delete next[d.key]; continue; } // back to the default
+      if (d.type === "bool") v = v === true || v === "true" || v === "on";
+      else if (d.type === "number") {
+        v = Number(v);
+        if (!Number.isFinite(v) || v < d.min || v > d.max) throw new HttpError(400, `${d.label}: ${d.min} to ${d.max}`);
+      } else v = String(v).trim().slice(0, 100);
+      next[d.key] = v;
+    }
+    await env.USAGE.put("settings", JSON.stringify(next));
+    countCall("KV writes");
+    memoSet("settings", next, 60 * 1000);
+  }
+  const { values, saved } = await loadSettings(env);
+  return json(request, {
+    settings: SETTINGS.map((d) => ({ key: d.key, type: d.type, label: d.label, help: d.help, min: d.min, max: d.max,
+      value: values[d.key], default: d.def(env), changed: saved[d.key] !== undefined })),
+    note: "Other Worker copies pick up a change within a minute.",
+  });
+}
+
+async function handleUsage(request, env) {
+  checkAdmin(request, env);
   await flushUsage(env, true);
   const days = [];
   for (let i = 0; i < 7; i++) {
@@ -561,7 +627,8 @@ async function brandOperators(env) {
   const ops = ref.ops;
   const byBrand = {};
   for (const b of BRANDS) byBrand[b.key] = ops.filter(([, t]) => b.ocm.test(t)).map(([id, t]) => ({ id, title: t }));
-  if (env.OCM_IONITY_OPERATOR_ID) byBrand.ionity = [{ id: Number(env.OCM_IONITY_OPERATOR_ID), title: "IONITY (set by hand)" }];
+  const ionityOp = Number(setting(env, "ocmIonityOperatorId"));
+  if (ionityOp) byBrand.ionity = [{ id: ionityOp, title: "IONITY (set by hand)" }];
   if (!byBrand.ionity.length) {
     // Fallback: read Ionity's operator ID off a known Ionity site.
     const url = `${OCM_BASE}/poi/?output=json&chargepointid=${OCM_KNOWN_IONITY_POI}&compact=true&verbose=false&key=${env.OCM_API_KEY}`;
@@ -1096,7 +1163,8 @@ function frSitesNear(index, brand, lat, lon, km) {
 
 let frSnapState = null; // { at, promise } — one read shared by every request in this Worker copy
 async function frSnapshot(index) {
-  if (frSnapState && Date.now() - frSnapState.at < FR_SNAPSHOT_MS) return frSnapState.promise;
+  const ttl = Math.max(FR_SNAPSHOT_MS, (Number(setting(null, "frGapMin")) || 3) * 60 * 1000 - 30 * 1000);
+  if (frSnapState && Date.now() - frSnapState.at < ttl) return frSnapState.promise;
   const promise = frWhole(index.ids).then((w) => ({ rows: w.rows, at: new Date().toISOString() }));
   frSnapState = { at: Date.now(), promise };
   promise.catch(() => { if (frSnapState?.promise === promise) frSnapState = null; });
@@ -1145,7 +1213,7 @@ async function frStatusFor(stations) {
       }),
     };
   }
-  return { status: out, checkedAt: snap.at, index: index.built };
+  return { status: out, checkedAt: snap.at, index: index.built, gapMin: Number(setting(null, "frGapMin")) || 3 };
 }
 
 async function liveStatus(station, env) {
@@ -1348,7 +1416,7 @@ const NDW_TILE_MAX_BYTES = 450 * 1024; // above this, parsing risks the free pla
 const NL_BOX = [3.3, 50.7, 7.3, 53.6]; // lon/lat, for parts of the route whose country is unknown
 const tileKey = (lat, lon) => `${Math.floor(lat / NDW_TILE_LAT)}_${Math.floor(lon / NDW_TILE_LON)}`;
 function ndwTilesAlong(route, env) {
-  if (env.NDW_DISCOVERY === "off") return [];
+  if (!setting(env, "ndwDiscovery")) return [];
   const tiles = new Set();
   const nearKm = 1.5; // service areas and chargers at exits; further out is a detour anyway
   let lastKm = -Infinity;
@@ -1421,7 +1489,7 @@ async function ndwTile(env, key) {
 
 async function handleNdwSites(request, env) {
   const body = await request.json().catch(() => ({}));
-  if (env.NDW_DISCOVERY === "off") return json(request, { sites: [], split: [], done: [] });
+  if (!setting(env, "ndwDiscovery")) return json(request, { sites: [], split: [], done: [] });
   const tiles = (Array.isArray(body.tiles) ? body.tiles : []).filter(validTile).slice(0, 3);
   const brands = new Set((Array.isArray(body.brands) ? body.brands : []).filter((k) => BRAND[k]));
   const sites = [], split = [], done = [];
@@ -1920,7 +1988,7 @@ async function handleStatus(request, env) {
 // about it: a 9-digit number that passes the "11-proef" (like a Dutch BSN). A right code gets a token
 // (HMAC of a fixed text with a server-side secret); the app keeps it and sends it as X-Access.
 // Changing ACCESS_SECRET (or, without it, OCM_API_KEY) signs everyone out.
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/brands", "/admin/usage"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/brands", "/admin/usage", "/admin/settings"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -1976,6 +2044,7 @@ async function route(request, env) {
   if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/") && !(await hasAccess(request, env, url))) {
     throw new HttpError(401, "Access code needed");
   }
+  await loadSettings(env); // switches from the usage page (cached a minute)
 
   if (path === "/" && request.method === "GET") {
     return json(request, {
@@ -1990,13 +2059,15 @@ async function route(request, env) {
     return json(request, { results: await geocode(env, q) });
   }
   if (path === "/admin/usage" && request.method === "GET") return handleUsage(request, env);
+  if (path === "/admin/settings" && (request.method === "GET" || request.method === "POST")) return handleSettings(request, env);
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/fr-status" && request.method === "POST") {
     // Reading the national file costs more CPU than the free plan allows; automatic updates used up the
     // Worker's allowance on 14 Nov so that /plan failed too (1102). The app now asks only on a tap, at
-    // most every 3 minutes. Switch France off with the Worker variable FR_LIVE = "off".
-    if (env.FR_LIVE === "off") return json(request, { status: {}, off: true });
+    // most every few minutes (setting "France: minutes between updates").
+    // Switch: "France live (tap)" on the usage page (or the Worker variable FR_LIVE = "off").
+    if (!setting(env, "frLive")) return json(request, { status: {}, off: true });
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
     return json(request, await frStatusFor(body.stations));

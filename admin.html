@@ -62,12 +62,27 @@
   th:first-child, td:first-child { text-align: left; position: sticky; left: 0; background: var(--card); }
   thead th { color: var(--muted); font-weight: 600; font-size: .9rem; }
   tr:last-child td { border-bottom: 0; }
+  /* Settings */
+  .set { padding: 10px 0; }
+  .set + .set { border-top: 1px solid rgba(127,127,127,.18); }
+  .set .row { align-items: center; }
+  .set input[type=number], .set input[type=text] { flex: none; width: 9em; padding: 8px 10px; }
+  .set .meta { margin-top: 3px; }
+  .set .changed { color: var(--warn); font-weight: 600; }
+  .switch { position: relative; width: 52px; height: 30px; flex: none; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; border-radius: 15px; background: var(--line); transition: background .15s; }
+  .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch input:checked + span { background: var(--ok); }
+  .switch input:checked + span::after { transform: translateX(22px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
+  #setMsg { min-height: 1.2em; }
 </style>
 </head>
 <body>
 <a class="apps-back" href="./">‹ Apps</a>
 <h1>Usage</h1>
-<p class="muted">How much of the free tiers EVailability uses, per data source.</p>
+<p class="muted">How much of the free tiers EVailability uses, per data source, and the app’s server settings.</p>
 
 <form id="login">
   <div class="login">
@@ -81,6 +96,7 @@
   <button type="button" class="link" id="logout">Log out</button>
 </div>
 <p id="msg" class="error" hidden></p>
+<div id="settings"></div>
 <div id="out"></div>
 
 <script>
@@ -233,6 +249,7 @@ async function load(token = $("pw").value.trim()) {
     $("pw").value = "";
     showLoggedIn(true);
     render(data);
+    loadSettings(token);
   } catch (e) {
     $("out").innerHTML = "";
     $("msg").textContent = e.message;
@@ -240,11 +257,64 @@ async function load(token = $("pw").value.trim()) {
   }
 }
 
+// ---- Settings: switches and values the Worker reads from KV (no need for the Cloudflare dashboard).
+let settingsToken = "";
+async function loadSettings(token) {
+  settingsToken = token;
+  try {
+    const res = await fetch(`${WORKER}/admin/settings`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    renderSettings(data);
+  } catch (e) {
+    $("settings").innerHTML = `<div class="card small error">Settings couldn’t be loaded: ${esc(e.message)}</div>`;
+  }
+}
+const showVal = (s, v) => (s.type === "bool" ? (v ? "on" : "off") : v === "" || v == null ? "empty" : String(v));
+function renderSettings(data, msg = "") {
+  const rows = data.settings.map((s) => {
+    let control;
+    if (s.type === "bool") control = `<label class="switch"><input type="checkbox" data-key="${esc(s.key)}" ${s.value ? "checked" : ""} aria-label="${esc(s.label)}"><span></span></label>`;
+    else control = `<input type="${s.type === "number" ? "number" : "text"}" data-key="${esc(s.key)}" value="${esc(s.value ?? "")}"
+      ${s.type === "number" ? `min="${s.min}" max="${s.max}" inputmode="numeric"` : ""} placeholder="${esc(showVal(s, s.default))}" aria-label="${esc(s.label)}">`;
+    return `<div class="set"><div class="row"><span class="name">${esc(s.label)}</span>${control}</div>
+      <div class="small muted meta">${esc(s.help || "")} Default: ${esc(showVal(s, s.default))}.
+      ${s.changed ? `<span class="changed">Changed.</span> <button type="button" class="link" data-reset="${esc(s.key)}">Back to default</button>` : ""}</div></div>`;
+  }).join("");
+  $("settings").innerHTML = `<h2>Settings</h2><div class="card group">${rows}
+    <div class="small muted" id="setMsg">${esc(msg || data.note || "")}</div></div>`;
+}
+async function saveSetting(key, value) {
+  $("setMsg").textContent = "Saving…";
+  try {
+    const res = await fetch(`${WORKER}/admin/settings`, {
+      method: "POST", headers: { Authorization: `Bearer ${settingsToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ settings: { [key]: value } }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    renderSettings(data, `Saved. ${data.note || ""}`);
+  } catch (e) {
+    $("setMsg").textContent = `Not saved: ${e.message}`;
+    $("setMsg").classList.add("error");
+  }
+}
+$("settings").addEventListener("change", (e) => {
+  const el = e.target.closest("[data-key]");
+  if (!el) return;
+  saveSetting(el.dataset.key, el.type === "checkbox" ? el.checked : el.value.trim());
+});
+$("settings").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-reset]");
+  if (b) saveSetting(b.dataset.reset, null);
+});
+
 $("login").addEventListener("submit", (e) => { e.preventDefault(); load(); });
 $("refresh").addEventListener("click", () => load(savedToken()));
 $("logout").addEventListener("click", () => {
   try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch (_) {}
   $("out").innerHTML = "";
+  $("settings").innerHTML = "";
   showLoggedIn(false);
   $("pw").focus();
 });

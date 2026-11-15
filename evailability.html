@@ -852,7 +852,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.62";
+const APP_VERSION = "2026-11-14.63";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -875,7 +875,7 @@ const OLD_MS = 5 * 60 * 1000;       // after 5 minutes the numbers are only outl
 // (it costs more CPU than the free plan allows; automatic updates used up the Worker's allowance on
 // 14 Nov). So France is tap-only: a tap on a French charger updates every French charger on the
 // route at once, at most once per 3 minutes; after a failed lookup France pauses for 15 minutes.
-const FR_MIN_GAP_MS = 3 * 60 * 1000;
+let FR_MIN_GAP_MS = 3 * 60 * 1000; // the server sends the current value (usage page, Settings)
 const FR_FAIL_PAUSE_MS = 15 * 60 * 1000;
 const FR_MAX = 250; // French chargers per lookup, nearest ahead first
 const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
@@ -1788,7 +1788,8 @@ async function refreshFrance() {
   let why = null;
   try {
     const r = await api("/fr-status", { stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 30000, false);
-    if (r.off) { state.frOffUntil = Date.now() + 30 * 60 * 1000; state.frOffReason = "off"; why = "France live is switched off on the server"; }
+    if (r.off) { state.frOffUntil = Date.now() + 10 * 60 * 1000; state.frOffReason = "off"; why = "France live is switched off on the server"; }
+    if (r.gapMin > 0) FR_MIN_GAP_MS = r.gapMin * 60 * 1000;
     applyStatus(r.status || {});
     state.frAt = Date.now();
     state.frError = null;
@@ -2953,7 +2954,7 @@ function helpHtml() {
     <div class="k">${dot("free")}</div><div class="v"><b class="kv" style="color:var(--free)">3/6</b>&ensp;3 of 6 chargers free right now.</div>
     <div class="k">${dot("full")}</div><div class="v"><b class="kv" style="color:var(--full)">0/4</b>&ensp;All in use.</div>
     <div class="k">${dot("offline")}</div><div class="v"><b>Offline</b>: reported out of order, or nothing has changed for hours.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old, outlined numbers more than 5 minutes; the dot keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every 3 minutes. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old, outlined numbers more than 5 minutes; the dot keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (3 unless changed on the usage page). A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>

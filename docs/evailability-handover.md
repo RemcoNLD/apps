@@ -6,7 +6,7 @@ A web app for the phone that shows the fast chargers along a driving route, with
 - **Usage page:** https://remconld.github.io/apps/admin.html
 - **Server (proxy):** https://ionity.remco-dv.workers.dev
 - **Code:** GitHub repo `RemcoNLD/apps` (branch `main`)
-- **State at the last update:** app `2026-11-14.62`, Worker deployed from commit of the same day. Open items: section 10. France: section 11.
+- **State at the last update:** app `2026-11-14.63`, Worker deployed from commit of the same day. Open items: section 10. France: section 11.
 
 No passwords, keys or tokens are in this document or in the repo. Where they're needed, this document names the secret and says where to set it.
 
@@ -107,6 +107,7 @@ All need the access token (header `X-Access`, or `?access=` in a URL), except th
 | `POST /alternatives` | `{from, to}` → up to 3 route options (see below), each with main roads, cities on the way and the number of Ionity sites. |
 | `POST /plan` | `{from, to, via?, viaSnap?, brands?, corridorKm?}` (viaSnap: per via, true for a town: it is moved onto the nearest A/N road of a rough route through it; the used points come back as `vias`) → route (coordinates, km and minutes per point, roads, via positions) plus the chargers of those brands within 5 km. `via`: one point or a list of up to 3. Detours are included only if cached; status only for the first 8 chargers. |
 | `POST /status` | `{stations:[{id, lat, lon, country, brand}]}` → live status per charger (not France). |
+| `GET/POST /admin/settings` | Settings for the usage page (Bearer ADMIN_TOKEN): GET lists them, POST `{settings:{key:value}}` saves (empty/null = default). |
 | `POST /fr-status` | `{stations:[{id, lat, lon, brand}]}` (max 250) → live status per French charger, from the France index and one read of the national live file (section 11). |
 | `POST /places` | `{points:[{id, lat, lon}]}` (max 8) → `{places:{id:{area, src, town, v, ok}}}`, for chargers named only by their brand. One Overpass request per batch: service areas (`highway=services`/`rest_area`, within 800 m, the one whose outline is nearest, 0 when inside it) and, as fallback, the nearest fuel station within 200 m, or charging station whose name starts with a charging brand, whose name says more than its brand (host names such as restaurants and hotels are skipped) ("Shell 't Hol" → "'t Hol"; `placeFromStationName`). Three mirrors, 7 s timeout each, starting with the one that answered last. Town: the geocoder. Cached 30 days per ~100 m (`pl7:` in KV), not when Overpass failed. |
 | `POST /ndw-sites` | `{tiles, brands}` (max 3 tiles) → `{sites, split, done}`: fast chargers of those brands from NDW in those tiles; `split` lists quarter tiles to ask for instead. |
@@ -173,6 +174,9 @@ Every outgoing call is counted per source (`countCall`). The tally is written to
 Watch the 1,000 writes/day: writes happen for usage (≤ every 2 min while in use), new boxes, logos and state changes.
 
 ---
+
+### Settings (usage page)
+Switches and values live in KV under `settings` and are changed on admin.html (section "Settings"), so the Cloudflare dashboard isn't needed for them. Each Worker copy reads them at most once a minute (`loadSettings` at the start of every request, `setting(env, key)` to read). Not set = the old Worker variable if there is one, else the default. Current settings: `frLive` (France live, tap; old variable FR_LIVE), `frGapMin` (minutes between French reads, 1–60, default 3; sent to the app in `/fr-status` as `gapMin`), `ndwDiscovery` (NDW as second source; old NDW_DISCOVERY), `ocmIonityOperatorId` (old OCM_IONITY_OPERATOR_ID). Secrets stay in Cloudflare. Saving costs one KV write.
 
 ## 5. The app
 
@@ -344,6 +348,6 @@ Build of 14 Nov 2026: 3,943 sites, 25,923 fast points, 710 kB (172 kB gzipped). 
 
 **Switched off (app `.60`, 14 Nov 23:20):** in a simulated drive to France the whole-file reads used up the Worker's CPU allowance: route loading became slow and then `/plan` failed too ("Couldn't reach the server", the 1102 page has no CORS headers), while the usage page showed no quota overruns. `/fr-status` now answers `{status:{}, off:true}` without reading anything unless the Worker variable `FR_LIVE` is `on` (set it in the Cloudflare dashboard, it survives deploys because of `keep_vars`); the app then stops asking for 30 minutes. Turn it on only with Workers Paid or another way to read the file.
 
-**Tap-only (app `.62`, 15 Nov).** France is back on, but only on demand: French rows show ↻ after planning; a tap on a French charger updates all French chargers on the route in one `/fr-status` call, at most once per 3 minutes (toast "France checked … ago, next in … min"). After a failed call France pauses 15 minutes; when the server answers `off`, 30 minutes. The timer and scrolling never ask for France. Worker: France is on unless `FR_LIVE` = `off`; one read per Worker copy at most every 150 s. If 1102 errors still show up in the logs, switch it off and consider Workers Paid.
+**Tap-only (app `.62`, 15 Nov).** France is back on, but only on demand: French rows show ↻ after planning; a tap on a French charger updates all French chargers on the route in one `/fr-status` call, at most once per 3 minutes (toast "France checked … ago, next in … min"). After a failed call France pauses 15 minutes; when the server answers `off`, 30 minutes. The timer and scrolling never ask for France. Worker: France is on unless switched off on the usage page (Settings) or with `FR_LIVE` = `off`; one read per Worker copy at most every max(150 s, the set minutes − 30 s). If 1102 errors still show up in the logs, switch it off and consider Workers Paid.
 
 **Still to do.** French sites from the index as a second source (like NDW) for sites Open Charge Map misses; merge Allego twin sites; French EVSE prefixes in `BRANDS` (only needed if the brand is recognised from live data elsewhere); watch the Worker logs for 1102 on `/fr-status`; if they're frequent, Workers Paid ($5/month). (2) Worker: load the index (memory, a day), FR in `LIVE_COUNTRIES`, one shared scan of the dynamic file per minute, `frStatus` per site (free = en_service and libre among live points; full; "not live" when the newest change is > 24 h old), FR sites from the index as a second source like NDW (`ndwTiles`-style), brand prefixes above. (3) App: source label and attribution, PAN FR on the usage page, `APP_VERSION`. (4) Test on a drive in France.

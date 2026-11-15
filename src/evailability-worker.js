@@ -4,7 +4,9 @@
 //   GET  /                      health check: shows which secrets are set
 //   GET  /geocode?q=Venlo       address search -> [{label, lat, lon}]
 //   POST /plan                  {from:[lon,lat], to:[lon,lat], corridorKm?:5, brands?:["ionity","fastned",…],
-//                               avoid?:[[[lon,lat],…],…]}  (avoid: small areas around closures the driver chose to avoid)
+//                               avoid?:[[[lon,lat],…],…], avoidSpans?:[[[lon,lat],[lon,lat]],…]}
+//                               (avoid: small areas around closures the driver chose to avoid; avoidSpans: a point
+//                               before and after each, used for routes over 150 km, see handlePlan)
 //                               -> route + chargers of those brands along it (detour minutes only when cached)
 //   POST /status                {stations:[{id, lat, lon, country, brand}]}
 //   POST /fr-status             {stations:[{id, lat, lon, brand}]}  France, from one national file (read at most every 90 s)
@@ -42,7 +44,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-15.96";
+const WORKER_VERSION = "2026-11-16.97";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -504,18 +506,18 @@ function turnsOf(route) {
 // The routing service's raw answer per route object (kept only as long as the route itself is cached),
 // so a /plan in debug mode can store it.
 const rawRoute = new WeakMap();
-async function getRouteCached(env, points, avoid = null) {
-  const key = `route:${JSON.stringify(points)}${avoid ? `:${JSON.stringify(avoid)}` : ""}`;
+async function getRouteCached(env, points, avoid = null, radii = null) {
+  const key = `route:${JSON.stringify(points)}${avoid ? `:${JSON.stringify(avoid)}` : ""}${radii ? `:${radii.join(",")}` : ""}`;
   const hit = memoGet(key);
   if (hit) { countCall("Route from cache"); return hit; }
-  const r = await getRoute(env, points, avoid);
+  const r = await getRoute(env, points, avoid, radii);
   memoSet(key, r, ROUTE_TTL_MS);
   return r;
 }
 
 // avoid: small areas the route must not pass (road closures the driver chose to avoid), as rings of [lon, lat].
-async function getRoute(env, points, avoid = null) {
-  const req = { coordinates: points, radiuses: snapRadii(points), instructions: true, extra_info: ["countryinfo", "waycategory"] };
+async function getRoute(env, points, avoid = null, radii = null) {
+  const req = { coordinates: points, radiuses: radii || snapRadii(points), instructions: true, extra_info: ["countryinfo", "waycategory"] };
   if (avoid?.length) req.options = { avoid_polygons: { type: "MultiPolygon", coordinates: avoid.map((ring) => [ring]) } };
   const data = await fetchJson(`${ORS_BASE}/directions/driving-car/geojson`, {
     method: "POST",
@@ -539,6 +541,7 @@ async function getRoute(env, points, avoid = null) {
     coords, km, min, steps, countrySegs, highwaySegs, idIso: {},
     viaKm: firstEnd != null ? km[firstEnd] : null,
     viaKms: ends.map((i) => km[i]), // one per via point, in order
+    ends, // route index where each via point is reached
     distanceKm: (f.properties?.summary?.distance || 0) / 1000,
     durationMin: (f.properties?.summary?.duration || 0) / 60,
   };
@@ -1450,7 +1453,53 @@ async function handlePlan(request, env) {
     });
     if (!avoid.length) avoid = null;
   }
-  const route = await getRouteCached(env, [from, ...vias, to], avoid);
+  // The routing service only takes avoid areas for routes up to 150 km. Longer: plan a short route
+  // around each closure (from a bit before it to a bit after it, with the avoid area), take a point
+  // halfway along that detour, and plan the whole route through it without avoid areas. That point
+  // is a hidden via: no "arrive" there, and not one of your own via points.
+  let route, detourPts = [];
+  const points = [from, ...vias, to];
+  const crowKm = points.slice(1).reduce((sum, p, i) => sum + haversineKm(points[i], p), 0);
+  const spans = Array.isArray(body.avoidSpans) ? body.avoidSpans : [];
+  if (avoid && crowKm > 90 && spans.length === avoid.length && spans.every((sp) => Array.isArray(sp) && sp.length === 2 && sp.every(valid))) {
+    for (let i = 0; i < avoid.length; i++) {
+      const [a, b] = spans[i];
+      const around = await getRouteCached(env, [a, b], [avoid[i]]);
+      const c = avoid[i].reduce((acc, p) => [acc[0] + p[0] / avoid[i].length, acc[1] + p[1] / avoid[i].length], [0, 0]);
+      // Halfway along the detour, or failing that its point furthest from the closure.
+      const half = around.km.at(-1) / 2;
+      let k = around.km.findIndex((x) => x >= half);
+      let best = k >= 0 ? k : 0;
+      if (haversineKm(around.coords[best], c) < 1) {
+        let far = -1;
+        around.coords.forEach((p, j) => { const d = haversineKm(p, c); if (d > far) { far = d; best = j; } });
+      }
+      detourPts.push(around.coords[best].map((v) => +v.toFixed(6)));
+    }
+    // Each detour point goes where it adds the least distance between the route's points.
+    const wp = [...points], hidden = new Set();
+    for (const d of detourPts) {
+      let at = 1, add = Infinity;
+      for (let j = 1; j < wp.length; j++) {
+        const extra = haversineKm(wp[j - 1], d) + haversineKm(d, wp[j]) - haversineKm(wp[j - 1], wp[j]);
+        if (extra < add) { add = extra; at = j; }
+      }
+      wp.splice(at, 0, d);
+      hidden.add(d);
+    }
+    // The detour point lies exactly on the detour road: snap within 30 m only, so it can't jump to the
+    // other side of a dual carriageway.
+    const full = await getRouteCached(env, wp, null, wp.map((p) => (hidden.has(p) ? 30 : SNAP_RADIUS_M)));
+    // Hidden vias: drop their "arrive" steps and their km from the via list.
+    const hiddenEnds = new Set(wp.map((p, j) => (hidden.has(p) ? full.ends[j - 1] : null)).filter((x) => x != null));
+    const steps = full.steps.filter((st) => !(st.type === 10 && hiddenEnds.has(st.way_points?.[0])));
+    const viaKms = full.ends.filter((i) => !hiddenEnds.has(i)).map((i) => full.km[i]);
+    route = { ...full, steps, viaKms, viaKm: viaKms[0] ?? null, ends: full.ends.filter((i) => !hiddenEnds.has(i)) };
+    const raw = rawRoute.get(full);
+    if (raw) rawRoute.set(route, raw);
+  } else {
+    route = await getRouteCached(env, points, avoid);
+  }
   const pois = await sitesAlongRoute(env, route, corridorKm, brands);
   learnCountries(route, pois.map((p) => ({
     index: projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).index,

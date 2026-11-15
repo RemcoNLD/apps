@@ -1073,7 +1073,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.102";
+const APP_VERSION = "2026-11-16.103";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1453,7 +1453,11 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
     body.viaSnap = state.vias.map((v) => v.exact === false && !v.snapped);
   }
   if (debugOn()) body.debug = true; // the Worker keeps the whole routing result under an id (debug line)
-  if (state.avoid?.length) body.avoid = state.avoid.map((a) => a.ring); // closures you chose to avoid
+  if (state.avoid?.length) {
+    body.avoid = state.avoid.map((a) => a.ring); // closures you chose to avoid
+    // A point before and after each: on routes over ~100 km the Worker plans around them that way.
+    if (state.avoid.every((a) => a.span)) body.avoidSpans = state.avoid.map((a) => a.span);
+  }
   const data = await api("/plan", body);
   if (data.debugError) reportError(data.debugError);
   // Keep the points as the Worker used them, so rerouting doesn't snap (or drive into town) again.
@@ -3487,9 +3491,25 @@ function closureWhen(m) {
   const b = now + (minAtKm(m.toKm) - u.min + CLOSURE_MARGIN_MIN) * 60000;
   return (m.c.periods || []).map(([s, e]) => [Date.parse(s), Date.parse(e)]).find(([s, e]) => s < b && e > a) || null;
 }
+// Overlapping or touching records on the same stretch (NDW often has several for one closure)
+// become one row; its "until" is the latest of them.
 function closuresAhead() {
   if (!state.route) return [];
-  return matchClosures(state.route).filter((m) => m.toKm > state.user.km && closureWhen(m));
+  const list = matchClosures(state.route).filter((m) => m.toKm > state.user.km && closureWhen(m));
+  const out = [];
+  for (const m of list) {
+    const last = out[out.length - 1];
+    if (last && m.fromKm <= last.toKm + 1) {
+      last.toKm = Math.max(last.toKm, m.toKm);
+      last.members.push(m);
+      const w = closureWhen(m);
+      if (w[1] > last.when[1]) last.when = [Math.min(last.when[0], w[0]), w[1]];
+      if (!last.c.between && m.c.between) last.c = m.c;
+    } else {
+      out.push({ ...m, members: [m], when: closureWhen(m) });
+    }
+  }
+  return out;
 }
 function closureLabel(m) {
   const road = m.c.road || mainRoadAt((m.fromKm + m.toKm) / 2)?.ref || roadAt(m.fromKm)?.ref || "";
@@ -3498,7 +3518,7 @@ function closureLabel(m) {
 }
 const dayTime = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 function closureRow(m) {
-  const u = state.user, [from, until] = closureWhen(m);
+  const u = state.user, [from, until] = m.when || closureWhen(m);
   const inside = m.fromKm <= u.km;
   const when = inside ? `<span class="when"><b>now</b>&ensp;${fmtKm(m.toKm - u.km)} km left</span>`
     : `<span class="when"><b>${fmtKm(m.fromKm - u.km)}</b>&nbsp;km</span>`; // no time: room for "until"
@@ -3525,19 +3545,21 @@ async function avoidClosure(id) {
   state.avoiding = id; state.rerouting = true;
   render();
   const before = state.avoid || [];
-  state.avoid = [...before.filter((a) => a.id !== id), { id, ring: avoidRing(m) }].slice(-10);
+  const span = [pointAtKm(Math.max(0, m.fromKm - 8)), pointAtKm(Math.min(state.route.distanceKm, m.toKm + 8))]
+    .map((p) => p.map((v) => +v.toFixed(5)));
+  state.avoid = [...before.filter((a) => a.id !== id), { id, ring: avoidRing(m), span }].slice(-10);
   showBanner("Planning a route around the closure…");
   try {
     await plan(await hereNow());
     state.stickToBottom = true;
     await loadClosures();
-    const still = matchClosures(state.route).some((x) => x.id === id);
+    const still = matchClosures(state.route).some((x) => m.members.some((y) => y.id === x.id));
     showBanner(still ? "No way around this closure found. The route still goes through it."
       : "New route around the closure.", { ok: !still, hideAfter: 6000 });
   } catch (e) {
     state.avoid = before;
-    showBanner(`Couldn’t plan around it: ${e.message}`, { retry: false });
-    reportError(`Avoid closure: ${e.message}`);
+    showBanner("Couldn’t plan a route around this closure. Try again in a moment.", { hideAfter: 8000 });
+    reportError(`Avoid closure: ${e.message}`); // details with the debug line on
   } finally {
     state.avoiding = null; state.rerouting = false;
     save();

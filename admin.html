@@ -295,14 +295,14 @@ async function loadSettings(token) {
     $("settings").innerHTML = `<div class="card small error">Settings couldn’t be loaded: ${esc(e.message)}</div>`;
   }
 }
-const showVal = (s, v) => (s.type === "bool" ? (v ? "on" : "off") : s.type === "choice" ? (Number(v) === 0 ? "off" : `${v} h`)
+const showVal = (s, v) => (s.type === "bool" ? (v ? "on" : "off") : s.type === "choice" ? `${v} h`
   : v === "" || v == null ? "empty" : String(v));
 function renderSettings(data, msg = "") {
   const rows = data.settings.map((s) => {
     let control;
     if (s.type === "bool") control = `<label class="switch"><input type="checkbox" data-key="${esc(s.key)}" ${s.value ? "checked" : ""} aria-label="${esc(s.label)}"><span></span></label>`;
     else if (s.type === "choice") control = `<select data-key="${esc(s.key)}" aria-label="${esc(s.label)}">${s.options.map((o) =>
-      `<option value="${o}" ${Number(s.value) === o ? "selected" : ""}>${o === 0 ? "Off" : `${o} h`}</option>`).join("")}</select>`;
+      `<option value="${o}" ${Number(s.value) === o ? "selected" : ""}>${o} h</option>`).join("")}</select>`;
     else control = `<input type="${s.type === "number" ? "number" : "text"}" data-key="${esc(s.key)}" value="${esc(s.value ?? "")}"
       ${s.type === "number" ? `min="${s.min}" max="${s.max}" inputmode="numeric"` : ""} placeholder="${esc(showVal(s, s.default))}" aria-label="${esc(s.label)}">`;
     return `<div class="set"><div class="row"><span class="name">${esc(s.label)}</span>${control}</div>
@@ -325,8 +325,7 @@ async function loadClosuresInfo(hours) {
     const ago = Math.round((Date.now() - when) / 36e5);
     const src = Object.entries(d.sources || {}).map(([k, v]) =>
       `${esc(k.toUpperCase())}: ${v.ok ? `${v.count} closures` : `<span class="error">failed (${esc(v.error || "?")})</span>`}`).join(" · ");
-    const state = hours === 0 || d.paused ? `<b class="error">Paused</b>: no updates, and the app says closures are off. `
-      : ago > (hours || d.hours || 12) + 8 ? `<b class="error">Late</b>: older than the interval allows. ` : "";
+    const state = ago > (hours || d.hours || 12) + 8 ? `<b class="error">Late</b>: older than the interval allows. ` : "";
     $("closInfo").innerHTML = `${state}Last update ${esc(when.toLocaleString())} (${ago} h ago). ${src}<br>${run} to update now.`;
   } catch (e) {
     $("closInfo").innerHTML = `${esc(e.message)} ${run}`;

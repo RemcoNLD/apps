@@ -1067,7 +1067,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.94";
+const APP_VERSION = "2026-11-15.95";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2033,7 +2033,7 @@ $("planBtn").addEventListener("click", async () => {
   state.arrived = false; state.wasAway = false;
   state.avoid = []; // closures avoided on an earlier trip don't carry over
   state.closureNoteShown = null;
-  closureAt = 0; // a new trip asks again whether closures are paused
+  closureAt = 0; // a new trip loads the latest closures
   playNoSleep(); // started by this tap: iOS lets a video play from a tap without asking
   btn.disabled = true; btn.textContent = "Planning…"; showStartError("");
   try {
@@ -3322,16 +3322,12 @@ const CLOSURE_STEP_M = 120;       // closure lines are checked every this many m
 const CLOSURE_MATCH = 0.6;        // share of those points on the route, in your direction
 const CLOSURE_MARGIN_MIN = 15;    // in force this long before or after you pass also counts
 const AVOID_HALF_M = 18;          // half the side of the small square sent to the routing service
-let closureData = null, closureAt = 0, closureLoading = null, closureHours = null;
+let closureData = null, closureAt = 0, closureLoading = null;
 const closureMatches = new WeakMap(); // route -> matches (not saved with the route)
 async function loadClosures() {
   if (closureData && Date.now() - closureAt < 30 * 60000) return closureData;
   if (closureLoading) return closureLoading;
   closureLoading = (async () => {
-    // Paused on the admin page? Asked from the Worker, so a pause counts at once (the file
-    // only says so after the job's next run).
-    try { closureHours = (await (await fetch(`${WORKER}/closures/schedule`, { cache: "no-store" })).json()).hours ?? null; }
-    catch (_) { closureHours = null; }
     try {
       const res = await fetch(`data/closures.json?h=${Math.floor(Date.now() / 1800000)}`);
       if (res.ok) { closureData = await res.json(); closureAt = Date.now(); }
@@ -3341,13 +3337,11 @@ async function loadClosures() {
   })();
   return closureLoading;
 }
-const closuresPaused = () => closureHours === 0 || (closureHours == null && !!closureData?.paused);
-// A note when closures are off, too old or missing; null when all is well.
+// A note when closures are too old or missing (job failing, feed changed); null when all is well.
 function closureNote() {
-  if (closuresPaused()) return "Road closures are off (paused on the admin page): closed roads won’t show.";
   if (!closureData) return "Road closures couldn’t be loaded: closed roads won’t show.";
   const ageH = (Date.now() - Date.parse(closureData.generatedAt)) / 3600000;
-  const hours = closureHours || closureData.hours || 12;
+  const hours = closureData.hours || 12; // the interval set on the admin page when the job ran
   if (ageH > hours + 8) return `Road closures were last updated ${ageH < 48 ? `${Math.round(ageH)} hours` : `${Math.round(ageH / 24)} days`} ago: new ones may be missing.`;
   return null;
 }
@@ -3399,7 +3393,7 @@ function samplesOf(line) {
   return out;
 }
 function matchClosures(route) {
-  if (closuresPaused() || !closureData?.closures) return [];
+  if (!closureData?.closures) return [];
   if (closureMatches.has(route)) return closureMatches.get(route);
   const xs = route.coords.map((c) => c[0]), ys = route.coords.map((c) => c[1]);
   const box = [Math.min(...xs) - 0.01, Math.min(...ys) - 0.01, Math.max(...xs) + 0.01, Math.max(...ys) + 0.01];
@@ -4366,7 +4360,7 @@ function helpHtml() {
   <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto. A roundabout is drawn with its exit where the road really leaves and the exit number in the middle ("2nd exit", or "straight on"). In the last 500 m the whole row pulses: a white band sweeps across it the way you turn (left to right for right, right to left for left), and straight on the whole row fades between black and white. It sweeps about once a second while you drive and twice as fast in the last 50 m; when you stand still (a traffic light), it sweeps three more times and then holds still in white until you drive off. A "keep left/right" where you simply stay on the same motorway isn't shown. On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Road closures</h3>
-  <p>Planned closures in the Netherlands and Germany show on the line as a red row (<b>A1 closed · Dortmund/Unna – Kamener Kreuz</b>), only when they're on your route, in your direction, and in force around the time you get there: with the distance, the time to get there and until when it's closed. Closures in the other direction, lane closures and closures for lorries only don't show. <b>Avoid</b> plans a new route around it; that stays for this trip (also when you're rerouted) until you plan a new route. The routing itself doesn't know these closures: without Avoid, the route still goes through. The closures are updated every few hours (the interval is set on the admin page). Town streets aren't included. If closures are paused on the admin page, couldn't be loaded, or haven't been updated for longer than they should, a note says so after planning.</p>
+  <p>Planned closures in the Netherlands and Germany show on the line as a red row (<b>A1 closed · Dortmund/Unna – Kamener Kreuz</b>), only when they're on your route, in your direction, and in force around the time you get there: with the distance, the time to get there and until when it's closed. Closures in the other direction, lane closures and closures for lorries only don't show. <b>Avoid</b> plans a new route around it; that stays for this trip (also when you're rerouted) until you plan a new route. The routing itself doesn't know these closures: without Avoid, the route still goes through. The closures are updated every few hours (the interval is set on the admin page). Town streets aren't included. If closures couldn't be loaded, or haven't been updated for longer than they should, a note says so after planning.</p>
 
   <h3>Free or not</h3>
   <div class="legend">

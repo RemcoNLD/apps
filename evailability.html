@@ -501,6 +501,14 @@
   .road-tap .row.road, .road-tap .tl-road { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .road-tap .tl-road::after { content: ""; position: absolute; inset: -12px -10px; }
   .road-tap .row.road:active { opacity: .6; }
+  /* A planned road closure on your route, in your direction, in force when you get there */
+  .row.closure .marker { background: var(--danger); position: relative; }
+  .row.closure .marker::after { content: ""; position: absolute; left: 4px; right: 4px; top: 50%; height: 4px; margin-top: -2px; background: #fff; border-radius: 1px; }
+  .row.closure .name { color: var(--danger); font-size: 1.2rem; }
+  .row.closure .sub.meta { display: flex; gap: 10px; font-size: 1rem; white-space: nowrap; overflow: hidden; }
+  .row.closure .until { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .row.closure .avoid { font: inherit; font-weight: 700; font-size: 1rem; padding: 9px 14px; border-radius: 10px; border: 2px solid var(--danger); background: transparent; color: var(--line); cursor: pointer; }
+  .row.closure .avoid:disabled { opacity: .5; }
   /* A main road on the timeline (every one up to the destination, chargers or not) */
   .row.road { height: 46px; padding: 0; }
   .row.road .sub.meta { font-size: 1rem; }
@@ -1059,7 +1067,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.92";
+const APP_VERSION = "2026-11-15.93";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1421,6 +1429,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
     body.viaSnap = state.vias.map((v) => v.exact === false && !v.snapped);
   }
   if (debugOn()) body.debug = true; // the Worker keeps the whole routing result under an id (debug line)
+  if (state.avoid?.length) body.avoid = state.avoid.map((a) => a.ring); // closures you chose to avoid
   const data = await api("/plan", body);
   if (data.debugError) reportError(data.debugError);
   // Keep the points as the Worker used them, so rerouting doesn't snap (or drive into town) again.
@@ -1452,6 +1461,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   save();
   addNdwSites(data.ndwTiles || [], state.planBrands); // in the background: the route shows straight away
   roadsFromMap(); // and the road numbers checked against the map
+  loadClosures().then(() => render()); // closures on the route, in the background
   // Names follow once rows are on screen (refreshStatus after the first render).
 }
 
@@ -2021,6 +2031,7 @@ $("destRow").addEventListener("click", async () => {
 $("planBtn").addEventListener("click", async () => {
   const btn = $("planBtn");
   state.arrived = false; state.wasAway = false;
+  state.avoid = []; // closures avoided on an earlier trip don't carry over
   playNoSleep(); // started by this tap: iOS lets a video play from a tap without asking
   btn.disabled = true; btn.textContent = "Planning…"; showStartError("");
   try {
@@ -3301,6 +3312,171 @@ $("recalc").addEventListener("click", () => { state.lastRerouteAt = 0; reroute()
 
 // ------------------------------------------------------------- rendering
 
+// ---- Road closures: planned full closures (NL: NDW, DE: Autobahn GmbH) in data/closures.json, made by a
+// GitHub job every few hours (interval on the admin page). Only closures on your route in your direction
+// of travel that are in force when you get there show on the line; Avoid replans around one.
+const CLOSURE_NEAR_M = 40;        // a closure point this close to the route counts as on it (open data vs map: ~15 m)
+const CLOSURE_STEP_M = 120;       // closure lines are checked every this many metres
+const CLOSURE_MATCH = 0.6;        // share of those points on the route, in your direction
+const CLOSURE_MARGIN_MIN = 15;    // in force this long before or after you pass also counts
+const AVOID_HALF_M = 18;          // half the side of the small square sent to the routing service
+let closureData = null, closureAt = 0, closureLoading = null;
+const closureMatches = new WeakMap(); // route -> matches (not saved with the route)
+async function loadClosures() {
+  if (closureData && Date.now() - closureAt < 30 * 60000) return closureData;
+  if (closureLoading) return closureLoading;
+  closureLoading = (async () => {
+    try {
+      const res = await fetch(`data/closures.json?h=${Math.floor(Date.now() / 1800000)}`);
+      if (res.ok) { closureData = await res.json(); closureAt = Date.now(); }
+    } catch (_) { /* no closures this time: the app works as before */ }
+    closureLoading = null;
+    return closureData;
+  })();
+  return closureLoading;
+}
+// Route segments in a grid of ~2 km cells, so each closure point only looks at the route near it.
+function routeGrid(route) {
+  const C = 0.02, cells = new Map();
+  const { coords } = route;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const [a, b] = [coords[i], coords[i + 1]];
+    for (let x = Math.floor(Math.min(a[0], b[0]) / C); x <= Math.floor(Math.max(a[0], b[0]) / C); x++)
+      for (let y = Math.floor(Math.min(a[1], b[1]) / C); y <= Math.floor(Math.max(a[1], b[1]) / C); y++) {
+        const k = `${x},${y}`;
+        if (!cells.has(k)) cells.set(k, []);
+        cells.get(k).push(i);
+      }
+  }
+  return { C, cells };
+}
+// Nearest route spot to a point: distance (m), km along the route, and the route's bearing there.
+function nearestOnRoute(route, grid, p) {
+  const x = Math.floor(p[0] / grid.C), y = Math.floor(p[1] / grid.C);
+  let best = null;
+  const P = xy(p, p[1]);
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+    for (const i of grid.cells.get(`${x + dx},${y + dy}`) || []) {
+      const a = route.coords[i], b = route.coords[i + 1];
+      const r = seg(P, xy(a, p[1]), xy(b, p[1]));
+      if (!best || r.d < best.d) best = { d: r.d, i, km: route.km[i] + r.t * (route.km[i + 1] - route.km[i]) };
+    }
+  }
+  if (best) { best.d *= 1000; best.dir = bearing(route.coords[best.i], route.coords[best.i + 1]); } // d in m
+  return best;
+}
+// Points every CLOSURE_STEP_M along a line, each with the line's bearing there.
+function samplesOf(line) {
+  const out = [];
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i], b = line[i + 1], len = distM(a, b), dir = bearing(a, b);
+    const n = Math.max(1, Math.ceil(len / CLOSURE_STEP_M));
+    for (let k = 0; k < n; k++) out.push({ p: [a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n], dir });
+  }
+  if (line.length > 1) out.push({ p: line[line.length - 1], dir: bearing(line[line.length - 2], line[line.length - 1]) });
+  return out;
+}
+function matchClosures(route) {
+  if (closureMatches.has(route)) return closureMatches.get(route);
+  if (!closureData?.closures) return [];
+  const xs = route.coords.map((c) => c[0]), ys = route.coords.map((c) => c[1]);
+  const box = [Math.min(...xs) - 0.01, Math.min(...ys) - 0.01, Math.max(...xs) + 0.01, Math.max(...ys) + 0.01];
+  const grid = routeGrid(route);
+  const out = [];
+  for (const c of closureData.closures) {
+    for (const line of c.lines || []) {
+      if (!line.some(([x, y]) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3])) continue;
+      const smp = samplesOf(line);
+      const hits = [];
+      for (const s of smp) {
+        const n = nearestOnRoute(route, grid, s.p);
+        if (!n || n.d > CLOSURE_NEAR_M) continue;
+        // Lines run the way the closed carriageway is driven: the other direction doesn't concern you.
+        // A whole road closed (NL roadClosed) counts either way.
+        if (!c.full && angleDiff(n.dir, s.dir) > 50) continue;
+        hits.push(n.km);
+      }
+      if (!hits.length || hits.length < CLOSURE_MATCH * smp.length) continue;
+      const fromKm = Math.min(...hits), toKm = Math.max(...hits);
+      out.push({ id: c.id, c, fromKm, toKm: Math.max(toKm, fromKm + 0.05) });
+      break; // one match per closure
+    }
+  }
+  out.sort((a, b) => a.fromKm - b.fromKm);
+  closureMatches.set(route, out);
+  return out;
+}
+// The closure's time windows that overlap the time you'll drive through it.
+function closureWhen(m) {
+  const u = state.user, now = Date.now();
+  const a = now + (minAtKm(m.fromKm) - u.min - CLOSURE_MARGIN_MIN) * 60000;
+  const b = now + (minAtKm(m.toKm) - u.min + CLOSURE_MARGIN_MIN) * 60000;
+  return (m.c.periods || []).map(([s, e]) => [Date.parse(s), Date.parse(e)]).find(([s, e]) => s < b && e > a) || null;
+}
+function closuresAhead() {
+  if (!state.route) return [];
+  return matchClosures(state.route).filter((m) => m.toKm > state.user.km && closureWhen(m));
+}
+function closureLabel(m) {
+  const road = m.c.road || mainRoadAt((m.fromKm + m.toKm) / 2)?.ref || roadAt(m.fromKm)?.ref || "";
+  const where = m.c.between ? m.c.between.replace(/ - /g, " – ") : nearbyName(pointAtKm((m.fromKm + m.toKm) / 2));
+  return `${road ? `${road} ` : "Road "}closed${where ? ` · ${where}` : ""}`;
+}
+const dayTime = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+function closureRow(m) {
+  const u = state.user, [from, until] = closureWhen(m);
+  const inside = m.fromKm <= u.km;
+  const when = inside ? `<span class="when"><b>now</b>&ensp;${fmtKm(m.toKm - u.km)} km left</span>`
+    : `<span class="when"><b>${fmtKm(m.fromKm - u.km)}</b>&nbsp;km&ensp;${fmtClock(minAtKm(m.fromKm) - u.min)}</span>`;
+  const span = from > Date.now() ? `from ${dayTime(from)} to ${dayTime(until)}` : `until ${dayTime(until)}`;
+  const busy = state.avoiding === m.id;
+  return `<div class="row closure" title="${esc((m.c.dir ? `${m.c.dir}. ` : "") + (m.c.text || ""))}">
+    <span class="marker" aria-hidden="true"></span>
+    <div><div class="name"><span class="label">${esc(closureLabel(m))}</span></div>
+      <div class="sub meta">${when}<span class="until">${esc(span)}</span></div></div>
+    <div class="avail"><button type="button" class="avoid" data-avoid="${esc(m.id)}" ${busy || state.rerouting ? "disabled" : ""}>${busy ? "…" : "Avoid"}</button></div>
+  </div>`;
+}
+// A small square on the route itself, halfway along the closed stretch: the routing service then
+// can't use that carriageway. Placed on the route's own line (not the closure's), so it surely hits it.
+function avoidRing(m) {
+  const [lon, lat] = pointAtKm((m.fromKm + m.toKm) / 2);
+  const dy = AVOID_HALF_M / 111320, dx = AVOID_HALF_M / (111320 * Math.cos(lat * Math.PI / 180));
+  const r = (v) => +v.toFixed(6);
+  return [[r(lon - dx), r(lat - dy)], [r(lon + dx), r(lat - dy)], [r(lon + dx), r(lat + dy)], [r(lon - dx), r(lat + dy)]];
+}
+async function avoidClosure(id) {
+  const m = closuresAhead().find((x) => x.id === id);
+  if (!m || state.rerouting) return;
+  state.avoiding = id; state.rerouting = true;
+  render();
+  const before = state.avoid || [];
+  state.avoid = [...before.filter((a) => a.id !== id), { id, ring: avoidRing(m) }].slice(-10);
+  showBanner("Planning a route around the closure…");
+  try {
+    await plan(await hereNow());
+    state.stickToBottom = true;
+    await loadClosures();
+    const still = matchClosures(state.route).some((x) => x.id === id);
+    showBanner(still ? "No way around this closure found. The route still goes through it."
+      : "New route around the closure.", { ok: !still, hideAfter: 6000 });
+  } catch (e) {
+    state.avoid = before;
+    showBanner(`Couldn’t plan around it: ${e.message}`, { retry: false });
+    reportError(`Avoid closure: ${e.message}`);
+  } finally {
+    state.avoiding = null; state.rerouting = false;
+    save();
+    render();
+  }
+}
+$("list").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-avoid]");
+  if (!b) return;
+  e.stopPropagation();
+  avoidClosure(b.dataset.avoid);
+});
+
 function upcoming() {
   return state.stations.filter((s) => s.alongKm > state.user.km - PASSED_KM);
 }
@@ -3944,9 +4120,16 @@ function render() {
   if (note) inOrder.push({ key: "note", html: note });
   const nextRoads = roads.filter((p) => p.fromKm !== curRoad?.fromKm && p.fromKm > u.km);
   let ri = 0;
-  const pushRoad = () => { const p = nextRoads[ri++]; inOrder.push({ key: `road-${p.fromKm}`, html: roadRow(p, false) }); };
+  const closures = closuresAhead();
+  let ci = 0;
+  const pushClosures = (km) => {
+    while (ci < closures.length && closures[ci].fromKm <= km) { const m = closures[ci++]; inOrder.push({ key: `closure-${m.id}`, html: closureRow(m) }); }
+  };
+  pushClosures(u.km); // one you're in or right at: nearest
+  const pushRoad = () => { const p = nextRoads[ri++]; pushClosures(p.fromKm); inOrder.push({ key: `road-${p.fromKm}`, html: roadRow(p, false) }); };
   ahead.forEach((site, i) => {
     while (ri < nextRoads.length && nextRoads[ri].fromKm <= site.alongKm) pushRoad();
+    pushClosures(site.alongKm);
     // Without road rows: a badge where the road changes between chargers, and under the nearest
     // charger the road you're on.
     const below = rows ? null : roadChange(i ? ahead[i - 1].alongKm : -Infinity, site.alongKm) || (i === 0 ? curRoad : null);
@@ -3954,6 +4137,7 @@ function render() {
     inOrder.push({ key: site.members.map((m) => m.id).join(" "), html: stationRow(site, below, above).trim() });
   });
   while (ri < nextRoads.length) pushRoad();
+  pushClosures(Infinity);
   if (!ahead.length && !checking) {
     inOrder.push({ key: "empty", html: hiddenCount
       ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
@@ -3991,7 +4175,7 @@ function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       to: state.to, vias: state.vias || [], route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
-      planBrands: state.planBrands, arrived: !!state.arrived,
+      planBrands: state.planBrands, arrived: !!state.arrived, avoid: state.avoid || [],
     }));
   } catch (_) { /* storage full or blocked; the app still works */ }
 }
@@ -4002,7 +4186,8 @@ function restore() {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (!saved?.route) return;
     Object.assign(state, { to: saved.to, vias: saved.vias || (saved.via ? [saved.via] : []), route: saved.route, stations: saved.stations, statusAt: saved.statusAt,
-      planBrands: saved.planBrands || ["ionity"], arrived: !!saved.arrived });
+      planBrands: saved.planBrands || ["ionity"], arrived: !!saved.arrived, avoid: saved.avoid || [] });
+    loadClosures().then(() => render());
     $("sim").checked = !!saved.sim;
     startDriving();
     if (!state.route.mapRoads) roadsFromMap();
@@ -4157,6 +4342,9 @@ function helpHtml() {
   <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. Don't want these rows? In the brands button (top left), set <b>Main roads on the line</b> to <b>Changes only</b>, or just tap a road row (tap a road badge on the line to bring them back): then a badge sits on the line only where the road changes between chargers. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
   <p>The <b>☰ menu</b> top left holds New route and Help. Top right is the <b>status time</b> of the chargers (now, or how many minutes old; tap it to update, at most once a minute, but right away once after a failed update).</p>
   <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto. A roundabout is drawn with its exit where the road really leaves and the exit number in the middle ("2nd exit", or "straight on"). In the last 500 m the whole row pulses: a white band sweeps across it the way you turn (left to right for right, right to left for left), and straight on the whole row fades between black and white. It sweeps about once a second while you drive and twice as fast in the last 50 m; when you stand still (a traffic light), it sweeps three more times and then holds still in white until you drive off. A "keep left/right" where you simply stay on the same motorway isn't shown. On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
+
+  <h3>Road closures</h3>
+  <p>Planned closures in the Netherlands and Germany show on the line as a red row (<b>A1 closed · Dortmund/Unna – Kamener Kreuz</b>), only when they're on your route, in your direction, and in force around the time you get there: with the distance, the time to get there and until when it's closed. Closures in the other direction, lane closures and closures for lorries only don't show. <b>Avoid</b> plans a new route around it; that stays for this trip (also when you're rerouted) until you plan a new route. The routing itself doesn't know these closures: without Avoid, the route still goes through. The closures are updated every few hours (the interval is set on the admin page). Town streets aren't included.</p>
 
   <h3>Free or not</h3>
   <div class="legend">

@@ -26,7 +26,7 @@ jobs:
         run: python3 tools/build-closures.py
       - name: Commit if changed
         run: |
-          git add data/closures.json data/closures-probe 2>/dev/null || true
+          git add data/closures.json data/closures-local.json data/closures-probe 2>/dev/null || true
           if git diff --cached --quiet; then echo "Nothing changed"; exit 0; fi
           git config user.name "closures-bot"
           git config user.email "actions@users.noreply.github.com"

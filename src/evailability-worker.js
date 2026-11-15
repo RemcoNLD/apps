@@ -3,7 +3,8 @@
 // Endpoints
 //   GET  /                      health check: shows which secrets are set
 //   GET  /geocode?q=Venlo       address search -> [{label, lat, lon}]
-//   POST /plan                  {from:[lon,lat], to:[lon,lat], corridorKm?:5, brands?:["ionity","fastned",…]}
+//   POST /plan                  {from:[lon,lat], to:[lon,lat], corridorKm?:5, brands?:["ionity","fastned",…],
+//                               avoid?:[[[lon,lat],…],…]}  (avoid: small areas around closures the driver chose to avoid)
 //                               -> route + chargers of those brands along it (detour minutes only when cached)
 //   POST /status                {stations:[{id, lat, lon, country, brand}]}
 //   POST /fr-status             {stations:[{id, lat, lon, brand}]}  France, from one national file (read at most every 90 s)
@@ -41,7 +42,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-15.93";
+const WORKER_VERSION = "2026-11-15.94";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -503,20 +504,23 @@ function turnsOf(route) {
 // The routing service's raw answer per route object (kept only as long as the route itself is cached),
 // so a /plan in debug mode can store it.
 const rawRoute = new WeakMap();
-async function getRouteCached(env, points) {
-  const key = `route:${JSON.stringify(points)}`;
+async function getRouteCached(env, points, avoid = null) {
+  const key = `route:${JSON.stringify(points)}${avoid ? `:${JSON.stringify(avoid)}` : ""}`;
   const hit = memoGet(key);
   if (hit) { countCall("Route from cache"); return hit; }
-  const r = await getRoute(env, points);
+  const r = await getRoute(env, points, avoid);
   memoSet(key, r, ROUTE_TTL_MS);
   return r;
 }
 
-async function getRoute(env, points) {
+// avoid: small areas the route must not pass (road closures the driver chose to avoid), as rings of [lon, lat].
+async function getRoute(env, points, avoid = null) {
+  const req = { coordinates: points, radiuses: snapRadii(points), instructions: true, extra_info: ["countryinfo", "waycategory"] };
+  if (avoid?.length) req.options = { avoid_polygons: { type: "MultiPolygon", coordinates: avoid.map((ring) => [ring]) } };
   const data = await fetchJson(`${ORS_BASE}/directions/driving-car/geojson`, {
     method: "POST",
     headers: orsHeaders(env),
-    body: JSON.stringify({ coordinates: points, radiuses: snapRadii(points), instructions: true, extra_info: ["countryinfo", "waycategory"] }),
+    body: JSON.stringify(req),
   }, "Routing");
   const f = data.features?.[0];
   if (!f) throw new HttpError(502, "Routing returned no route");
@@ -1433,7 +1437,20 @@ async function handlePlan(request, env) {
       if (p && haversineKm(p, vias[i]) < 15) vias[i] = [+p[0].toFixed(5), +p[1].toFixed(5)];
     } catch (_) { /* keep the centre */ }
   }
-  const route = await getRouteCached(env, [from, ...vias, to]);
+  // Closures the driver chose to avoid: up to 10 small rings (4 to 12 points), closed here if needed.
+  let avoid = null;
+  if (body.avoid != null) {
+    const ok = Array.isArray(body.avoid) && body.avoid.length <= 10 && body.avoid.every((r) =>
+      Array.isArray(r) && r.length >= 3 && r.length <= 12 && r.every(valid));
+    if (!ok) throw new HttpError(400, "avoid: up to 10 rings of 3 to 12 [lon, lat] points");
+    avoid = body.avoid.map((r) => {
+      const ring = r.map(([x, y]) => [+x.toFixed(6), +y.toFixed(6)]);
+      const [a, b] = [ring[0], ring.at(-1)];
+      return a[0] === b[0] && a[1] === b[1] ? ring : [...ring, a];
+    });
+    if (!avoid.length) avoid = null;
+  }
+  const route = await getRouteCached(env, [from, ...vias, to], avoid);
   const pois = await sitesAlongRoute(env, route, corridorKm, brands);
   learnCountries(route, pois.map((p) => ({
     index: projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).index,

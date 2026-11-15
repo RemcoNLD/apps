@@ -264,8 +264,9 @@ def autobahn():
                 continue
             imp = c.get("impact") or {}
             out.append({
-                "id": c.get("identifier"), "full": True, "road": road.strip(),
-                "from": imp.get("lower"), "to": imp.get("upper"), "dir": (c.get("subtitle") or "").strip(),
+                "id": c.get("identifier"), "full": False, "road": road.strip(),  # one direction (lines run the way it is driven)
+                # title "A1 | Dortmund/Unna - Kamener Kreuz": junctions in the order you drive them
+                "between": ((c.get("title") or "").split("|", 1)[-1]).strip(), "dir": (c.get("subtitle") or "").strip(),
                 "text": text[:300], "periods": [[iso(a), iso(b)] for a, b in periods[:20]], "lines": [simplify(geo)],
             })
         time.sleep(0.2)
@@ -293,7 +294,15 @@ def main():
             out["sources"][key] = {"ok": False, "count": 0, "error": str(e)[:200]}
         print(key, out["sources"][key].get("count"), out["sources"][key].get("error", ""))
     os.makedirs("data", exist_ok=True)
+    # Municipal streets (most NL records, ~2 MB) go in a separate file the app doesn't load (yet).
+    local_ = [c for c in out["closures"] if c["country"] == "NL" and (c.get("src") or "").startswith("Gemeente")]
+    out["closures"] = [c for c in out["closures"] if c not in local_]
+    if "nl" in out["sources"] and out["sources"]["nl"]["ok"]:
+        out["sources"]["nl"]["count"] = len(out["closures"]) - sum(1 for c in out["closures"] if c["country"] != "NL")
+        out["sources"]["nl"]["municipal"] = len(local_)
     json.dump(out, open(OUT, "w"), separators=(",", ":"), ensure_ascii=False)
+    json.dump({"generatedAt": out["generatedAt"], "closures": local_}, open("data/closures-local.json", "w"),
+              separators=(",", ":"), ensure_ascii=False)
 
 
 if __name__ == "__main__":

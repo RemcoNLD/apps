@@ -125,12 +125,12 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   /* Status bottom right while updating: a turning ring and the text gently pulsing */
-  .you .age { position: relative; }
-  .you .age.busy { display: inline-flex; align-items: center; gap: 10px; color: var(--sign-blue); }
-  .you .age.busy .spinner { width: 18px; height: 18px; flex: none; }
-  .you .age.busy .txt { animation: pulse 1.2s ease-in-out infinite; }
+  .you .age, .locbar .age { position: relative; }
+  .you .age.busy, .locbar .age.busy { display: inline-flex; align-items: center; gap: 10px; color: var(--sign-blue); }
+  .you .age.busy .spinner, .locbar .age.busy .spinner { width: 18px; height: 18px; flex: none; }
+  .you .age.busy .txt, .locbar .age.busy .txt { animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .45; } }
-  @media (prefers-reduced-motion: reduce) { .you .age.busy .txt { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .you .age.busy .txt, .locbar .age.busy .txt { animation: none; } }
   /* Arrival: a short confetti shower and a card */
   .confetti { position: fixed; inset: 0; z-index: 45; pointer-events: none; overflow: hidden; }
   .confetti i {
@@ -393,6 +393,22 @@
   .locbar .place { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--line); font-weight: 600; }
   .locbar .warn { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--full); }
   .you .sub { font-size: 1rem; }
+  /* Turn by turn in your row (.88): arrow, countdown, road; next exit on the right */
+  #drive .row.you { grid-template-columns: 48px 1fr auto; }
+  .row.you .turn { margin-left: 12px; display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .row.you .turn > * { flex-shrink: 0; }
+  .turn-ico { width: 30px; height: 30px; color: var(--line); }
+  .row.you .turn .dist { font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--line); }
+  .row.you .turn.soon .dist, .row.you .turn.soon .turn-ico { color: var(--sign-blue, #1d4fa3); }
+  .row.you .turn .turn-txt { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; color: var(--line); }
+  .row.you .turn .rb { font-size: .95rem; }
+  .next-exit { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; color: var(--muted); }
+  .next-exit .dist { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--line); }
+  .exit-sign { display: inline-flex; align-items: center; gap: 4px; max-width: 8.5em; padding: 1px 6px; border-radius: 5px; border: 1.5px solid currentColor; font-size: .85rem; font-weight: 700; color: var(--muted); overflow: hidden; }
+  .exit-sign > span { overflow: hidden; text-overflow: ellipsis; }
+  .row.you .turn .exit-sign { color: var(--line); }
+  .locbar .age { margin-left: auto; padding-left: 8px; font-size: .9rem; }
+  .locbar .age.err { white-space: nowrap !important; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
   .banner {
     margin: 0 16px 12px; padding: 14px 16px; border-radius: 10px;
@@ -532,8 +548,8 @@
   #start .check { margin: 14px 0 0; font-size: .95rem; }
   #start .primary { margin-top: 14px; padding: 14px; }
   /* Status age, bottom right in your own row */
-  .you .age { text-align: right; color: var(--muted); font-size: .95rem; line-height: 1.25; white-space: nowrap; }
-  .you .age.err { color: var(--danger); white-space: normal; max-width: 14em; }
+  .you .age, .locbar .age { text-align: right; color: var(--muted); font-size: .95rem; line-height: 1.25; white-space: nowrap; }
+  .you .age.err, .locbar .age.err { color: var(--danger); white-space: normal; max-width: 14em; }
 
   /* ---------- introduction (first run) ---------- */
   .intro {
@@ -686,7 +702,7 @@
   .avr.changed { animation: changed 1.3s ease-out; }
   @media (prefers-reduced-motion: reduce) { .avr.changed { animation: none; } .avr circle { transition: none; } }
   /* Several brands at one site: rings side by side, the brand logo as a badge on each ring */
-  .avail.multi { display: flex; align-items: center; justify-content: flex-end; gap: 6px; position: relative; }
+  .avail.multi { display: flex; align-items: center; justify-content: flex-end; gap: 6px; position: relative; padding-right: 5px; } /* room for the last ring's logo badge */
   .avail.multi .ml { display: block; position: relative; line-height: 0; }
   .avail.multi .avr { width: 44px; height: 44px; }
   .avail.multi.n3 .avr { width: 35px; height: 35px; }
@@ -985,7 +1001,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.87";
+const APP_VERSION = "2026-11-15.88";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1488,6 +1504,7 @@ async function matchRoads(route, run) {
   const CHUNK = 100, STEP = 0.2, NEAR_M = 30, BOX_KM = 4;
   const samples = []; // {k, ref, intRef, cls}
   const marks = new Map(); // landmarks for the location line: id -> [lon, lat, kind, name]
+  const exits = new Map(); // exits on your side of the motorway: id -> [km, ref, name]
   let anyMatched = 0, n = 0;
   try {
     for (let c0 = 0; c0 < total; c0 += CHUNK) {
@@ -1507,7 +1524,7 @@ async function matchRoads(route, run) {
       const hw = `[highway~"^(${Object.keys(MAP_CLASSES).join("|")})$"][ref]`;
       const data = await overpass(`[out:json][timeout:20];(${boxes.map((b) => `way${hw}(${b});`).join("")});out tags geom;`);
       if (run !== mapRun || state.route !== route) return; // a newer route
-      await landmarksAlong(boxes, c0, c1, marks);
+      await landmarksAlong(boxes, c0, c1, marks, exits);
       if (run !== mapRun || state.route !== route) return;
       // Segments in a grid (about 300 m cells) for quick lookups.
       const lat0 = coords[idx[0]][1], kx = 111.32 * Math.cos(lat0 * Math.PI / 180), ky = 110.57, CELL = 0.3;
@@ -1553,7 +1570,11 @@ async function matchRoads(route, run) {
     else reportError(`Road numbers from the map: ${e.message}. Using the route's own.`);
     return;
   }
-  if (run === mapRun && state.route === route && marks.size) { route.landmarks = [...marks.values()]; nearCache.key = null; save(); }
+  if (run === mapRun && state.route === route && marks.size) {
+    route.landmarks = [...marks.values()];
+    route.exits = [...exits.values()].sort((a, b) => a[0] - b[0]);
+    nearCache.key = null; save(); render();
+  }
   // Only numbered roads are asked for, so town streets stay unmatched: a quarter is plenty.
   if (run !== mapRun || state.route !== route || !n || anyMatched / n < 0.25) return;
   // Stretches of the same number; gaps without a number (ramps, junctions) up to 3 km join the same road.
@@ -1589,7 +1610,7 @@ async function matchRoads(route, run) {
 // Landmarks for the location line ("A17 Zevenbergen"): named motorway exits on the route (in the
 // same small boxes as the roads) and towns and villages near it (wider boxes every 10 km). One extra
 // map query per 100 km, right after the roads; if it fails the line just shows the badge.
-async function landmarksAlong(roadBoxes, c0, c1, marks) {
+async function landmarksAlong(roadBoxes, c0, c1, marks, exits) {
   const wide = [];
   for (let b0 = c0; b0 < c1; b0 += 10) {
     const pts = [pointAtKm(b0), pointAtKm(Math.min(state.route.distanceKm, b0 + 5)), pointAtKm(Math.min(state.route.distanceKm, b0 + 10))];
@@ -1597,10 +1618,31 @@ async function landmarksAlong(roadBoxes, c0, c1, marks) {
     const my = 0.07, mx = 0.07 / Math.cos(lats[0] * Math.PI / 180); // about 8 km
     wide.push(`${(Math.min(...lats) - my).toFixed(4)},${(Math.min(...lons) - mx).toFixed(4)},${(Math.max(...lats) + my).toFixed(4)},${(Math.max(...lons) + mx).toFixed(4)}`);
   }
-  const q = `[out:json][timeout:20];(${roadBoxes.map((b) => `node[highway=motorway_junction][name](${b});`).join("")}${wide.map((b) => `node[place~"^(city|town|village)$"][name](${b});`).join("")});out qt;`;
+  // Exits with the motorway they sit on (so only the ones on your side of the road count), then places.
+  const q = `[out:json][timeout:25];(${roadBoxes.map((b) => `node[highway=motorway_junction](${b});`).join("")})->.j;.j out qt;`
+    + `way(bn.j)[highway~"^(motorway|trunk)$"];out geom qt;`
+    + `(${wide.map((b) => `node[place~"^(city|town|village)$"][name](${b});`).join("")});out qt;`;
   try {
     const data = await overpass(q);
-    for (const e of data.elements || []) {
+    const els = data.elements || [];
+    const junctions = new Map(els.filter((e) => e.type === "node" && e.tags?.highway === "motorway_junction").map((e) => [e.id, e]));
+    // A junction is on your side when the motorway it's on runs the same way as the route there.
+    for (const w of els.filter((e) => e.type === "way" && e.geometry && e.nodes)) {
+      w.nodes.forEach((nid, i) => {
+        const j = junctions.get(nid);
+        if (!j || exits.has(nid) || !(j.tags.ref || j.tags.name)) return;
+        const g = w.geometry, a = g[Math.max(0, i - 1)], b = g[Math.min(g.length - 1, i + 1)];
+        if (!a || !b || (a.lat === b.lat && a.lon === b.lon)) return;
+        const pr = projectPoint(j.lat, j.lon);
+        if (!pr || pr.d > 0.15) return;
+        const wayDir = bearing([a.lon, a.lat], [b.lon, b.lat]);
+        const routeDir = bearing(pointAtKm(Math.max(0, pr.km - 0.1)), pointAtKm(Math.min(state.route.distanceKm, pr.km + 0.1)));
+        if (angleDiff(wayDir, routeDir) > 50) return;
+        exits.set(nid, [Math.round(pr.km * 100) / 100, j.tags.ref || "", j.tags.name || ""]);
+      });
+    }
+    for (const e of els) {
+      if (e.type !== "node") continue;
       const t = e.tags || {};
       const kind = t.highway === "motorway_junction" ? "x" : t.place === "city" ? "c" : t.place === "town" ? "t" : "v";
       const name = t.name;
@@ -1628,6 +1670,73 @@ function nearbyName(lonlat) {
   nearCache.key = key;
   nearCache.val = exit?.name || place?.name || null;
   return nearCache.val;
+}
+
+// ---- Turn by turn (your row). The routing service's own steps, which came with the route (no extra
+// calls): the next one ahead with a countdown and the road you turn onto. On a motorway, the next exit
+// (number and name, your side of the road only) counts down on the right, unless that's where you turn.
+const TURN_ANGLE = { 0: -90, 1: 90, 2: -135, 3: 135, 4: -45, 5: 45, 6: 0, 8: 45, 12: -35, 13: 35 };
+function turnIcon(type, exitNo) {
+  const svg = (inner) => `<svg class="turn-ico" viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
+  const head = (x, y, ang) => { // arrowhead at (x, y) pointing at ang degrees (0 = up)
+    const r = Math.PI / 180, pt = (d, a) => `${(x + d * Math.sin((ang + a) * r)).toFixed(1)},${(y - d * Math.cos((ang + a) * r)).toFixed(1)}`;
+    return `<path d="M${pt(0, 0)} L${pt(6.5, 150)} L${pt(6.5, -150)}Z" fill="currentColor"/>`;
+  };
+  const line = 'fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"';
+  if (type === 10) return svg(`<path d="M7 21V4" ${line}/><path d="M7 4h11l-3 4 3 4H7" fill="currentColor"/>`); // arrive: flag
+  if (type === 9) return svg(`<path d="M16 22V10a5 5 0 0 0-10 0v6" ${line}/>${head(6, 19, 180)}`); // U-turn
+  if (type === 7) {
+    return svg(`<circle cx="12" cy="10" r="5" ${line}/><path d="M12 22v-7" ${line}/>${exitNo ? `<text x="12" y="12.6" text-anchor="middle" font-size="7.5" font-weight="800" fill="currentColor">${exitNo}</text>` : ""}`);
+  }
+  const ang = TURN_ANGLE[type] ?? 0, r = Math.PI / 180;
+  const bx = 12 - 4 * Math.sin(ang * r), by = 13; // the bend leans away from the turn so the arrow stays centred
+  const ex = bx + 8 * Math.sin(ang * r), ey = by - 8 * Math.cos(ang * r);
+  return svg(`<path d="M${bx.toFixed(1)} 22V${by} L${ex.toFixed(1)} ${ey.toFixed(1)}" ${line}/>${head(ex + 1.5 * Math.sin(ang * r), ey - 1.5 * Math.cos(ang * r), ang)}`);
+}
+function fmtDist(km) {
+  if (km < 0.95) return `${Math.max(0, Math.round(km * 20) * 50)} m`;
+  return `${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
+}
+function nextTurn() {
+  const turns = state.route?.turns;
+  if (!turns?.length) return null;
+  const k = state.user.km;
+  const i = turns.findIndex(([km]) => km > k + 0.03);
+  return i < 0 ? null : { km: turns[i][0], type: turns[i][1], name: turns[i][2], exitNo: turns[i][3], next: turns[i + 1] };
+}
+// What the turn leads onto: the numbered road there (as on the timeline), else the step's street name.
+function turnTarget(t) {
+  if (t.type === 10) return `<span class="turn-txt">${esc(state.to?.label?.split(",")[0] || "Destination")}</span>`;
+  const road = mainRoadAt(t.km + 0.4);
+  if (road && road.fromKm >= t.km - 1.5 && road.fromKm <= t.km + 1.5) return roadPartBadge(withOverride(road));
+  const ref = normRef((t.name.match(/\b[ABDEMNRS] ?\d{1,4}[a-z]?\b/) || [])[0]);
+  if (ref) return roadBadge(ref, countryAt(t.km, t.km));
+  // An unnamed slip road: name the road it leads to, if that comes right after.
+  const name = t.name || (t.next && t.next[0] - t.km < 2 ? t.next[2] : "");
+  return name ? `<span class="turn-txt">${esc(name)}</span>` : "";
+}
+function nextExit(turnKm) {
+  const exits = state.route?.exits;
+  const u = state.user;
+  if (!exits?.length || !onMainRoadNow()) return null;
+  const x = exits.find(([km]) => km > u.km + 0.03);
+  if (!x || x[0] - u.km > 30) return null;
+  if (turnKm != null && Math.abs(turnKm - x[0]) < 1.2) return { ...x, isTurn: true };
+  return { km: x[0], ref: x[1], name: x[2] };
+}
+function exitSign(ref, name) {
+  return `<span class="exit-sign">${ref ? `<b>${esc(ref)}</b>` : ""}${name ? `<span>${esc(name)}</span>` : ""}</span>`;
+}
+function turnRow() {
+  const u = state.user;
+  const t = u.at != null && u.offKm <= ON_ROUTE_KM ? nextTurn() : null;
+  if (!t) return `<div class="name">You</div>`;
+  const ex = nextExit(t.km);
+  // Turning at an exit: its number goes with the turn ("↗ 1.2 km 18 A58").
+  const atExit = ex?.isTurn && ex[1] ? `<span class="exit-sign"><b>${esc(ex[1])}</b></span>` : "";
+  const right = ex && !ex.isTurn
+    ? `<div class="next-exit">${exitSign(ex.ref, ex.name)}<span class="dist">${fmtDist(ex.km - u.km)}</span></div>` : "";
+  return `<div class="turn${t.km - u.km < 0.5 ? " soon" : ""}">${turnIcon(t.type, t.exitNo)}<span class="dist">${fmtDist(t.km - u.km)}</span>${atExit}${turnTarget(t)}</div>${right}`;
 }
 
 // Second source of chargers in the Netherlands (NDW), for sites Open Charge Map doesn't have
@@ -3620,9 +3729,10 @@ function render() {
 
   // What we know about your position. The road badge only when you're on the route with a recent fix:
   // projected from an old or off-route position it names a road you're not on.
-  setHtml($("youRow"), `<span class="marker" aria-hidden="true"></span>
-    <div class="name">You</div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`);
-  setHtml($("locBar"), locationLine());
+  // Your row: the next turn with a countdown, and the next exit on a motorway (routes planned
+  // before .88 have no turns: then just "You"). The status time sits at the end of the bottom line.
+  setHtml($("youRow"), `<span class="marker" aria-hidden="true"></span>${turnRow()}`);
+  setHtml($("locBar"), `${locationLine()}<span class="age${state.statusError ? " err" : ""}" id="age"></span>`);
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcomingShown();
@@ -3861,7 +3971,7 @@ function helpHtml() {
   <h3>The screen while driving</h3>
   <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. Don't want these rows? In the brands button (top left), set <b>Main roads on the line</b> to <b>Changes only</b>, or just tap a road row (tap a road badge on the line to bring them back): then a badge sits on the line only where the road changes between chargers. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
-  <p>Your own row shows the status time (an error appears there too). The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
+  <p>Your own row shows the <b>next turn</b>: an arrow, the distance counting down and the road you turn onto (a roundabout shows its exit number). On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street, and at the end the status time (an error appears there too). With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Free or not</h3>
   <div class="legend">

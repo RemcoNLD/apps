@@ -40,7 +40,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-15.87";
+const WORKER_VERSION = "2026-11-15.88";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1433,6 +1433,11 @@ async function handlePlan(request, env) {
       borders: (route.countrySegs || []).map(([a, b, id]) => ({ fromKm: Math.round(route.km[a]), toKm: Math.round(route.km[b]), id, iso: route.idIso[id] || null })),
       debugNames: [...new Set(route.steps.filter((s) => s.distance > 2000).map((s) => s.name))].slice(0, 25),
       // Every step with a name: km where it starts and the routing service's name, to check road numbers.
+      // Turn-by-turn for your row: [km where it happens, type, road name, roundabout exit] per step
+      // (type: 0 left, 1 right, 2/3 sharp, 4/5 slight, 6 straight, 7 roundabout, 9 U-turn, 10 arrive,
+      // 11 depart, 12 keep left, 13 keep right). Already in the routing answer, so no extra calls.
+      turns: route.steps.filter((st) => st.way_points && ![6, 11].includes(st.type))
+        .map((st) => [Math.round(route.km[st.way_points[0]] * 100) / 100, st.type, st.name && st.name !== "-" ? st.name : "", st.exit_number || 0]),
       debugSteps: route.steps.filter((st) => st.name && st.name !== "-" && st.way_points).map((st) => [Math.round(route.km[st.way_points[0]] * 10) / 10, st.name]).slice(0, 120),
       coords: keep.map((i) => [+route.coords[i][0].toFixed(5), +route.coords[i][1].toFixed(5)]),
       km: keep.map((i) => Math.round(route.km[i] * 100) / 100),

@@ -77,6 +77,17 @@
   .switch input:checked + span::after { transform: translateX(22px); }
   .switch input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
   #setMsg { min-height: 1.2em; }
+  /* Debug route viewer */
+  #routeView details { background: var(--card); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+  #routeView summary { font-weight: 700; cursor: pointer; padding: 4px 0; }
+  #routeView .table-wrap { margin-top: 8px; max-height: 70vh; overflow: auto; }
+  #routeView td, #routeView th { padding: 6px 10px; font-size: .88rem; text-align: left; }
+  #routeView td.n, #routeView th.n { text-align: right; }
+  #routeView td.wrap { white-space: normal; min-width: 14em; }
+  #routeView pre { margin: 8px 0 0; max-height: 70vh; overflow: auto; font: .78rem/1.35 ui-monospace, Menlo, monospace; white-space: pre; }
+  #routeView .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin-top: 6px; font-size: .92rem; }
+  #routeView .kv > :nth-child(odd) { color: var(--muted); }
+  #routeView .hl { color: var(--warn); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -102,13 +113,13 @@
   <div class="card group">
     <div class="row"><input id="routeId" type="text" placeholder="Route id, e.g. k3x9q2" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Route id" style="flex:1"></div>
     <div class="session">
-      <button type="button" class="link" data-part="">Download all</button>
-      <button type="button" class="link" data-part="ors">Routing service only</button>
-      <button type="button" class="link" data-part="app">What the app got</button>
+      <button type="button" class="link" id="routeShow">Show</button>
+      <button type="button" class="link" data-part="">Download</button>
     </div>
     <div class="small muted" id="routeMsg">Routes planned in debug mode (Help &gt; Debug line) are kept 30 days. The id is after # on the app’s debug line.</div>
   </div>
 </div>
+<div id="routeView"></div>
 <div id="out"></div>
 
 <script>
@@ -322,6 +333,69 @@ $("settings").addEventListener("click", (e) => {
   if (b) saveSetting(b.dataset.reset, null);
 });
 
+// ---- Debug routes on screen: summary, the routing service's steps, road numbers, chargers and the raw JSON.
+const TURN_NAME = { 0: "left", 1: "right", 2: "sharp left", 3: "sharp right", 4: "slight left", 5: "slight right", 6: "straight", 7: "roundabout", 8: "leave roundabout", 9: "U-turn", 10: "arrive", 11: "depart", 12: "keep left", 13: "keep right" };
+// Long lists of coordinates and numbers shortened, so the raw JSON stays readable.
+function shortJson(v) {
+  return JSON.stringify(v, (k, x) => {
+    if (Array.isArray(x) && x.length > 12 && x.every((y) => typeof y === "number" || (Array.isArray(y) && y.every((z) => typeof z === "number")))) {
+      return `[${x.length} ${Array.isArray(x[0]) ? "points" : "numbers"}: ${JSON.stringify(x[0])} … ${JSON.stringify(x[x.length - 1])}]`;
+    }
+    return x;
+  }, 2);
+}
+const ll = (p) => (Array.isArray(p) ? `${(+p[1]).toFixed(5)}, ${(+p[0]).toFixed(5)}` : "–");
+const table = (head, rows) => `<div class="table-wrap"><table><thead><tr>${head.map(([h, c]) => `<th class="${c || ""}">${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
+function renderRoute(rec, id) {
+  const app = rec.app || {}, r = app.route || {}, req = rec.request || {};
+  const f = rec.ors?.answer?.features?.[0];
+  const segs = f?.properties?.segments || [];
+  const km = r.km || [];
+  // The routing service's own steps, with the km along the route from its distances.
+  let acc = 0;
+  const steps = segs.flatMap((sg) => sg.steps || []).map((st) => { const at = acc; acc += st.distance || 0; return { ...st, at: at / 1000 }; });
+  const stepRows = steps.map((st) => `<tr><td class="n">${st.at.toFixed(1)}</td><td>${esc(TURN_NAME[st.type] ?? st.type)}${st.exit_number ? ` (exit ${st.exit_number})` : ""}</td><td>${esc(st.name && st.name !== "-" ? st.name : "")}</td><td class="wrap">${esc(st.instruction || "")}</td><td class="n">${((st.distance || 0) / 1000).toFixed(2)}</td></tr>`);
+  const roadRows = (r.roads || []).map((x) => `<tr><td>${esc(x.ref)}</td><td>${esc(x.country || "")}</td><td class="n">${x.fromKm}</td><td class="n">${x.toKm}</td><td class="n">${(x.toKm - x.fromKm).toFixed(1)}</td></tr>`);
+  const stRows = (app.stations || []).map((x) => `<tr><td class="n">${x.alongKm}</td><td>${esc(x.brand)}</td><td>${esc(x.name)}</td><td>${esc(x.country || "")}</td><td class="n">${x.offRouteKm}</td><td class="n">${x.maxKw ?? ""}</td><td>${x.status ? esc(`${x.status.available ?? "?"}/${x.status.total ?? "?"}`) : "–"}</td><td>${esc(x.road || "")}</td></tr>`);
+  const sum = [
+    ["Id", `#${id}`], ["Planned", new Date(rec.at).toLocaleString()], ["Worker", rec.worker],
+    ["From", ll(req.from)], ["Via", (req.via || []).map(ll).join(" · ") || "–"], ["To", ll(req.to)],
+    ["Distance", `${r.distanceKm} km`], ["Time", `${r.durationMin} min`], ["Brands", (app.brands || []).join(", ")],
+    ["Roads", (r.roads || []).map((x) => x.ref).join(" › ") || "–"],
+    ["Borders", (r.borders || []).map((b) => `${b.iso || b.id} ${b.fromKm}–${b.toKm}`).join(", ") || "–"],
+    ["Chargers", (app.stations || []).length], ["Route points", `${(r.coords || []).length} (app) · ${f?.geometry?.coordinates?.length ?? "?"} (routing service)`],
+  ].map(([k, v]) => `<span>${esc(k)}</span><span>${esc(String(v))}</span>`).join("");
+  $("routeView").innerHTML = `<h2>Route #${esc(id)}</h2>
+    <details open><summary>Summary</summary><div class="kv">${sum}</div></details>
+    <details open><summary>Routing service steps (${steps.length})</summary>${steps.length ? table([["km", "n"], ["Type"], ["Name"], ["Instruction"], ["Length", "n"]], stepRows) : `<p class="small muted">${esc(rec.ors?.cached || "No raw answer kept.")}</p>`}</details>
+    <details><summary>Road numbers the app got (${(r.roads || []).length})</summary>${table([["Road"], ["Country"], ["From", "n"], ["To", "n"], ["km", "n"]], roadRows)}</details>
+    <details><summary>Chargers (${(app.stations || []).length})</summary>${table([["km", "n"], ["Brand"], ["Name"], ["Ctry"], ["Off", "n"], ["kW", "n"], ["Free"], ["Road"]], stRows)}</details>
+    <details><summary>Request</summary><pre>${esc(JSON.stringify(req, null, 2))}</pre></details>
+    <details><summary>Raw JSON (coordinate lists shortened)</summary><pre id="rawJson"></pre></details>`;
+  // Built only when opened: the routing answer can be large.
+  const raw = $("routeView").querySelector("details:last-child");
+  raw.addEventListener("toggle", () => { if (raw.open && !$("rawJson").textContent) $("rawJson").textContent = shortJson(rec); }, { once: false });
+  $("routeView").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+$("routeShow").addEventListener("click", async () => {
+  const id = $("routeId").value.trim().replace(/^#/, "").toLowerCase();
+  const msg = $("routeMsg");
+  msg.classList.remove("error");
+  if (!id) { msg.textContent = "Enter a route id first."; return; }
+  msg.textContent = "Fetching…";
+  try {
+    const res = await fetch(`${WORKER}/debug/route/${encodeURIComponent(id)}`, { headers: { "X-Access": savedToken() } });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Error ${res.status}`);
+    const rec = await res.json();
+    msg.textContent = "";
+    renderRoute(rec, id);
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add("error");
+  }
+});
+$("routeId").addEventListener("keydown", (e) => { if (e.key === "Enter") $("routeShow").click(); });
+
 // ---- Debug routes: a routing result the Worker kept for a plan made in debug mode, as a JSON file.
 $("debugRoute").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-part]");
@@ -359,6 +433,7 @@ $("logout").addEventListener("click", () => {
   try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch (_) {}
   $("out").innerHTML = "";
   $("settings").innerHTML = "";
+  $("routeView").innerHTML = "";
   showLoggedIn(false);
   $("pw").focus();
 });

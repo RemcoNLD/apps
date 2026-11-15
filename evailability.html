@@ -846,7 +846,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.60";
+const APP_VERSION = "2026-11-14.61";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2311,7 +2311,7 @@ function updateNavSrc() {
 // row that shows only a brand tells missing map data apart from a bug.
 function nameSourceHtml(members, label) {
   const s = members.find((m) => siteName(m) === label) || members[0];
-  const lines = [`Name from: ${esc(s._nameFrom || "?")}`];
+  const lines = [`Name from: ${esc(s._nameFrom || "?")}${members.length > 1 ? ` (${esc((BRAND[brandKey(s)] || {}).name || brandKey(s))})` : ""}`];
   const needing = members.filter((m) => { siteName(m); return m._needsPlace; });
   if (needing.length) {
     const m = needing.includes(s) ? s : needing[0];
@@ -2336,9 +2336,37 @@ function nameSourceHtml(members, label) {
 
 // The name of a row with several chargers: the first member with a real name, so the row doesn't
 // switch between "Nieuwegein" and "Shell Recharge" when its members change order.
+// One name for a row with several brands. Each member's name has a quality (where it came from);
+// the best one wins, and between equals the member order (Ionity first). A name once shown stays
+// until a strictly better one turns up: a brand whose lookup finishes later can't overwrite an
+// equally good or better name another brand already gave. Shell's own names are fuel-station names
+// ("Shell Kleinpolderplein"), so they rank below a service area found for another brand.
+const NAME_RANK = {
+  "charger’s own name": 0,
+  "service area in the charger’s address": 1,
+  "service area (OpenStreetMap)": 2,
+  "fuel/charging station nearby (OpenStreetMap)": 3,
+  "live-status name (NDW)": 4,
+  "town in the charger’s address": 5,
+  "town (geocoder)": 6,
+  "brand (no place found)": 7,
+};
+const WEAK_OWN_NAME = new Set(["shell"]);
+function nameRank(s) {
+  const r = NAME_RANK[s._nameFrom] ?? 7;
+  return r === 0 && WEAK_OWN_NAME.has(brandKey(s)) ? 2.5 : r;
+}
+const shownName = new Map(); // charger id → { label, rank } last shown for its row
 function siteLabel(members) {
-  const names = members.map(siteName);
-  return names.find((n) => String(n).replace(BRAND_WORDS, "").trim()) || names[0];
+  const opts = members.map((m, i) => ({ label: siteName(m), rank: nameRank(m), i }));
+  const best = opts.reduce((a, b) => (b.rank < a.rank ? b : a));
+  // What these chargers showed before, if a member still gives that name and nothing better came.
+  const prev = members.map((m) => shownName.get(m.id)).filter(Boolean)
+    .filter((p) => opts.some((o) => o.label === p.label))
+    .reduce((a, b) => (!a || b.rank < a.rank ? b : a), null);
+  const pick = prev && prev.rank <= best.rank ? prev : best;
+  for (const m of members) shownName.set(m.id, { label: pick.label, rank: pick.rank });
+  return pick.label;
 }
 
 // Place names found before, kept on the device by position (about 100 m), so a new plan or a

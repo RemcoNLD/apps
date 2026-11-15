@@ -6,7 +6,7 @@ A web app for the phone that shows the fast chargers along a driving route, with
 - **Usage page:** https://remconld.github.io/apps/admin.html
 - **Server (proxy):** https://ionity.remco-dv.workers.dev
 - **Code:** GitHub repo `RemcoNLD/apps` (branch `main`)
-- **State at the last update:** app `2026-11-14.59`, Worker deployed from commit of the same day. Open items: section 10. France: section 11.
+- **State at the last update:** app `2026-11-14.61`, Worker deployed from commit of the same day. Open items: section 10. France: section 11.
 
 No passwords, keys or tokens are in this document or in the repo. Where they're needed, this document names the secret and says where to set it.
 
@@ -265,6 +265,9 @@ The app asks for a code once per device. The Worker does the check, so the page 
 
 ---
 
+### Names of rows with several brands (app `.61`)
+`siteLabel()` ranks each member's name by where it came from (`NAME_RANK`: own name, service area in the address, service area from OpenStreetMap, nearby station, NDW name, town in the address, town from the geocoder, brand), ties go to the member order (Ionity first). Shell's own names are fuel-station names, so they rank just below an OpenStreetMap service area (`WEAK_OWN_NAME`). A shown name sticks (`shownName`, per charger id) until a strictly better one appears, so a brand whose place lookup finishes later can't overwrite an equally good name. The press-and-hold sheet now names the brand the name came from.
+
 ## 9. Rename to EVailability: what's left
 
 The app, files, texts and device storage are renamed. The Worker still runs as `ionity` (address `ionity.remco-dv.workers.dev`) because Worker secrets can't be copied by code. To finish:
@@ -338,5 +341,7 @@ Build of 14 Nov 2026: 3,943 sites, 25,923 fast points, 710 kB (172 kB gzipped). 
 - App: French chargers no longer go to `/status`. `refreshFrance()` sends every French charger ahead (max 250) in one call: every 2 minutes while the next French charger is on screen, otherwise every 5 minutes; a tap on a French charger updates them all (at most once a minute, else a toast). No automatic retry on failure. A status's age counts from the server's read (`checkedAt`), not from arrival.
 - All countries: numbers grey after 3 minutes (as before) and outlined after 5 minutes (`OLD_MS`, `.stat.old`).
 - Usage page: "transport.data.gouv.fr (France live)" with whole-file reads and index loads.
+
+**Switched off (app `.60`, 14 Nov 23:20):** in a simulated drive to France the whole-file reads used up the Worker's CPU allowance: route loading became slow and then `/plan` failed too ("Couldn't reach the server", the 1102 page has no CORS headers), while the usage page showed no quota overruns. `/fr-status` now answers `{status:{}, off:true}` without reading anything unless the Worker variable `FR_LIVE` is `on` (set it in the Cloudflare dashboard, it survives deploys because of `keep_vars`); the app then stops asking for 30 minutes. Turn it on only with Workers Paid or another way to read the file.
 
 **Still to do.** French sites from the index as a second source (like NDW) for sites Open Charge Map misses; merge Allego twin sites; French EVSE prefixes in `BRANDS` (only needed if the brand is recognised from live data elsewhere); watch the Worker logs for 1102 on `/fr-status`; if they're frequent, Workers Paid ($5/month). (2) Worker: load the index (memory, a day), FR in `LIVE_COUNTRIES`, one shared scan of the dynamic file per minute, `frStatus` per site (free = en_service and libre among live points; full; "not live" when the newest change is > 24 h old), FR sites from the index as a second source like NDW (`ndwTiles`-style), brand prefixes above. (3) App: source label and attribution, PAN FR on the usage page, `APP_VERSION`. (4) Test on a drive in France.

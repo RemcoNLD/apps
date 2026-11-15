@@ -437,6 +437,18 @@ async function geocode(env, q) {
 const SNAP_RADIUS_M = 5000;
 const snapRadii = (points) => points.map(() => SNAP_RADIUS_M);
 
+// Routes are kept 15 minutes per Worker copy, by their exact points: picking a route option plans
+// through the same points the options were made with, so its route needn't be asked for again.
+const ROUTE_TTL_MS = 15 * 60 * 1000;
+async function getRouteCached(env, points) {
+  const key = `route:${JSON.stringify(points)}`;
+  const hit = memoGet(key);
+  if (hit) { countCall("Route from cache"); return hit; }
+  const r = await getRoute(env, points);
+  memoSet(key, r, ROUTE_TTL_MS);
+  return r;
+}
+
 async function getRoute(env, points) {
   const data = await fetchJson(`${ORS_BASE}/directions/driving-car/geojson`, {
     method: "POST",
@@ -1337,7 +1349,7 @@ async function handlePlan(request, env) {
       if (p && haversineKm(p, vias[i]) < 15) vias[i] = [+p[0].toFixed(5), +p[1].toFixed(5)];
     } catch (_) { /* keep the centre */ }
   }
-  const route = await getRoute(env, [from, ...vias, to]);
+  const route = await getRouteCached(env, [from, ...vias, to]);
   const pois = await sitesAlongRoute(env, route, corridorKm, brands);
   learnCountries(route, pois.map((p) => ({
     index: projectOnRoute([p.AddressInfo?.Longitude, p.AddressInfo?.Latitude], route).index,
@@ -1862,9 +1874,12 @@ async function handleAlternatives(request, env) {
   const { from, to } = body;
   const valid = (p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
   if (!valid(from) || !valid(to)) throw new HttpError(400, "Send from and to as [lon, lat]");
+  // Your own via points still ahead (while driving): the route through them comes first, marked ownVia.
+  const ownVias = Array.isArray(body.via) ? body.via.filter(valid).slice(0, 3) : [];
   const t = { ...ALT_DEFAULTS, ...(body.tune || {}) };
 
-  const fastest = await getRoute(env, [from, to]);
+  const fastest = await getRouteCached(env, [from, to]);
+  const viaRoute = ownVias.length ? await getRouteCached(env, [from, ...ownVias, to]).catch(() => null) : null;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const offKm = t.offsetKm ?? clamp(fastest.distanceKm * t.offsetShare, t.offsetMinKm, t.offsetMaxKm);
   t.mainRoadKm = t.mainRoadKm ?? clamp(fastest.distanceKm * t.mainRoadShare, t.mainRoadMinKm, t.mainRoadMaxKm);
@@ -1891,10 +1906,10 @@ async function handleAlternatives(request, env) {
   }
 
   // Plan the kept ones properly through the snapped point.
-  const routes = await Promise.all(picks.map((v) => getRoute(env, [from, v, to]).then((r) => ({ r, v })).catch(() => null)));
+  const routes = await Promise.all(picks.map((v) => getRouteCached(env, [from, v, to]).then((r) => ({ r, v })).catch(() => null)));
 
   // Ionity sites per route, looked up in sections along each one (one big area gets cut short).
-  const all = [{ r: fastest, v: null }, ...routes.filter(Boolean)];
+  const all = [...(viaRoute ? [{ r: viaRoute, v: null, own: true }] : []), { r: fastest, v: null }, ...routes.filter(Boolean)];
   const found = new Map();
   for (const { r } of all) {
     try { for (const p of await ionityAlongRoute(env, r, 5)) found.set(p.ID, p); } catch (_) {}
@@ -1902,9 +1917,11 @@ async function handleAlternatives(request, env) {
   const pois = [...found.values()];
 
   const options = [];
-  for (const { r, v } of all) {
+  for (const { r, v, own } of all) {
     if (v && r.durationMin > fastest.durationMin * t.maxSlower) continue;
     const o = await describeOption(env, r, v, pois, 4, t.mainRoadKm);
+    if (own) { o.ownVia = true; options.push(o); continue; }
+    if (options.some((x) => x.signature === o.signature)) continue; // same roads as your via route
     if (v && options.some((x) => x.signature === o.signature)) continue; // snapping made it the same road after all
     // A side trip that leaves a road and comes back onto it later (A27 > N631 > A58 > A27) isn't a real alternative.
     const refs = o.roads.map((x) => x.ref);

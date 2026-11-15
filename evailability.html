@@ -983,7 +983,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.82";
+const APP_VERSION = "2026-11-15.83";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1392,15 +1392,25 @@ function renderDebug() {
   if (!el) return;
   el.hidden = !debugOn() || $("drive").hidden;
   if (el.hidden) return;
-  const short = (v) => (v ? String(v).replace(/^\d{4}-\d{2}-\d{2}\./, ".") : "?");
-  const app = `app ${short(APP_VERSION)}${latestApp ? (latestApp === APP_VERSION ? ` <span class="ok">✓</span>` : ` <span class="bad">(${short(latestApp)} out)</span>`) : ""}`;
-  const w = workerInfo?.error ? `<span class="bad">worker ?</span>`
-    : workerInfo ? `worker ${short(workerInfo.version)}${workerInfo.deployedAt ? ` @${new Date(workerInfo.deployedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}` : ""}${workerInfo.deployId ? ` ${workerInfo.deployId}` : ""}`
-    : "worker …";
+  // Compact code (for screenshots, not for reading while driving):
+  //   A82✓   app .82, the latest | A82>83 newer one out
+  //   W82@1346.2dd9   Worker .82, deployed 13:46, deploy id | W? not reached | W… asking
+  //   Rm5:A27   roads from the map, 5 stretches, first A27 | R…  map lookup running
+  //   Rr / Rr1 / Rx   routing service's list (map not yet / retry 1 / map failed)
+  //   P1345   route planned 13:45
+  const num = (v) => (v ? String(v).replace(/^\d{4}-\d{2}-\d{2}\./, "") : "?");
+  const hm = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }).replace(":", "");
+  const app = `A${num(APP_VERSION)}${latestApp ? (latestApp === APP_VERSION ? `<span class="ok">✓</span>` : `<span class="bad">&gt;${num(latestApp)}</span>`) : ""}`;
+  const w = workerInfo?.error ? `<span class="bad">W?</span>`
+    : workerInfo ? `W${num(workerInfo.version)}${workerInfo.deployedAt ? `@${hm(workerInfo.deployedAt)}` : ""}${workerInfo.deployId ? `.${workerInfo.deployId.slice(0, 4)}` : ""}`
+    : "W…";
   const r = state.route;
-  const roads = !r ? "" : r.mapRoads ? `roads <span class="ok">map</span>` : mapBusy ? "roads map…" : r.mapTries >= 3 ? `roads <span class="bad">route (map failed)</span>` : r.mapTries ? `roads route (map retry ${r.mapTries})` : "roads route";
-  const planned = state.plannedAt ? ` · plan ${new Date(state.plannedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}` : "";
-  el.innerHTML = `${app} · ${w} · ${roads}${planned}`;
+  const rl = r?.roads || [];
+  const summary = `${rl.length}:${rl.find((x) => x.toKm > state.user.km)?.ref || "-"}`;
+  const roads = !r ? "" : r.mapRoads ? `<span class="ok">Rm</span>${summary}` : mapBusy ? `R…${summary}`
+    : r.mapTries >= 3 ? `<span class="bad">Rx</span>${summary}` : `Rr${r.mapTries || ""}${summary}`;
+  const planned = state.plannedAt ? ` P${hm(state.plannedAt)}` : "";
+  el.innerHTML = `${app} ${w} ${roads}${planned}`;
 }
 $("debugToggle").checked = debugOn();
 $("debugToggle").addEventListener("change", (e) => {

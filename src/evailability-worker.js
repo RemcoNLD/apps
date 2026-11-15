@@ -597,7 +597,9 @@ function roadsAlong(route) {
     }
   }
   return parts
-    .filter((p) => p.toKm - p.fromKm >= 5) // skip short connectors
+    // Skip short connectors (a few km of motorway at an interchange), but keep every N or B road
+    // of 1 km or more: they're short by nature and you want to see you'll use them (N3 at Dordrecht).
+    .filter((p) => p.toKm - p.fromKm >= (/^[NB]/.test(p.ref) ? 1 : 5))
     .map((p) => ({ ref: p.ref, country: p.country, fromKm: Math.round(p.fromKm * 10) / 10, toKm: Math.round(p.toKm * 10) / 10 }));
 }
 

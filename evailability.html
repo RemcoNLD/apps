@@ -973,7 +973,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.76";
+const APP_VERSION = "2026-11-15.77";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1354,7 +1354,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.offCount = 0;
   state.plannedAt = Date.now();
   state.roadOverride = null; state.roadCheckedKm = null;
-  state.prevKm = state.user.km;
+  state.viaReached = false;
   save();
   addNdwSites(data.ndwTiles || [], state.planBrands); // in the background: the route shows straight away
   // Names follow once rows are on screen (refreshStatus after the first render).
@@ -1855,9 +1855,15 @@ function onPosition(lonlat, accuracy, heading = null, speed = null) {
   state.offCount = reliable && pr.d > OFF_ROUTE_KM ? state.offCount + 1 : 0;
   // Once past a via point, it no longer matters for a new route.
   const viaKms = state.route.viaKms || (state.route.viaKm != null ? [state.route.viaKm] : []);
-  const prevKm = state.prevKm ?? 0;
-  state.prevKm = pr.d < OFF_ROUTE_KM ? pr.km : prevKm;
-  if (state.vias?.length && viaKms.length && pr.km > viaKms[0] && prevKm > viaKms[0] - 5 && pr.d < OFF_ROUTE_KM) {
+  // Passed only once you've really been there (within 1 km of the point itself) and are beyond it
+  // on the route, or well beyond it (10 km) on the route. Leaving the route near the via onto a
+  // road that runs close to the route after it (A16 next to the N3) doesn't count: the via stays,
+  // so a new route still goes through it.
+  const via0 = state.vias?.[0];
+  if (via0 && Number.isFinite(via0.lat) && haversine([via0.lon, via0.lat], lonlat) < 1) state.viaReached = true;
+  if (state.vias?.length && viaKms.length && pr.d < OFF_ROUTE_KM
+      && ((state.viaReached && pr.km > viaKms[0]) || pr.km > viaKms[0] + 10)) {
+    state.viaReached = false;
     state.vias.shift();
     state.route.viaKms = viaKms.slice(1);
     state.route.viaKm = state.route.viaKms[0] ?? null;

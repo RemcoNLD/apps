@@ -927,6 +927,7 @@
   <div id="helpBody"></div>
   <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
   <label class="check"><input id="debugToggle" type="checkbox"> Debug line while driving (versions and data sources)</label>
+  <p class="hint"><button type="button" id="copyRouteData" class="link">Copy route data</button> (road numbers and the routing service's step names, to paste in a chat for checking)</p>
 </div>
 
 <div class="intro" id="intro" hidden role="dialog" aria-modal="true" aria-label="Introduction">
@@ -983,7 +984,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.84";
+const APP_VERSION = "2026-11-15.85";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1420,6 +1421,19 @@ $("debugToggle").addEventListener("change", (e) => {
   refreshDebugInfo(true); renderDebug();
 });
 setInterval(() => refreshDebugInfo(), 60000);
+$("copyRouteData").addEventListener("click", async () => {
+  const r = state.route;
+  if (!r) { toast("No route planned"); return; }
+  const line = (x) => `${x.ref} ${x.fromKm}-${x.toKm}`;
+  const text = [
+    `EVailability ${APP_VERSION} · worker ${workerInfo?.version || "?"} · planned ${r.plannedAt ? new Date(r.plannedAt).toISOString() : "?"} · ${r.distanceKm} km · you at km ${state.user.km.toFixed(1)}`,
+    `roads (${r.mapRoads ? "map" : "route"}): ${(r.roads || []).map(line).join(", ")}`,
+    r.stepRoads ? `route's own: ${r.stepRoads.map(line).join(", ")}` : "",
+    `map tries: ${r.mapTries || 0}`,
+    `steps: ${(r.debugSteps || []).map(([k, n]) => `${k} ${n}`).join(" | ") || "(none: planned before .76)"}`,
+  ].filter(Boolean).join("\n");
+  toast((await copyText(text)) ? "Route data copied" : "Couldn’t copy", 2500);
+});
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshDebugInfo(true); });
 
 // ---- Road numbers from the map. The routing service names roads by its turn instructions, so a
@@ -1430,20 +1444,24 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 // every 200 m the one running the same way as the route, bigger roads first. Its number makes
 // the road list (breadcrumbs, timeline, your location). If the map can't be reached, the
 // routing service's list stays.
-const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
 const MAP_CLASSES = { motorway: 0, trunk: 1, primary: 2, secondary: 3 };
 let mapRun = 0, mapBusy = false;
-async function overpass(q, ms = 15000) {
-  let last = null;
-  for (const url of OVERPASS) {
-    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
-    try {
-      const res = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctl.signal });
+// All map servers at once; the first good answer wins (one is often slow or busy).
+async function overpass(q, ms = 20000) {
+  const ctls = OVERPASS.map(() => new AbortController());
+  const timer = setTimeout(() => ctls.forEach((c) => c.abort()), ms);
+  try {
+    return await Promise.any(OVERPASS.map(async (url, i) => {
+      const res = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctls[i].signal });
       if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
-      return await res.json();
-    } catch (e) { last = e; } finally { clearTimeout(t); }
-  }
-  throw last || new Error("map unavailable");
+      const data = await res.json();
+      ctls.forEach((c, j) => { if (j !== i) c.abort(); });
+      return data;
+    }));
+  } catch (e) {
+    throw new Error(e?.errors?.map((x) => x.message).join("; ") || "map servers didn't answer in 20 s");
+  } finally { clearTimeout(timer); }
 }
 function normRef(v) {
   const r = String(v || "").split(";")[0].replace(/\s+/g, "").toUpperCase();
@@ -1993,7 +2011,7 @@ async function lookUpWhere(onRoute, routeRoad = null) {
   const prev = state.loc?.kind === "place" ? state.loc : null;
   const h = state.heading != null ? `&heading=${Math.round(state.heading)}` : "";
   try {
-    const r = await api(`/where?lat=${at[1].toFixed(5)}&lon=${at[0].toFixed(5)}${h}`, null, 9000, false);
+    const r = await api(`/where?lat=${at[1].toFixed(5)}&lon=${at[0].toFixed(5)}${h}`, null, 12000, false);
     const ref = r.ref || (r.street && /^[ABDEMNRS]\s?\d{1,4}[a-z]?$/i.test(r.street.trim()) ? r.street.replace(/\s/g, "").toUpperCase() : null);
     if (routeRoad) {
       // Only a motorway or trunk road the map is sure of corrects the route (not a ramp or a road alongside).

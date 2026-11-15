@@ -38,7 +38,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-15.82";
+const WORKER_VERSION = "2026-11-15.85";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1677,24 +1677,26 @@ const ROAD_CLASS_PENALTY_M = {
   primary_link: 8, secondary_link: 10, tertiary_link: 10, unclassified: 12, residential: 18,
   living_street: 25, service: 35,
 };
-async function overpassJson(q, ms = 6000) {
-  const order = [...OVERPASS_MIRRORS.slice(overpassGood), ...OVERPASS_MIRRORS.slice(0, overpassGood)];
-  let lastErr = null;
-  for (const url of order) {
-    countCall("Overpass");
-    try {
-      const res = await fetchWithTimeout(url, {
+// All mirrors at once, the first good answer wins (one is often slow or refusing).
+async function overpassJson(q, ms = 4000) {
+  const ctls = OVERPASS_MIRRORS.map(() => new AbortController());
+  const timer = setTimeout(() => ctls.forEach((c) => c.abort()), ms);
+  try {
+    return await Promise.any(OVERPASS_MIRRORS.map(async (url, i) => {
+      countCall("Overpass");
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "evailability personal app (github.com/RemcoNLD)", Accept: "application/json" },
-        body: "data=" + encodeURIComponent(q),
-      }, ms);
-      if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
+        body: "data=" + encodeURIComponent(q), signal: ctls[i].signal,
+      });
+      if (!res.ok) { countCall("Overpass errors"); throw new Error(`${new URL(url).host} ${res.status}`); }
       const data = await res.json();
-      overpassGood = OVERPASS_MIRRORS.indexOf(url);
+      ctls.forEach((c, j) => { if (j !== i) c.abort(); });
       return data;
-    } catch (e) { lastErr = e; countCall("Overpass errors"); }
-  }
-  throw lastErr || new Error("Overpass unavailable");
+    }));
+  } catch (_) {
+    throw new Error("Overpass unavailable");
+  } finally { clearTimeout(timer); }
 }
 function bearingDeg([lon1, lat1], [lon2, lat2]) {
   const r = Math.PI / 180, y = Math.sin((lon2 - lon1) * r) * Math.cos(lat2 * r);
@@ -1784,6 +1786,7 @@ const AREA_RE = /\b(verzorgingsplaats|parkeerplaats|rasthof|raststätte|rastanla
 // shared by many Workers, so one server may refuse ("429"). Try a few mirrors in turn.
 const OVERPASS_MIRRORS = [
   "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];

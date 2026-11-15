@@ -658,6 +658,32 @@
   .legend .avr { width: 44px; height: 44px; }
   .legend .avr > .stat { font-size: 1.15rem; font-weight: 800; }
   .legend .avr.offline > .stat { font-size: .62rem; text-transform: uppercase; letter-spacing: .03em; }
+
+  /* ---------- errors (.65): below your position, oldest unread first; tap it to dismiss, × clears all */
+  .errtray { margin: 0 16px 10px; display: flex; align-items: stretch; gap: 8px; }
+  .errtray .err-msg {
+    flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 10px; text-align: left;
+    padding: 10px 12px; border-radius: 10px; border: 0; border-left: 6px solid var(--danger);
+    background: var(--asphalt-raised); color: var(--line); font: inherit; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .errtray .err-msg:active { opacity: .7; }
+  .errtray .err-ico {
+    flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--danger); color: #fff;
+    display: grid; place-items: center; font-weight: 900; font-size: .9rem; line-height: 1; margin-top: 1px;
+  }
+  .errtray .err-body { min-width: 0; flex: 1; }
+  .errtray .err-txt { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; font-weight: 600; font-size: 1rem; line-height: 1.3; }
+  .errtray .err-meta { margin-top: 3px; color: var(--muted); font-size: .85rem; font-weight: 600; }
+  .errtray .err-n { flex: none; align-self: center; min-width: 26px; padding: 3px 8px; border-radius: 999px; background: var(--danger); color: #fff; font-weight: 800; font-size: .85rem; text-align: center; }
+  .errtray .err-x {
+    flex: none; width: 48px; border-radius: 10px; border: 0; background: var(--asphalt-raised);
+    color: var(--muted); font-size: 1.6rem; font-weight: 700; line-height: 1; cursor: pointer;
+  }
+  .errtray .err-x:active { opacity: .7; }
+  .errtray.pop .err-msg { animation: errpop .9s ease-out; }
+  @keyframes errpop { 0% { transform: scale(.96); box-shadow: 0 0 0 0 rgba(224,87,79,.6); } 40% { transform: scale(1.02); box-shadow: 0 0 0 8px rgba(224,87,79,0); } 100% { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .errtray.pop .err-msg { animation: none; } }
 </style>
 </head>
 <body>
@@ -885,6 +911,7 @@
     <div class="list" id="list"></div>
     <div class="row you" id="youRow"></div>
   </div>
+  <div class="errtray" id="errTray" hidden role="status" aria-live="polite"></div>
   <div class="banner" id="offRoute" hidden role="status" aria-live="polite">
     <span id="offRouteText"></span>
     <button id="recalc" hidden>Try again</button>
@@ -892,7 +919,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.64";
+const APP_VERSION = "2026-11-15.65";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1018,6 +1045,47 @@ async function api(path, body, timeoutMs, retry = true) {
   if (!res.ok) throw new Error(data.error || `The server answered ${res.status}`);
   return data;
 }
+
+// ---- errors: shown below your position until you've read them. Oldest unread first; a tap on it
+// dismisses it and shows the next; × clears them all. The same message again isn't queued twice:
+// it counts up (×3) and takes the newest time. Kept on the device so a reload doesn't lose them.
+const ERR_KEY = "evailability-errors", ERR_MAX = 20;
+let errors = (() => { try { return JSON.parse(localStorage.getItem(ERR_KEY) || "[]").filter((e) => e && e.text); } catch (_) { return []; } })();
+function saveErrors() { try { localStorage.setItem(ERR_KEY, JSON.stringify(errors)); } catch (_) {} }
+function reportError(text) {
+  text = String(text || "").replace(/\s+/g, " ").trim();
+  if (!text) return;
+  const same = errors.find((e) => e.text === text);
+  if (same) { same.n = (same.n || 1) + 1; same.at = Date.now(); }
+  else { errors.push({ text, at: Date.now(), n: 1 }); if (errors.length > ERR_MAX) errors.shift(); }
+  saveErrors();
+  renderErrors(true);
+}
+const errClock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+function renderErrors(pop = false) {
+  const tray = $("errTray");
+  if (!tray) return;
+  if (!errors.length) { tray.hidden = true; tray.innerHTML = ""; return; }
+  const e = errors[0], more = errors.length - 1;
+  tray.innerHTML = `<button type="button" class="err-msg" title="Tap when read">
+      <span class="err-ico" aria-hidden="true">!</span>
+      <span class="err-body"><span class="err-txt">${esc(e.text)}</span>
+        <span class="err-meta" style="display:block">${errClock(e.at)}${e.n > 1 ? ` · ${e.n}×` : ""} · tap when read</span></span>
+      ${more ? `<span class="err-n" title="${more} more waiting">+${more}</span>` : ""}
+    </button><button type="button" class="err-x" aria-label="Clear all errors" title="Clear all">×</button>`;
+  tray.hidden = false;
+  if (pop) { tray.classList.remove("pop"); void tray.offsetWidth; tray.classList.add("pop"); }
+}
+$("errTray").addEventListener("click", (ev) => {
+  if (ev.target.closest(".err-x")) errors = [];
+  else if (ev.target.closest(".err-msg")) errors.shift();
+  else return;
+  saveErrors(); renderErrors();
+});
+// Bugs in the app itself, too, so they don't go unnoticed on the road.
+window.addEventListener("error", (ev) => reportError(`App error: ${ev.message || "unknown"}${ev.lineno ? ` (line ${ev.lineno})` : ""}`));
+window.addEventListener("unhandledrejection", (ev) => reportError(`App error: ${ev.reason?.message || ev.reason || "unknown"}`));
+renderErrors();
 
 // ---- access code: asked once, checked by the server; the token it returns is kept on this device
 function showLock() { $("lock").hidden = false; setTimeout(() => $("lockCode").focus(), 50); }
@@ -1198,7 +1266,7 @@ async function addNdwSites(tiles, brands) {
   while (queue.length && run === ndwRun && state.route) {
     const batch = queue.splice(0, 3);
     let r;
-    try { r = await api("/ndw-sites", { tiles: batch, brands }); } catch (_) { break; }
+    try { r = await api("/ndw-sites", { tiles: batch, brands }); } catch (e) { reportError(`Extra Dutch chargers (NDW): ${e.message}`); break; }
     if (run !== ndwRun || !state.route) return;
     queue.push(...(r.split || []));
     for (const x of r.sites || []) {
@@ -1472,7 +1540,10 @@ function startGps() {
   if (!navigator.geolocation) return;
   state.watchId = navigator.geolocation.watchPosition(
     (p) => onPosition([p.coords.longitude, p.coords.latitude], p.coords.accuracy),
-    () => { state.user.acc = null; render(); },
+    (err) => {
+      state.user.acc = null; render();
+      reportError(`Location: ${err.code === 1 ? "permission denied" : err.code === 2 ? "position unavailable" : err.code === 3 ? "no GPS fix in 20 s" : err.message || "unknown error"}`);
+    },
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
 }
 
@@ -1688,7 +1759,7 @@ async function refreshOne(ids) {
   if (!list.length) return;
   for (const s of list) s.loadingAt = Date.now();
   render();
-  try { await fetchStatus(list); } catch (e) { /* keeps the old (grey) value */ }
+  try { await fetchStatus(list); } catch (e) { reportError(`Status: ${e.message}`); /* keeps the old (grey) value */ }
   for (const s of list) s.loadingAt = null;
   save(); render();
 }
@@ -1745,7 +1816,7 @@ async function fetchDetours(stations) {
           if (detours && s.id in detours) s.detourMin = detours[s.id];
           if (reach?.[s.id]) { s.toMin = reach[s.id].toMin; s.toKm = reach[s.id].toKm; }
         }
-      } catch (_) { /* try again in a few minutes */ }
+      } catch (e) { reportError(`Detours: ${e.message}`); /* try again in a few minutes */ }
       for (const s of chunk) s.detourLoading = false;
       // Show each batch as it arrives (nearest first), then look up the status of what came into view.
       render();
@@ -1794,6 +1865,7 @@ async function refreshStatus(force = true) {
     state.statusError = false;
   } catch (e) {
     state.statusError = true;
+    reportError(`Status: ${e.message}`);
   } finally {
     for (const s of todo) s.loadingAt = null;
     save();
@@ -1835,6 +1907,7 @@ async function refreshFrance() {
     state.frError = null;
   } catch (e) {
     state.frError = e.message; // the old values stay and age: grey, then outlined
+    reportError(`France: ${e.message} France paused for 15 min.`);
     state.frOffUntil = Date.now() + FR_FAIL_PAUSE_MS; state.frOffReason = "error";
     why = "France couldn’t be updated; paused for 15 min";
   } finally {
@@ -2273,6 +2346,7 @@ async function reroute() {
     showBanner("You’ve left the route. New route planned.", { ok: true, hideAfter: 6000 }); // its roads show at the top
   } catch (e) {
     showBanner(`Couldn’t reroute: ${e.message}`, { retry: true });
+    reportError(`Reroute: ${e.message}`);
   } finally {
     state.rerouting = false;
     render();
@@ -2495,7 +2569,8 @@ async function fetchPlaces(stations = namesToFetch()) {
     }
     savePlaceCache();
     save(); render();
-  } catch (_) {
+  } catch (e) {
+    reportError(`Place names: ${e.message}`);
     // No answer (timeout, no network): asked again in a minute rather than after 10.
     for (const s of todo) { s.placeTriedAt = now - 9 * 60 * 1000; s.placeFailAt = now; }
   }
@@ -3044,6 +3119,9 @@ function helpHtml() {
   </div>
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>
   <p>A free charger now is no guarantee it is still free when you arrive.</p>
+
+  <h3>Errors</h3>
+  <p>When something goes wrong (no connection, a lookup that failed, no GPS fix), a red message appears <b>below your position</b>. New ones queue behind it (the red <b>+N</b> shows how many wait); the same error again only counts up (×3). <b>Tap the message</b> when you've read it to show the next, or <b>×</b> to clear them all.</p>
 
   <h3>Detours</h3>
   <div class="legend">

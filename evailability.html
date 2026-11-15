@@ -781,6 +781,9 @@
   .legend .avr.offline > .stat { font-size: .62rem; text-transform: uppercase; letter-spacing: .03em; }
 
   /* ---------- errors (.65): below your position, oldest unread first; tap it to dismiss, × clears all */
+  .netbar { margin: 0 16px 8px; padding: 9px 12px; border-radius: 10px; background: var(--asphalt-raised); color: var(--muted);
+    display: flex; align-items: center; gap: 10px; font-size: .95rem; line-height: 1.3; }
+  .netbar svg { width: 22px; height: 22px; flex-shrink: 0; }
   .errtray { margin: 0 16px 10px; display: flex; align-items: stretch; gap: 8px; }
   .errtray .err-msg {
     flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 10px; text-align: left;
@@ -1060,6 +1063,7 @@
     <div class="list" id="list"></div>
     <div class="row you" id="youRow"></div>
   </div>
+  <div class="netbar" id="netBar" hidden role="status" aria-live="polite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/><path d="M3 3l18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>No internet connection. Chargers show their last known status and update when you're back online.</span></div>
   <div class="errtray" id="errTray" hidden role="status" aria-live="polite"></div>
   <div class="locbar" id="locBar" role="button" aria-label="Your location, tap to update"></div>
   <div class="banner" id="offRoute" hidden role="status" aria-live="polite">
@@ -1069,7 +1073,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.100";
+const APP_VERSION = "2026-11-15.101";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1184,6 +1188,21 @@ const state = {
 
 // ------------------------------------------------------------- API
 
+// No connection (flight mode, no signal): a calm note above your location instead of errors, and
+// "Status offline" top right. Cleared by the next answer from the server or the phone going online,
+// which also updates the chargers on screen.
+function setOffline(off) {
+  off = !!off || navigator.onLine === false;
+  if (state.offline === off) return;
+  state.offline = off;
+  const bar = $("netBar");
+  if (bar) bar.hidden = !off;
+  if (!off && $("drive") && !$("drive").hidden && typeof refreshStatus === "function") setTimeout(() => refreshStatus(), 500);
+  if (typeof render === "function" && state.route) render();
+}
+window.addEventListener("offline", () => setOffline(true));
+window.addEventListener("online", () => setOffline(false));
+if (navigator.onLine === false) setTimeout(() => setOffline(true), 0); // already offline when the app opens
 // A dropped connection (Safari: "Load failed") gets one more try after a short pause.
 // If the server is busy, a second try usually works.
 const ACCESS_KEY = "evailability-access";
@@ -1198,9 +1217,9 @@ async function api(path, body, timeoutMs, retry = true) {
     // With a timeout, a request that hangs (network switch, app in the background) is given up.
     const ctl = timeoutMs ? new AbortController() : null;
     const timer = ctl && setTimeout(() => ctl.abort(), timeoutMs);
-    try { res = await fetch(WORKER + path, ctl ? { ...opts, signal: ctl.signal } : opts); break; }
+    try { res = await fetch(WORKER + path, ctl ? { ...opts, signal: ctl.signal } : opts); setOffline(false); break; }
     catch (e) {
-      if (attempt >= 1 || !retry) throw new Error("Couldn’t reach the server. Please try again in a moment.");
+      if (attempt >= 1 || !retry) { setOffline(true); throw new Error("Couldn’t reach the server. Please try again in a moment."); }
       await new Promise((r) => setTimeout(r, 2000));
     }
     finally { if (timer) clearTimeout(timer); }
@@ -1234,10 +1253,13 @@ function reportError(text) {
   renderErrors(true);
 }
 const errClock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+// The error tray is for testing: only with the debug line on (Help). Errors are still kept, so they
+// show once it's switched on. Without it, being offline shows as a calm note (netBar) instead.
+function debugMode() { try { return localStorage.getItem("evailability-debug") === "1"; } catch (_) { return false; } }
 function renderErrors(pop = false) {
   const tray = $("errTray");
   if (!tray) return;
-  if (!errors.length) { tray.hidden = true; tray.innerHTML = ""; return; }
+  if (!errors.length || !debugMode()) { tray.hidden = true; tray.innerHTML = ""; return; }
   const e = errors[0], more = errors.length - 1;
   tray.innerHTML = `<button type="button" class="err-msg" title="Tap when read">
       <span class="err-ico" aria-hidden="true">!</span>
@@ -1510,7 +1532,7 @@ function renderDebug() {
 $("debugToggle").checked = debugOn();
 $("debugToggle").addEventListener("change", (e) => {
   try { localStorage.setItem(DEBUG_KEY, e.target.checked ? "1" : "0"); } catch (_) {}
-  refreshDebugInfo(true); renderDebug();
+  refreshDebugInfo(true); renderDebug(); renderErrors();
 });
 setInterval(() => refreshDebugInfo(), 60000);
 $("copyRouteData").addEventListener("click", async () => {
@@ -4211,9 +4233,12 @@ function render() {
 
   const busy = statusBusy();
   $("age").classList.toggle("busy", busy);
-  $("age").classList.toggle("err", !busy && !!state.statusError);
+  $("age").classList.toggle("err", !busy && !state.offline && !!state.statusError);
   if (busy) {
     setHtml($("age"), `<span class="spinner" aria-hidden="true"></span>`);
+  } else if (state.offline) {
+    $("age").classList.remove("err");
+    setHtml($("age"), `Status<b>offline</b>`);
   } else if (state.statusError) {
     setHtml($("age"), `Status<b>failed</b>`);
   } else if (state.statusAt) {
@@ -4415,8 +4440,9 @@ function helpHtml() {
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>
   <p>A free charger now is no guarantee it is still free when you arrive.</p>
 
-  <h3>Errors</h3>
-  <p>When something goes wrong (no connection, a lookup that failed, no GPS fix), a red message appears <b>below your position</b>. New ones queue behind it (the red <b>+N</b> shows how many wait); the same error again only counts up (×3). <b>Tap the message</b> when you've read it to show the next, or <b>×</b> to clear them all.</p>
+  <h3>No connection and errors</h3>
+  <p>Without internet (flight mode, no signal) a grey note above your location says so, and top right shows <b>Status offline</b>. The chargers keep their last known status, your position and the route keep working, and everything updates by itself once you're back online.</p>
+  <p>With the debug line on (below), errors are shown too (a lookup that failed, no GPS fix): a red message appears <b>below your position</b>. New ones queue behind it (the red <b>+N</b> shows how many wait); the same error again only counts up (×3). <b>Tap the message</b> when you've read it to show the next, or <b>×</b> to clear them all.</p>
 
   <h3>Detours</h3>
   <div class="legend">

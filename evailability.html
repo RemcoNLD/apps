@@ -932,7 +932,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.67";
+const APP_VERSION = "2026-11-15.68";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -956,6 +956,19 @@ const OLD_MS = 5 * 60 * 1000;       // after 5 minutes the numbers are only outl
 // 14 Nov). So France is tap-only: a tap on a French charger updates every French charger on the
 // route at once, at most once per 3 minutes; after a failed lookup France pauses for 15 minutes.
 let FR_MIN_GAP_MS = 3 * 60 * 1000; // the server sends the current value (usage page, Settings)
+// France's timing survives a reload: the gap the server last sent, when France was last asked, any pause.
+const FR_KEY = "evailability-fr";
+function saveFr() {
+  try { localStorage.setItem(FR_KEY, JSON.stringify({ gapMs: FR_MIN_GAP_MS, triedAt: state.frTriedAt || 0, offUntil: state.frOffUntil || 0, offReason: state.frOffReason || null })); } catch (_) {}
+}
+function loadFr() {
+  try {
+    const f = JSON.parse(localStorage.getItem(FR_KEY) || "null");
+    if (!f) return;
+    if (f.gapMs > 0) FR_MIN_GAP_MS = f.gapMs;
+    state.frTriedAt = f.triedAt || 0; state.frOffUntil = f.offUntil || 0; state.frOffReason = f.offReason || null;
+  } catch (_) {}
+}
 const FR_FAIL_PAUSE_MS = 15 * 60 * 1000;
 const FR_MAX = 250; // French chargers per lookup, nearest ahead first
 const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
@@ -1914,7 +1927,7 @@ async function refreshFrance() {
   try {
     const r = await api("/fr-status", { stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 30000, false);
     if (r.off) { state.frOffUntil = Date.now() + 10 * 60 * 1000; state.frOffReason = "off"; why = "France live is switched off on the server"; }
-    if (r.gapMin > 0) FR_MIN_GAP_MS = r.gapMin * 60 * 1000;
+    if (r.gapMin > 0) FR_MIN_GAP_MS = r.gapMin * 60 * 1000; // the usage page's setting
     applyStatus(r.status || {});
     state.frAt = Date.now();
     state.frError = null;
@@ -1926,6 +1939,7 @@ async function refreshFrance() {
   } finally {
     for (const s of ahead) s.loadingAt = null;
     frBusy = false;
+    saveFr();
     save(); render();
   }
   return why;
@@ -2086,6 +2100,14 @@ $("list").addEventListener("click", (e) => {
   const ids = row.dataset.ids.split(" ");
   const members = state.stations.filter((s) => ids.includes(s.id));
   const now = Date.now();
+  // French chargers follow France's own gap (usage page setting), not the 1-minute tap rule:
+  // refreshFrance() either asks or says when France can be asked again.
+  if (members.some((s) => s.country === "FR")) {
+    refreshFrance().then((why) => { if (why) toast(why, 3200); });
+    const rest = members.filter((s) => s.country !== "FR" && (!s.statusAt || now - s.statusAt >= TAP_MIN_MS));
+    if (rest.length) refreshOne(rest.map((s) => s.id));
+    return;
+  }
   const due = members.filter((s) => !s.statusAt || now - s.statusAt >= TAP_MIN_MS);
   if (!due.length) {
     const last = Math.max(...members.map((s) => s.statusAt || 0));
@@ -2995,6 +3017,7 @@ function save() {
 }
 
 function restore() {
+  loadFr();
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (!saved?.route) return;

@@ -1,8 +1,8 @@
-name: Deploy Ionity Worker
+name: Deploy EVailability Worker
 on:
   push:
     branches: [main]
-    paths: ["src/ionity-route-worker.js", "wrangler.toml"]
+    paths: ["src/evailability-worker.js", "wrangler.toml"]
   workflow_dispatch:
 jobs:
   deploy:

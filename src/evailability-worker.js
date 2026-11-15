@@ -17,6 +17,7 @@
 //   GET  /debug/route/<id>      a routing result kept by a /plan with debug:true (app in debug mode), 30 days in KV
 //                               ?part=request|app|ors for one part (ors = the routing service's raw answer)
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
+//   GET  /closures/schedule     hours between road-closure updates (read by the GitHub job .github/workflows/closures.yml)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /admin/settings        switches and values set on the usage page (same header)
 //   POST /admin/settings        {settings:{key: value}} saves them (one KV write); empty value = default
@@ -40,7 +41,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-15.90";
+const WORKER_VERSION = "2026-11-15.93";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -210,6 +211,8 @@ const SETTINGS = [
     help: "Sites Open Charge Map doesn't have, found in NDW's live data along the route." },
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
     help: "Empty: found automatically. Only fill in if that lookup fails." },
+  { key: "closuresHours", type: "choice", options: [6, 12, 24, 48], label: "Road closures: hours between updates", def: () => 12,
+    help: "How often the GitHub job fetches planned closures (NL, DE). It wakes every 6 hours and skips until this much time has passed; Run workflow on GitHub always updates." },
 ];
 let SET = null; // this request's settings (loaded at the start of each request, see route)
 async function loadSettings(env) {
@@ -238,6 +241,10 @@ async function handleSettings(request, env) {
       let v = given[d.key];
       if (v === null || v === "") { delete next[d.key]; continue; } // back to the default
       if (d.type === "bool") v = v === true || v === "true" || v === "on";
+      else if (d.type === "choice") {
+        v = Number(v);
+        if (!d.options.includes(v)) throw new HttpError(400, `${d.label}: ${d.options.join(", ")}`);
+      }
       else if (d.type === "number") {
         v = Number(v);
         if (!Number.isFinite(v) || v < d.min || v > d.max) throw new HttpError(400, `${d.label}: ${d.min} to ${d.max}`);
@@ -250,7 +257,7 @@ async function handleSettings(request, env) {
   }
   const { values, saved } = await loadSettings(env);
   return json(request, {
-    settings: SETTINGS.map((d) => ({ key: d.key, type: d.type, label: d.label, help: d.help, min: d.min, max: d.max,
+    settings: SETTINGS.map((d) => ({ key: d.key, type: d.type, label: d.label, help: d.help, min: d.min, max: d.max, options: d.options,
       value: values[d.key], default: d.def(env), changed: saved[d.key] !== undefined })),
     note: "Other Worker copies pick up a change within a minute.",
   });
@@ -2234,7 +2241,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/brands", "/admin/usage", "/admin/settings"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/brands", "/admin/usage", "/admin/settings", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -2307,6 +2314,10 @@ async function route(request, env) {
     const q = (url.searchParams.get("q") || "").trim();
     if (!q) throw new HttpError(400, "Add ?q=<place>");
     return json(request, { results: await geocode(env, q) });
+  }
+  if (path === "/closures/schedule" && request.method === "GET") {
+    // Public on purpose: only the update interval, for the scheduled GitHub job (no secrets in GitHub needed).
+    return json(request, { hours: setting(env, "closuresHours") });
   }
   if (path === "/admin/usage" && request.method === "GET") return handleUsage(request, env);
   if (path === "/admin/settings" && (request.method === "GET" || request.method === "POST")) return handleSettings(request, env);

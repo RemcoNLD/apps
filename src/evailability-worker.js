@@ -1993,6 +1993,9 @@ async function route(request, env) {
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/fr-status" && request.method === "POST") {
+    // Off unless the Worker variable FR_LIVE is "on": reading the national file costs more CPU than the
+    // free plan allows, and on 14 Nov it used up the Worker's allowance so that /plan failed too (1102).
+    if (env.FR_LIVE !== "on") return json(request, { status: {}, off: true });
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
     return json(request, await frStatusFor(body.stations));

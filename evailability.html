@@ -846,7 +846,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.59";
+const APP_VERSION = "2026-11-14.60";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1764,6 +1764,7 @@ async function refreshFrance(force) {
   const ahead = upcoming().filter((s) => s.country === "FR").slice(0, FR_MAX);
   if (!ahead.length) return false;
   const now = Date.now();
+  if (now < (state.frOffUntil || 0)) return false; // switched off on the server: ask again later
   if (now - (state.frTriedAt || 0) < FR_MIN_GAP_MS) return false;
   if (!force) {
     const next = visibleAhead().find((s) => s.country === "FR");
@@ -1778,6 +1779,7 @@ async function refreshFrance(force) {
   render();
   try {
     const r = await api("/fr-status", { stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 30000, false);
+    if (r.off) state.frOffUntil = Date.now() + 30 * 60 * 1000;
     applyStatus(r.status || {});
     state.frAt = Date.now();
     state.frError = null;

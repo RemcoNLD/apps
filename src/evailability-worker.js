@@ -1404,6 +1404,8 @@ async function handlePlan(request, env) {
       // A sample of the raw street names, to check the road numbers come through in each country
       borders: (route.countrySegs || []).map(([a, b, id]) => ({ fromKm: Math.round(route.km[a]), toKm: Math.round(route.km[b]), id, iso: route.idIso[id] || null })),
       debugNames: [...new Set(route.steps.filter((s) => s.distance > 2000).map((s) => s.name))].slice(0, 25),
+      // Every step with a name: km where it starts and the routing service's name, to check road numbers.
+      debugSteps: route.steps.filter((st) => st.name && st.name !== "-" && st.way_points).map((st) => [Math.round(route.km[st.way_points[0]] * 10) / 10, st.name]).slice(0, 120),
       coords: keep.map((i) => [+route.coords[i][0].toFixed(5), +route.coords[i][1].toFixed(5)]),
       km: keep.map((i) => Math.round(route.km[i] * 100) / 100),
       min: keep.map((i) => Math.round(route.min[i] * 10) / 10),
@@ -1656,20 +1658,94 @@ function snapToMainRoad(rough, p) {
   return best;
 }
 
-// Street and town at a point, for the app's location line when you're not on a numbered main road.
-// The app asks only after a turn, every few km on local roads, or on a tap; kept a day per ~20 m.
-async function whereAt(env, [lon, lat]) {
-  const key = `where:${lon.toFixed(4)},${lat.toFixed(4)}`;
+// Street and town at a point, for the app's location line. The street comes from OpenStreetMap
+// (Overpass, free): of the roads within 40 m, the one that runs the way you're driving, with bigger
+// roads preferred over side streets and service roads. The nearest address (the geocoder) often
+// names a quiet street next to the ring road you're actually on. Its number (A27, N3) comes along,
+// so the app can also check the route's road number after a junction. The town comes from the
+// geocoder, kept a day per ~1 km. Fallback: the geocoder's nearest street.
+const ROAD_CLASS_PENALTY_M = {
+  motorway: 0, trunk: 0, primary: 0, secondary: 3, tertiary: 6, motorway_link: 8, trunk_link: 8,
+  primary_link: 8, secondary_link: 10, tertiary_link: 10, unclassified: 12, residential: 18,
+  living_street: 25, service: 35,
+};
+async function overpassJson(q, ms = 6000) {
+  const order = [...OVERPASS_MIRRORS.slice(overpassGood), ...OVERPASS_MIRRORS.slice(0, overpassGood)];
+  let lastErr = null;
+  for (const url of order) {
+    countCall("Overpass");
+    try {
+      const res = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "evailability personal app (github.com/RemcoNLD)", Accept: "application/json" },
+        body: "data=" + encodeURIComponent(q),
+      }, ms);
+      if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
+      const data = await res.json();
+      overpassGood = OVERPASS_MIRRORS.indexOf(url);
+      return data;
+    } catch (e) { lastErr = e; countCall("Overpass errors"); }
+  }
+  throw lastErr || new Error("Overpass unavailable");
+}
+function bearingDeg([lon1, lat1], [lon2, lat2]) {
+  const r = Math.PI / 180, y = Math.sin((lon2 - lon1) * r) * Math.cos(lat2 * r);
+  const x = Math.cos(lat1 * r) * Math.sin(lat2 * r) - Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos((lon2 - lon1) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+// The road you're most likely on: distance to it, plus a penalty for small roads and for running
+// across your heading (either direction along a road is fine).
+async function roadHere(lat, lon, heading) {
+  const q = `[out:json][timeout:6];way(around:40,${lat.toFixed(6)},${lon.toFixed(6)})[highway~"^(${Object.keys(ROAD_CLASS_PENALTY_M).join("|")})$"];out tags geom;`;
+  const data = await overpassJson(q);
+  const kx = 111.32 * Math.cos(lat * Math.PI / 180), ky = 110.57; // km per degree
+  let best = null;
+  for (const w of data.elements || []) {
+    const g = w.geometry || [];
+    let dMin = Infinity, segBearing = null;
+    for (let i = 0; i < g.length - 1; i++) {
+      const ax = (g[i].lon - lon) * kx, ay = (g[i].lat - lat) * ky, bx = (g[i + 1].lon - lon) * kx, by = (g[i + 1].lat - lat) * ky;
+      const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy || 1e-12;
+      const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+      const d = Math.hypot(ax + t * dx, ay + t * dy) * 1000;
+      if (d < dMin) { dMin = d; segBearing = bearingDeg([g[i].lon, g[i].lat], [g[i + 1].lon, g[i + 1].lat]); }
+    }
+    if (!Number.isFinite(dMin)) continue;
+    let score = dMin + (ROAD_CLASS_PENALTY_M[w.tags?.highway] ?? 20);
+    if (heading != null && segBearing != null) {
+      const diff = Math.abs(((heading - segBearing + 540) % 360) - 180);
+      const across = Math.min(diff, 180 - diff); // 0 = along the road, 90 = crossing it
+      score += across > 35 ? 40 : across > 20 ? 12 : 0;
+    }
+    if (!w.tags?.name && !w.tags?.ref) score += 15; // nameless: a ramp or a driveway
+    if (!best || score < best.score) best = { score, tags: w.tags || {} };
+  }
+  if (!best) return null;
+  const t = best.tags;
+  const ref = String(t.ref || "").split(";")[0].replace(/\s/g, "");
+  const numbered = /^(motorway|trunk|primary|motorway_link|trunk_link)$/.test(t.highway) && /^[AN]\d{1,3}[a-z]?$/i.test(ref) ? ref.toUpperCase() : null;
+  return { street: t.name || null, ref: numbered, highway: t.highway || null };
+}
+async function whereAt(env, [lon, lat], heading = null) {
+  const key = `where:${lon.toFixed(4)},${lat.toFixed(4)}:${heading == null ? "-" : Math.round(heading / 30)}`;
   const cached = memoGet(key);
   if (cached !== undefined) return cached;
-  const url = `${PELIAS_BASE}/reverse?point.lat=${lat}&point.lon=${lon}&size=1&layers=address,street`;
-  const data = await fetchJson(url, { headers: orsHeaders(env) }, "Geocoder");
-  const p = data.features?.[0]?.properties || {};
-  const out = {
-    street: p.street || (p.layer === "street" ? p.name : null) || null,
-    city: p.locality || p.localadmin || p.county || null,
-    country: p.country_code || null,
-  };
+  let road = null;
+  try { road = await roadHere(lat, lon, heading); } catch (_) { /* geocoder below */ }
+  const cityKey = `where-city:${lon.toFixed(2)},${lat.toFixed(2)}`;
+  let city = memoGet(cityKey), street = road?.street ?? null, country = null;
+  if (city === undefined || (!road && street == null)) {
+    const url = `${PELIAS_BASE}/reverse?point.lat=${lat}&point.lon=${lon}&size=1&layers=address,street`;
+    try {
+      const data = await fetchJson(url, { headers: orsHeaders(env) }, "Geocoder");
+      const p = data.features?.[0]?.properties || {};
+      city = p.locality || p.localadmin || p.county || null;
+      country = p.country_code || null;
+      if (!road) street = p.street || (p.layer === "street" ? p.name : null) || null;
+      memoSet(cityKey, city, 24 * 3600 * 1000);
+    } catch (_) { if (city === undefined) city = null; }
+  }
+  const out = { street, city, country, ref: road?.ref || null, highway: road?.highway || null, source: road ? "osm" : "geocoder" };
   memoSet(key, out, 24 * 3600 * 1000);
   return out;
 }
@@ -2111,7 +2187,8 @@ async function route(request, env) {
   if (path === "/where" && request.method === "GET") {
     const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new HttpError(400, "Add ?lat=..&lon=..");
-    return json(request, await whereAt(env, [lon, lat]));
+    const h = Number(url.searchParams.get("heading"));
+    return json(request, await whereAt(env, [lon, lat], url.searchParams.has("heading") && Number.isFinite(h) ? h : null));
   }
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
   if (path === "/detours" && request.method === "POST") return handleDetours(request, env);

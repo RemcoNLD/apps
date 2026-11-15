@@ -973,7 +973,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.75";
+const APP_VERSION = "2026-11-15.76";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1353,6 +1353,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   }
   state.offCount = 0;
   state.plannedAt = Date.now();
+  state.roadOverride = null; state.roadCheckedKm = null;
   state.prevKm = state.user.km;
   save();
   addNdwSites(data.ndwTiles || [], state.planBrands); // in the background: the route shows straight away
@@ -1749,7 +1750,16 @@ function onMainRoadNow() {
   if (u.at == null || u.offKm > ON_ROUTE_KM || (u.acc != null && u.acc > 100)) return null;
   return mainRoadAt(u.km);
 }
+// The route's road number, unless a map check found you on another numbered road (see lookUpWhere).
+// That correction holds for the rest of this stretch of the route, or 15 km.
+function withOverride(part) {
+  const ov = state.roadOverride;
+  return part && ov && ov.fromKm === part.fromKm ? { ...part, ref: ov.ref, country: part.country } : part;
+}
 // force: a turn or a tap (always look again); otherwise only when the situation calls for it.
+// On a main road the badge comes from the route, and the map checks its number after a turn
+// (a junction like A12 > A27 that the route data may have missed) and every 10 km.
+const ROAD_CHECK_EVERY_KM = 10;
 function updateLocation(reason = "fix", force = false) {
   const u = state.user;
   if (u.at == null || !state.route) return;
@@ -1757,15 +1767,21 @@ function updateLocation(reason = "fix", force = false) {
   const road = onMainRoadNow();
   const onRoute = u.offKm <= ON_ROUTE_KM;
   if (road) {
-    state.loc = { kind: "road", road, at: Date.now(), lonlat: u.lonlat, onRoute: true };
+    const ov = state.roadOverride;
+    if (ov && (ov.fromKm !== road.fromKm || u.km - ov.km > 15)) state.roadOverride = null;
+    state.loc = { kind: "road", road: withOverride(road), at: Date.now(), lonlat: u.lonlat, onRoute: true };
+    const due = state.roadCheckedKm == null || Math.abs(u.km - state.roadCheckedKm) >= ROAD_CHECK_EVERY_KM;
+    if (force || reason === "tap" || due) lookUpWhere(onRoute, road);
     return;
   }
+  state.roadOverride = null;
   const changed = loc.kind !== "place" || loc.onRoute !== onRoute;
   const far = loc.lonlat && haversine(loc.lonlat, u.lonlat) >= LOCAL_EVERY_KM;
   if (!(force || changed || far || reason === "tap")) return;
-  lookUpWhere(onRoute);
+  lookUpWhere(onRoute, null);
 }
-async function lookUpWhere(onRoute) {
+// routeRoad: the main road the route says you're on (then this is a check of its number).
+async function lookUpWhere(onRoute, routeRoad = null) {
   const u = state.user;
   const now = Date.now();
   if (state.whereBusy || now - (state.whereAt || 0) < WHERE_MIN_GAP_MS) {
@@ -1776,15 +1792,31 @@ async function lookUpWhere(onRoute) {
   }
   state.whereBusy = true; state.whereAt = now;
   const at = u.lonlat;
+  if (routeRoad) state.roadCheckedKm = u.km; // also when the check fails: try again 10 km on
   const prev = state.loc?.kind === "place" ? state.loc : null;
+  const h = state.heading != null ? `&heading=${Math.round(state.heading)}` : "";
   try {
-    const r = await api(`/where?lat=${at[1].toFixed(5)}&lon=${at[0].toFixed(5)}`, null, 8000, false);
-    const ref = r.street && /^[AN]\s?\d{1,3}[a-z]?$/i.test(r.street.trim()) ? r.street.replace(/\s/g, "").toUpperCase() : null;
-    state.loc = { kind: "place", city: r.city || null, street: ref ? null : r.street || null, ref, country: r.country || null,
-      at: Date.now(), lonlat: at, onRoute };
+    const r = await api(`/where?lat=${at[1].toFixed(5)}&lon=${at[0].toFixed(5)}${h}`, null, 9000, false);
+    const ref = r.ref || (r.street && /^[AN]\s?\d{1,3}[a-z]?$/i.test(r.street.trim()) ? r.street.replace(/\s/g, "").toUpperCase() : null);
+    if (routeRoad) {
+      // Only a motorway or trunk road the map is sure of corrects the route (not a ramp or a road alongside).
+      const sure = ref && /^(motorway|trunk)$/.test(r.highway || "");
+      if (sure && ref !== routeRoad.ref) {
+        if (state.roadOverride?.ref !== ref) {
+          const near = (state.route.debugSteps || []).filter(([k]) => Math.abs(k - u.km) < 8).map(([k, n]) => `${k}: ${n}`).join(" | ");
+          reportError(`Road check at km ${u.km.toFixed(1)}: route says ${routeRoad.ref}, map says ${ref}. Showing ${ref}.${near ? ` Route steps: ${near}` : ""}`);
+        }
+        state.roadOverride = { ref, fromKm: routeRoad.fromKm, km: u.km };
+      } else if (sure) state.roadOverride = null;
+      const road = onMainRoadNow();
+      if (road) state.loc = { kind: "road", road: withOverride(road), at: Date.now(), lonlat: u.lonlat, onRoute: true };
+    } else {
+      state.loc = { kind: "place", city: r.city || null, street: ref ? null : r.street || null, ref, country: r.country || null,
+        at: Date.now(), lonlat: at, onRoute };
+    }
   } catch (e) {
     // Keep the last place; the time shows how old it is.
-    state.loc = prev ? { ...prev, lonlat: at, onRoute } : { kind: "place", city: null, street: null, at: null, lonlat: at, onRoute };
+    if (!routeRoad) state.loc = prev ? { ...prev, lonlat: at, onRoute } : { kind: "place", city: null, street: null, at: null, lonlat: at, onRoute };
   } finally {
     state.whereBusy = false;
     render();
@@ -2650,7 +2682,8 @@ const roadPartBadge = (r) => roadBadge(r.ref, r.country || countryAt(r.fromKm ??
 // The breadcrumbs at the top: the main road you're on (or the next one), then the ones after it.
 // A road drops off the moment you've passed its end.
 function roadsAhead(limit = 3) {
-  return roadParts().filter((r) => r.toKm > state.user.km).slice(0, limit);
+  const parts = roadParts().filter((r) => r.toKm > state.user.km).map(withOverride);
+  return parts.filter((r, i) => r.ref !== parts[i - 1]?.ref).slice(0, limit);
 }
 
 // Which country a stretch of road is in, judged from the chargers on or near it.
@@ -3324,7 +3357,7 @@ function render() {
   const inOrder = [];
   const rows = roadRowsOn();
   const roads = rows ? roadParts() : [];
-  const curRoad = u.at != null && u.offKm <= ON_ROUTE_KM ? mainRoadAt(u.km) : null;
+  const curRoad = u.at != null && u.offKm <= ON_ROUTE_KM ? withOverride(mainRoadAt(u.km)) : null;
   if (curRoad && rows) inOrder.push({ key: `road-${curRoad.fromKm}`, html: roadRow(curRoad, true) });
   if (note) inOrder.push({ key: "note", html: note });
   const nextRoads = roads.filter((p) => p.fromKm !== curRoad?.fromKm && p.fromKm > u.km);

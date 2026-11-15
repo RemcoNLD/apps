@@ -563,7 +563,8 @@ function learnCountries(route, points) {
 
 function roadRef(name) {
   if (!name || name === "-") return null;
-  const m = String(name).match(/\b([AERSMBN])\s?(\d{1,3}[a-z]?)\b/);
+  // A motorway, E, R(ing), S(chnellstraße), M, B(undesstraße), N(ational) or French D road.
+  const m = String(name).match(/\b([AERSMBND])\s?(\d{1,4}[a-z]?)\b/);
   if (m) return `${m[1]}${m[2]}`;
   const de = String(name).match(/autobahn\s?(\d{1,3})\b/i); // "Bundesautobahn 3"
   return de ? `A${de[1]}` : null;
@@ -590,6 +591,7 @@ function roadsAlong(route) {
       const iso = isoAt(route, mid);
       const ref = refAt(route, ref0, Math.min(a + 1, b), mid);
       if (!ref) continue;
+      if (ref[0] === "D" && iso !== "FR") continue; // D numbers only mean a road in France
       const from = route.km[x], to = route.km[y];
       const last = parts[parts.length - 1];
       if (last && last.ref === ref && from - last.toKm < 3) last.toKm = to; // same road, short gap (junction)
@@ -599,7 +601,9 @@ function roadsAlong(route) {
   return parts
     // Skip short connectors (a few km of motorway at an interchange), but keep every N or B road
     // of 1 km or more: they're short by nature and you want to see you'll use them (N3 at Dordrecht).
-    .filter((p) => p.toKm - p.fromKm >= (/^[NB]/.test(p.ref) ? 1 : 5))
+    // Per country: NL/BE/FR N, BE R (ring), AT/DE B, FR M (métropole) from 1 km; FR D from 2 km;
+    // motorways (A, AT S, E) from 5 km.
+    .filter((p) => p.toKm - p.fromKm >= (/^[NBRM]/.test(p.ref) ? 1 : p.ref[0] === "D" ? 2 : 5))
     .map((p) => ({ ref: p.ref, country: p.country, fromKm: Math.round(p.fromKm * 10) / 10, toKm: Math.round(p.toKm * 10) / 10 }));
 }
 
@@ -1725,7 +1729,7 @@ async function roadHere(lat, lon, heading) {
   if (!best) return null;
   const t = best.tags;
   const ref = String(t.ref || "").split(";")[0].replace(/\s/g, "");
-  const numbered = /^(motorway|trunk|primary|motorway_link|trunk_link)$/.test(t.highway) && /^[AN]\d{1,3}[a-z]?$/i.test(ref) ? ref.toUpperCase() : null;
+  const numbered = /^(motorway|trunk|primary|secondary|motorway_link|trunk_link)$/.test(t.highway) && /^[ABDEMNRS]\d{1,4}[a-z]?$/i.test(ref) ? ref.toUpperCase() : null;
   return { street: t.name || null, ref: numbered, highway: t.highway || null };
 }
 async function whereAt(env, [lon, lat], heading = null) {

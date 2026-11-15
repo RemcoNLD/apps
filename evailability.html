@@ -973,7 +973,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.77";
+const APP_VERSION = "2026-11-15.78";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1797,7 +1797,7 @@ async function lookUpWhere(onRoute, routeRoad = null) {
   const h = state.heading != null ? `&heading=${Math.round(state.heading)}` : "";
   try {
     const r = await api(`/where?lat=${at[1].toFixed(5)}&lon=${at[0].toFixed(5)}${h}`, null, 9000, false);
-    const ref = r.ref || (r.street && /^[AN]\s?\d{1,3}[a-z]?$/i.test(r.street.trim()) ? r.street.replace(/\s/g, "").toUpperCase() : null);
+    const ref = r.ref || (r.street && /^[ABDEMNRS]\s?\d{1,4}[a-z]?$/i.test(r.street.trim()) ? r.street.replace(/\s/g, "").toUpperCase() : null);
     if (routeRoad) {
       // Only a motorway or trunk road the map is sure of corrects the route (not a ramp or a road alongside).
       const sure = ref && /^(motorway|trunk)$/.test(r.highway || "");

@@ -932,7 +932,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.69";
+const APP_VERSION = "2026-11-15.70";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -988,7 +988,12 @@ function detourOf(s) {
   const pullIn = serviceArea ? PULL_IN_MIN : 0;
   return Math.max(0, s.detourMin - pullIn);
 }
-const OFF_ROUTE_KM = 1.0;
+// More than this off the route (3 fixes in a row, accurate to 100 m) means you've left it. 0.5 km so a
+// parallel road (N237 next to the A28) counts; GPS on a motorway is far better than that.
+const OFF_ROUTE_KM = 0.5;
+// GPS watchdog: iOS sometimes stops a location watch without an error (after the screen was off, the
+// app in the background, or a while of driving). No fix for this long → the watch is started again.
+const GPS_STALE_MS = 20000, ON_ROUTE_KM = 0.3;
 const MY_SIDE_MAX_DETOUR = 6; // minutes; "Easy to reach" also shows any charger with at most this detour
 const MY_SIDE_KEY = "evailability-myside";
 const BRANDS_KEY = "evailability-brands";
@@ -1242,6 +1247,11 @@ function updatePlanBtn() {
 
 function showStartError(msg) { const p = $("startError"); p.textContent = msg; p.hidden = !msg; }
 
+// Where you are now for a new plan: the last fix if it's under 30 s old, otherwise asked again
+// (an old position would plan from where you were, e.g. still on the A28 after taking the N237).
+async function hereNow() {
+  return state.lastFix && Date.now() - state.lastFix.at < 30000 ? state.lastFix.lonlat : currentPosition();
+}
 function currentPosition() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error("This browser can’t share your location. Fill in a start instead."));
@@ -1274,6 +1284,13 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   for (const s of state.stations) s.statusAt = s.statusChecked === false || s.country === "FR" ? null : Date.now();
   state.statusAt = Date.now();
   state.user = { km: 0, min: 0, offKm: 0, acc: null, at: null };
+  // Where you were a moment ago, on the new route, so it doesn't say "Waiting for your location"
+  // until the next fix (which might be slow or, on iOS, never come without the watchdog).
+  const fix = state.lastFix;
+  if (fix && Date.now() - fix.at < 60000) {
+    const pr = project(fix.lonlat);
+    state.user = { km: pr.km, min: pr.min, offKm: pr.d, acc: fix.acc, at: fix.at, lonlat: fix.lonlat };
+  }
   state.offCount = 0;
   save();
   addNdwSites(data.ndwTiles || [], state.planBrands); // in the background: the route shows straight away
@@ -1390,7 +1407,7 @@ $("destRow").addEventListener("click", async () => {
   if (!state.route || state.rerouting) return;
   showOptionsLoading("Routes from here");
   try {
-    const from = state.user.lonlat || await currentPosition();
+    const from = await hereNow();
     const { options } = await api("/alternatives", { from, to: [state.to.lon, state.to.lat] });
     if ($("options").hidden) return; // closed while loading
     const cur = currentSignature();
@@ -1564,14 +1581,46 @@ function stopTracking() {
 
 function startGps() {
   if (!navigator.geolocation) return;
+  if (state.watchId != null) navigator.geolocation.clearWatch(state.watchId);
+  state.gpsStartedAt = Date.now();
   state.watchId = navigator.geolocation.watchPosition(
-    (p) => onPosition([p.coords.longitude, p.coords.latitude], p.coords.accuracy),
+    (p) => { state.gpsDenied = false; onPosition([p.coords.longitude, p.coords.latitude], p.coords.accuracy); },
     (err) => {
+      if (err.code === 1) state.gpsDenied = true;
       state.user.acc = null; render();
-      reportError(`Location: ${err.code === 1 ? "permission denied" : err.code === 2 ? "position unavailable" : err.code === 3 ? "no GPS fix in 20 s" : err.message || "unknown error"}`);
+      reportError(`Location: ${err.code === 1 ? "permission denied. Tap “You” to allow it again" : err.code === 2 ? "position unavailable" : err.code === 3 ? "no GPS fix in 20 s" : err.message || "unknown error"}`);
     },
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
 }
+const gpsActive = () => !$("drive").hidden && !$("sim").checked && state.route && !state.arrived;
+const lastFixAge = () => Date.now() - (state.lastFix?.at || 0);
+// Start the watch again when it has gone quiet. quiet: don't add an error message (on return to the app).
+function gpsWatchdog(quiet = false) {
+  if (!gpsActive() || document.visibilityState !== "visible") return;
+  if (lastFixAge() < GPS_STALE_MS || Date.now() - (state.gpsStartedAt || 0) < GPS_STALE_MS) return;
+  if (!quiet && state.lastFix) reportError(`Location: no update for ${Math.round(lastFixAge() / 1000)} s, location restarted`);
+  startGps();
+  render();
+}
+setInterval(() => gpsWatchdog(), 5000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && gpsActive() && lastFixAge() > 10000) { startGps(); render(); }
+});
+window.addEventListener("pageshow", () => { if (gpsActive() && lastFixAge() > 10000) startGps(); });
+// Tapping "You" when location is missing or old asks for it straight away. A tap is a user gesture,
+// which lets iOS show the permission question again after it was dropped.
+$("youRow").addEventListener("click", () => {
+  if (!gpsActive() || lastFixAge() < GPS_STALE_MS) return;
+  toast("Asking for your location…");
+  navigator.geolocation.getCurrentPosition(
+    (p) => { state.gpsDenied = false; onPosition([p.coords.longitude, p.coords.latitude], p.coords.accuracy); startGps(); },
+    (err) => {
+      state.gpsDenied = err.code === 1;
+      toast(err.code === 1 ? "Location is blocked. Settings → Privacy → Location Services → Safari Websites (or the app) → While Using" : "No location yet, trying again", 5000);
+      startGps();
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+});
 
 // Drives the route at 100 km/h, sped up 30 times, so a test drive takes minutes.
 function startSimulation() {
@@ -1586,6 +1635,7 @@ function startSimulation() {
 function onPosition(lonlat, accuracy) {
   const pr = project(lonlat);
   state.user = { km: pr.km, min: pr.min, offKm: pr.d, acc: accuracy, at: Date.now(), lonlat };
+  state.lastFix = { lonlat, acc: accuracy, at: Date.now() };
   const reliable = accuracy == null || accuracy < 100;
   state.offCount = reliable && pr.d > OFF_ROUTE_KM ? state.offCount + 1 : 0;
   // Once past a via point, it no longer matters for a new route.
@@ -2387,7 +2437,7 @@ async function reroute() {
   state.lastRerouteAt = Date.now();
   showBanner("You’ve left the route. Rerouting…");
   try {
-    const from = state.user.lonlat || await currentPosition();
+    const from = await hereNow();
     await plan(from);
     state.stickToBottom = true;
     showBanner("You’ve left the route. New route planned.", { ok: true, hideAfter: 6000 }); // its roads show at the top
@@ -2979,10 +3029,18 @@ function render() {
     <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`);
   fitRoads($("destRow").querySelector(".sub.roads"));
 
-  const gps = u.at == null ? "Waiting for your location…"
-    : u.acc != null && u.acc > 100 ? `Location rough (±${Math.round(u.acc)} m)` : "On route";
+  // What we know about your position. The road badge only when you're on the route with a recent fix:
+  // projected from an old or off-route position it names a road you're not on.
+  const fixAge = u.at == null ? Infinity : Date.now() - u.at;
+  const sim = $("sim").checked;
+  const gps = u.at == null ? (state.gpsDenied ? "Location blocked · tap here" : "Waiting for your location… tap to retry")
+    : !sim && fixAge > 30000 ? `Last location ${fixAge < 90000 ? `${Math.round(fixAge / 1000)} s` : `${Math.round(fixAge / 60000)} min`} ago · tap to retry`
+    : u.acc != null && u.acc > 100 ? `Location rough (±${Math.round(u.acc)} m)`
+    : u.offKm > ON_ROUTE_KM ? `${fmtKm(u.offKm)} km off the route`
+    : "On route";
+  const badge = u.at != null && (sim || fixAge <= 30000) && u.offKm <= ON_ROUTE_KM && roadNow();
   setHtml($("youRow"), `<span class="marker" aria-hidden="true"></span>
-    <div><div class="name">You</div><div class="sub">${gps}${roadNow() ? `&ensp;${roadPartBadge(roadNow())}` : ""}</div></div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`);
+    <div><div class="name">You</div><div class="sub">${gps}${badge ? `&ensp;${roadPartBadge(badge)}` : ""}</div></div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`);
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcomingShown();
@@ -3080,7 +3138,11 @@ async function checkForUpdate(manual) {
     if (manual) $("checkUpdate").textContent = "Couldn’t check, try again later";
   }
 }
-$("version").textContent = APP_VERSION;
+// Each home-screen icon on iPhone keeps its own storage, apart from Safari: the access code and
+// settings saved in one don't exist in another. The Help line says which one this is.
+const RUNS_AS = matchMedia("(display-mode: standalone)").matches || navigator.standalone ? "home-screen app" : "browser tab";
+$("version").textContent = `${APP_VERSION} · ${RUNS_AS}`;
+try { navigator.storage?.persist?.(); } catch (_) {}
 $("checkUpdate").addEventListener("click", () => checkForUpdate(true));
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(false); });
 checkForUpdate(false);
@@ -3315,7 +3377,7 @@ $("addBrandsBtn").addEventListener("click", async () => {
   const brands = BRANDS.map((b) => b.key).filter((k) => (state.planBrands || []).includes(k) || add.includes(k));
   btn.disabled = true; btn.textContent = "Replanning…"; $("brandSheetError").hidden = true;
   try {
-    const from = state.user.lonlat || await currentPosition();
+    const from = await hereNow();
     await plan(from, brands);
     for (const k of add) state.hidden.delete(k);
     saveHidden();

@@ -172,18 +172,33 @@
   /* ---------- driving screen ---------- */
   #drive { height: 100%; display: flex; flex-direction: column; }
   .bar {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 10px 16px; color: var(--muted); font-size: .95rem;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 12px; color: var(--muted); font-size: .95rem;
   }
   .bar button { background: none; border: 0; color: var(--muted); padding: 6px 0; font-weight: 600; }
   .bar .toggle {
     padding: 6px 12px; border-radius: 999px; border: 2px solid var(--muted); color: var(--muted); white-space: nowrap;
   }
   .bar .toggle[aria-pressed="true"] { background: var(--free); border-color: var(--free); color: #fff; }
-  #age { text-align: right; }
+  /* Menu (☰): New route and Help */
+  .menu-wrap { position: relative; flex-shrink: 0; }
+  .bar .menu-btn { width: 38px; height: 38px; display: grid; place-items: center; padding: 0; border-radius: 50%; border: 2px solid var(--muted); }
+  .menu-btn svg { width: 22px; height: 22px; }
+  .menu {
+    position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; min-width: 180px; padding: 6px 0;
+    background: var(--asphalt-raised); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  .bar .menu button { display: block; width: 100%; text-align: left; padding: 13px 18px; font-size: 1.1rem; color: var(--line); }
+  .bar .menu button + button { border-top: 1px solid rgba(127,127,127,.2); }
+  /* Status time, top right: "Status" over "now" / "3 min" (tap to update) */
+  .bar .age { flex-shrink: 0; padding: 0; text-align: right; line-height: 1.15; font-size: .85rem; color: var(--muted); min-width: 3.4em; }
+  .bar .age b { display: block; font-size: 1.05rem; color: var(--line); }
+  .bar .age.old b { color: var(--muted); }
+  .bar .age.err b { color: var(--danger); }
+  .bar .age.busy .spinner { width: 22px; height: 22px; display: inline-block; }
   .bar .brands-btn {
     display: inline-flex; align-items: center; gap: 0; padding: 4px 10px 4px 6px; border-radius: 999px;
-    border: 2px solid var(--muted); min-height: 36px;
+    border: 2px solid var(--muted); min-height: 36px; min-width: 0; flex-shrink: 1; overflow: hidden; white-space: nowrap;
   }
   .brands-btn .logo { width: 22px; height: 22px; margin-left: -6px; box-shadow: 0 0 0 2px var(--asphalt); }
   .brands-btn .logo:first-child { margin-left: 0; }
@@ -398,6 +413,9 @@
   .row.you .turn { margin-left: 12px; display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; }
   .row.you .turn > * { flex-shrink: 0; }
   .turn-ico { width: 30px; height: 30px; color: var(--line); }
+  .turn-marker { justify-self: center; z-index: 1; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: var(--asphalt); }
+  .turn-marker .turn-ico { width: 46px; height: 46px; }
+  .turn-marker.soon .turn-ico { color: var(--sign-blue); }
   .row.you .turn .dist { font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--line); }
   .row.you .turn.soon .dist, .row.you .turn.soon .turn-ico { color: var(--sign-blue, #1d4fa3); }
   .row.you .turn .turn-txt { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; color: var(--line); }
@@ -979,10 +997,16 @@
 
 <section id="drive" hidden>
   <div class="bar">
-    <button id="newRoute">New route</button>
+    <div class="menu-wrap">
+      <button type="button" class="menu-btn" id="menuBtn" aria-label="Menu" aria-expanded="false" aria-controls="menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <div class="menu" id="menu" hidden role="menu">
+        <button id="newRoute" type="button" role="menuitem">New route</button>
+        <button id="helpDrive" type="button" role="menuitem">Help</button>
+      </div>
+    </div>
     <button id="brandsBtn" class="brands-btn" type="button" aria-label="Choose which brands to show"></button>
     <button id="mySide" class="toggle" aria-pressed="false">Easy to reach</button>
-    <button type="button" class="help-btn" id="helpDrive" aria-label="Help and manual">?</button>
+    <button type="button" class="age" id="age" aria-label="Status of the chargers, tap to update"></button>
   </div>
   <div class="debugline" id="debugLine" hidden></div>
   <div class="strip">
@@ -1001,7 +1025,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.88";
+const APP_VERSION = "2026-11-15.89";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1730,13 +1754,15 @@ function exitSign(ref, name) {
 function turnRow() {
   const u = state.user;
   const t = u.at != null && u.offKm <= ON_ROUTE_KM ? nextTurn() : null;
-  if (!t) return `<div class="name">You</div>`;
+  if (!t) return `<span class="marker" aria-hidden="true"></span><div class="name">You</div>`;
   const ex = nextExit(t.km);
   // Turning at an exit: its number goes with the turn ("↗ 1.2 km 18 A58").
   const atExit = ex?.isTurn && ex[1] ? `<span class="exit-sign"><b>${esc(ex[1])}</b></span>` : "";
   const right = ex && !ex.isTurn
     ? `<div class="next-exit">${exitSign(ex.ref, ex.name)}<span class="dist">${fmtDist(ex.km - u.km)}</span></div>` : "";
-  return `<div class="turn${t.km - u.km < 0.5 ? " soon" : ""}">${turnIcon(t.type, t.exitNo)}<span class="dist">${fmtDist(t.km - u.km)}</span>${atExit}${turnTarget(t)}</div>${right}`;
+  const soon = t.km - u.km < 0.5 ? " soon" : "";
+  // The next turn takes the place of your arrow, big, at the end of the road line.
+  return `<span class="turn-marker${soon}" aria-hidden="true">${turnIcon(t.type, t.exitNo)}</span><div class="turn${soon}"><span class="dist">${fmtDist(t.km - u.km)}</span>${atExit}${turnTarget(t)}</div>${right}`;
 }
 
 // Second source of chargers in the Netherlands (NDW), for sites Open Charge Map doesn't have
@@ -3731,8 +3757,8 @@ function render() {
   // projected from an old or off-route position it names a road you're not on.
   // Your row: the next turn with a countdown, and the next exit on a motorway (routes planned
   // before .88 have no turns: then just "You"). The status time sits at the end of the bottom line.
-  setHtml($("youRow"), `<span class="marker" aria-hidden="true"></span>${turnRow()}`);
-  setHtml($("locBar"), `${locationLine()}<span class="age${state.statusError ? " err" : ""}" id="age"></span>`);
+  setHtml($("youRow"), turnRow());
+  setHtml($("locBar"), locationLine());
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcomingShown();
@@ -3788,13 +3814,15 @@ function render() {
 
   const busy = statusBusy();
   $("age").classList.toggle("busy", busy);
+  $("age").classList.toggle("err", !busy && !!state.statusError);
   if (busy) {
-    setHtml($("age"), `<span class="spinner" aria-hidden="true"></span><span class="txt">Updating</span>`);
+    setHtml($("age"), `<span class="spinner" aria-hidden="true"></span>`);
   } else if (state.statusError) {
-    setHtml($("age"), "Couldn’t update status");
+    setHtml($("age"), `Status<b>failed</b>`);
   } else if (state.statusAt) {
     const ago = Math.round((Date.now() - state.statusAt) / 60000);
-    setHtml($("age"), ago < 1 ? "Status now" : `Status ${ago} min old`);
+    $("age").classList.toggle("old", ago >= 3);
+    setHtml($("age"), ago < 1 ? `Status<b>now</b>` : `Status<b>${ago} min</b>`);
   }
 }
 
@@ -3971,7 +3999,8 @@ function helpHtml() {
   <h3>The screen while driving</h3>
   <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. Don't want these rows? In the brands button (top left), set <b>Main roads on the line</b> to <b>Changes only</b>, or just tap a road row (tap a road badge on the line to bring them back): then a badge sits on the line only where the road changes between chargers. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
-  <p>Your own row shows the <b>next turn</b>: an arrow, the distance counting down and the road you turn onto (a roundabout shows its exit number). On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street, and at the end the status time (an error appears there too). With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
+  <p>The <b>☰ menu</b> top left holds New route and Help. Top right is the <b>status time</b> of the chargers (now, or how many minutes old; tap it to update, at most once a minute).</p>
+  <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto (a roundabout shows its exit number). On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Free or not</h3>
   <div class="legend">
@@ -4033,7 +4062,21 @@ function openHelp() {
   });
 }
 $("helpStart").addEventListener("click", openHelp);
-$("helpDrive").addEventListener("click", openHelp);
+$("helpDrive").addEventListener("click", () => { closeMenu(); openHelp(); });
+function closeMenu() { $("menu").hidden = true; $("menuBtn").setAttribute("aria-expanded", "false"); }
+$("menuBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const open = $("menu").hidden;
+  $("menu").hidden = !open; $("menuBtn").setAttribute("aria-expanded", String(open));
+});
+document.addEventListener("click", (e) => { if (!$("menu").hidden && !e.target.closest(".menu-wrap")) closeMenu(); });
+$("newRoute").addEventListener("click", closeMenu);
+// Tap the status time: update the chargers on screen (at most once a minute, like a tap on a row).
+$("age").addEventListener("click", () => {
+  if (statusBusy()) return;
+  if (state.statusAt && Date.now() - state.statusAt < TAP_MIN_MS) { toast("Updated less than a minute ago"); return; }
+  refreshStatus(true);
+});
 $("helpClose").addEventListener("click", () => { $("help").hidden = true; });
 
 // While driving: show or hide the brands on this route straight away; adding new ones replans.

@@ -618,6 +618,46 @@
     .splash .head, .splash .tag, .splash .screen, .splash .points, .splash .nav .road { animation: none; }
     .splash .r { transition: none; }
   }
+
+  /* ---------- availability ring (.64): free count in the middle, one segment per charger around it:
+     green free, red in use, grey out of order. Faded when > 3 min old, grey ring + outlined number > 5 min. */
+  .avr { position: relative; display: inline-grid; place-items: center; width: 56px; height: 56px; flex-shrink: 0; border-radius: 50%; vertical-align: middle; }
+  .avr svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .avr circle { fill: none; stroke-width: 4.6; transition: stroke .4s; }
+  .avr .rg-free { stroke: var(--free); }
+  .avr .rg-busy { stroke: var(--danger); }
+  .avr .rg-off { stroke: var(--offline); }
+  .avr .rg-empty { stroke: var(--muted); stroke-width: 2.6; stroke-dasharray: 2.6 3.1; opacity: .75; }
+  .avr > .stat { position: relative; line-height: 1; text-align: center; }
+  .row .avail .avr > .stat { font-size: 1.6rem; font-weight: 800; letter-spacing: -.04em; }
+  .avr.free .stat strong { color: var(--free); }
+  .avr.full .stat strong { color: var(--danger); }
+  .avr.offline .stat strong { color: var(--offline); }
+  .row .avail .avr.offline > .stat { font-size: .8rem; letter-spacing: .03em; text-transform: uppercase; }
+  .avr.stale svg { opacity: .4; }
+  .avr.stale .stat, .avr.stale .stat strong { color: var(--muted); font-weight: 700; }
+  .avr.old circle:not(.rg-empty) { stroke: var(--muted); }
+  .avr.old svg { opacity: .55; }
+  .avr.old .stat, .avr.old .stat strong { color: transparent !important; -webkit-text-stroke: 1.2px var(--muted); }
+  .avr.changed { animation: changed 1.3s ease-out; }
+  @media (prefers-reduced-motion: reduce) { .avr.changed { animation: none; } .avr circle { transition: none; } }
+  /* Several brands at one site: rings side by side, the brand logo as a badge on each ring */
+  .avail.multi { display: flex; align-items: center; justify-content: flex-end; gap: 6px; position: relative; }
+  .avail.multi .ml { display: block; position: relative; line-height: 0; }
+  .avail.multi .avr { width: 44px; height: 44px; }
+  .avail.multi.n3 .avr { width: 35px; height: 35px; }
+  .avail.multi.n3 { gap: 5px; }
+  .row .avail.multi .avr > .stat { font-size: 1.2rem; }
+  .row .avail.multi.n3 .avr > .stat { font-size: .92rem; letter-spacing: -.04em; }
+  .row .avail.multi .avr.offline > .stat { font-size: .62rem; }
+  .avail.multi .ml > .logo { position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; z-index: 1; border-radius: 5px; box-shadow: 0 0 0 2px var(--asphalt); }
+  .avail.multi.n3 .ml > .logo { width: 16px; height: 16px; }
+  .avail.multi .more { position: absolute; right: 0; bottom: -17px; font-size: .75rem; line-height: 1; white-space: nowrap; }
+  .demo .row .avail .avr > .stat { font-size: 1.4rem; }
+  .demo .avr { width: 50px; height: 50px; }
+  .legend .avr { width: 44px; height: 44px; }
+  .legend .avr > .stat { font-size: 1.15rem; font-weight: 800; }
+  .legend .avr.offline > .stat { font-size: .62rem; text-transform: uppercase; letter-spacing: .03em; }
 </style>
 </head>
 <body>
@@ -852,7 +892,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.63";
+const APP_VERSION = "2026-11-15.64";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2470,10 +2510,9 @@ function statusInfo(s) {
   // Kept short: the station name gets the room. Colour says free (green) or full (orange).
   if (!st) return { cls: "nodata", text: `<span title="${s.country === "NL" ? "Status not found" : "No live data"}">–</span>` };
   if (st.available == null) return { cls: "nodata", text: `<span title="Status unknown">?</span>` };
-  const frac = (a, t) => `${a}<span class="sl">/</span><span class="tot">${t}</span>`;
-  if (st.state === "free") return { cls: "free", text: `<strong title="${st.available} of ${st.total} free">${frac(st.available, st.total)}</strong>` };
-  if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Offline</strong>` };
-  return { cls: "full", text: `<strong title="All in use">${frac(0, st.total)}</strong>` };
+  if (st.state === "free") return { cls: "free", text: `<strong>${st.available}</strong>` };
+  if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Off</strong>` };
+  return { cls: "full", text: `<strong>0</strong>` };
 }
 
 // Road changes drawn on the timeline: the road you'll be on from a point between two chargers.
@@ -2614,6 +2653,46 @@ function sitesOf(stations) {
   return sites;
 }
 
+// ---- availability ring: the free count in the middle; around it one segment per charger (pro rata):
+// green free, red in use, grey out of order. Up to RING_GAPS_MAX chargers the segments have small gaps
+// so they can be counted; beyond that one arc per colour.
+const RING_R = 17, RING_C = 2 * Math.PI * RING_R, RING_GAPS_MAX = 16;
+function ringParts(st) {
+  const total = st?.total || 0;
+  if (!total || st.available == null) return null;
+  const free = Math.max(0, Math.min(st.available, total));
+  const off = st.state === "likely_offline" ? total - free : Math.max(0, Math.min(st.offline || 0, total - free));
+  return { total, free, off, busy: total - free - off };
+}
+function ringSvg(st) {
+  const r = ringParts(st);
+  const open = `<svg viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-90 20 20)">`;
+  if (!r) return `${open}<circle class="rg-empty" cx="20" cy="20" r="${RING_R}"/></g></svg>`;
+  const kinds = [];
+  for (let i = 0; i < r.total; i++) kinds.push(i < r.free ? "free" : i < r.free + r.busy ? "busy" : "off");
+  const per = RING_C / r.total;
+  const gaps = r.total > 1 && r.total <= RING_GAPS_MAX;
+  const gap = gaps ? Math.min(2.2, per * 0.3) : 0;
+  const arcs = [];
+  if (gaps) kinds.forEach((k, i) => arcs.push({ k, from: i * per, len: per }));
+  else kinds.forEach((k, i) => (arcs.at(-1)?.k === k ? (arcs.at(-1).len += per) : arcs.push({ k, from: i * per, len: per })));
+  const f = (n) => Math.round(n * 100) / 100;
+  return open + arcs.map((a) => {
+    const len = Math.max(0.6, a.len - gap);
+    return `<circle class="rg-${a.k}" cx="20" cy="20" r="${RING_R}" stroke-dasharray="${f(len)} ${f(RING_C - len)}" stroke-dashoffset="${f(-(a.from + gap / 2))}"/>`;
+  }).join("") + `</g></svg>`;
+}
+function ringTitle(st) {
+  const r = ringParts(st);
+  if (!r) return "";
+  return [`${r.free} of ${r.total} free`, r.busy ? `${r.busy} in use` : "", r.off ? `${r.off} out of order` : ""].filter(Boolean).join(", ");
+}
+// info: from shownStatus (cls, text, old, st). extra: e.g. " changed".
+function availRing(info, extra = "") {
+  const t = ringTitle(info.st);
+  return `<span class="avr ${info.cls}${info.old ? " old" : ""}${extra}"${t ? ` title="${esc(t)}"` : ""}>${ringSvg(info.st)}<span class="stat">${info.text}</span></span>`;
+}
+
 // Status of one charger as shown: free / full / offline / stale / nodata, plus its text.
 function shownStatus(s) {
   let info = statusInfo(s);
@@ -2623,6 +2702,7 @@ function shownStatus(s) {
   // Grey only when the value is old (or there's none yet).
   if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="${loading ? "Updating" : "Tap to check"}">↻</span>` };
   info.old = !!s.status && !!s.statusAt && Date.now() - s.statusAt > OLD_MS;
+  info.st = s.status || null;
   return info;
 }
 const CLS_ORDER = ["free", "full", "offline", "stale", "nodata"];
@@ -2650,13 +2730,13 @@ function stationRow(site, change, after) {
   let avail, nameLogo = "";
   if (members.length === 1) {
     if (manyBrands) nameLogo = logoHtml(brandKey(s));
-    avail = `<div class="avail"><span class="stat${flashCls(s)}${infos[0].old ? " old" : ""}">${infos[0].text}</span></div>`;
+    avail = `<div class="avail">${availRing(infos[0], flashCls(s))}</div>`;
   } else {
     if (manyBrands) nameLogo = `<span class="logo spacer" aria-hidden="true"></span>`; // names line up with the rows that have a logo
     const shown = members.slice(0, 3);
     const more = members.length - shown.length;
     avail = `<div class="avail multi${shown.length >= 3 ? " n3" : ""}">${shown.map((m, i) =>
-      `<span class="ml ${infos[i].cls}">${logoHtml(brandKey(m))}<span class="stat${flashCls(m)}${infos[i].old ? " old" : ""}">${infos[i].text}</span></span>`).join("")}${
+      `<span class="ml ${infos[i].cls}">${availRing(infos[i], flashCls(m))}${logoHtml(brandKey(m))}</span>`).join("")}${
       more ? `<span class="more">+${more} more</span>` : ""}</div>`;
   }
   const title = members.length > 1 ? `${members.map((m) => (BRAND[brandKey(m)] || {}).name).join(", ")}. Tap to update` : "Tap to update this charger";
@@ -2840,12 +2920,17 @@ checkForUpdate(false);
 // ------------------------------------------------------------- introduction and help
 // Small pieces of the real screen, drawn with the same styles, for the intro and the manual.
 const demoDot = (cls) => `<span class="marker" aria-hidden="true"></span>`;
-function demoRow({ cls = "free", name, km, min, kw, stat, reach = "", detour = "", logo = "", note = "" }) {
+// A demo ring: free count + total (+ out of order), drawn like the real one.
+function demoRing(free, total, off = 0, size = "") {
+  const state = free > 0 ? "free" : off === total ? "likely_offline" : "full";
+  return availRing({ ...statusInfo({ status: { available: free, total, offline: off, state } }), st: { available: free, total, offline: off, state } }, size);
+}
+function demoRow({ cls = "free", name, km, min, kw, ring, reach = "", detour = "", logo = "", note = "" }) {
   return `<div class="row st ${cls}">
     ${demoDot(cls)}${reach || detour ? `<span class="reach">${reach}${detour}</span>` : ""}
     <div><div class="name">${logo}<span class="label">${name}</span></div>
       <div class="sub meta"><span class="when"><b>${km}</b>&nbsp;km&ensp;${min}</span>${kw ? `<span class="kw">${BOLT}${kw}</span>` : ""}</div></div>
-    <div class="avail"><span class="stat">${stat}</span>${note ? `<div class="note">${note}</div>` : ""}</div>
+    <div class="avail">${ring}${note ? `<div class="note">${note}</div>` : ""}</div>
   </div>`;
 }
 const demoDest = `<div class="row dest"><span class="marker" aria-hidden="true"></span><div><div class="name">Munich</div><div class="sub">Arrive 17:40</div></div><div class="dist"><div class="km">612<small>km</small></div></div></div>`;
@@ -2858,24 +2943,24 @@ const SLIDES = [
     title: "Every fast charger ahead",
     text: `<p>Your route as one road: <b>your destination at the top</b>, <b>you at the bottom</b>, and the chargers in between in the order you reach them.</p>
       <p>The nearest one sits right above you, so you can decide at any moment: charge now, or drive on.</p>`,
-    demo: () => `${demoDest}${demoRow({ name: "Aachen-Land", km: 142, min: "1:31", kw: 350, stat: "<strong>4/6</strong>" })}
-      ${demoRow({ name: "Venlo", km: 38, min: "26 min", kw: 350, stat: "<strong>2/4</strong>" })}${demoYou}`,
+    demo: () => `${demoDest}${demoRow({ name: "Aachen-Land", km: 142, min: "1:31", kw: 350, ring: demoRing(4, 6) })}
+      ${demoRow({ name: "Venlo", km: 38, min: "26 min", kw: 350, ring: demoRing(2, 4) })}${demoYou}`,
   },
   {
     title: "Free right now",
     text: `<p><b>Green</b>: chargers free right now, out of the total. <b>Orange</b>: all in use. <b>Grey</b>: probably out of order.</p>
       <p>Live in the Netherlands, Germany and Austria, updated every minute for the chargers on screen. Tap a charger to update it straight away.</p>`,
-    demo: () => `${demoRow({ name: "Free", km: 12, min: "8 min", kw: 350, stat: "<strong>3/6</strong>" })}
-      ${demoRow({ cls: "full", name: "All in use", km: 47, min: "31 min", kw: 300, stat: "<strong>0/4</strong>" })}
-      ${demoRow({ cls: "offline", name: "Out of order", km: 88, min: "58 min", stat: "<strong>Offline</strong>" })}`,
+    demo: () => `${demoRow({ name: "Free", km: 12, min: "8 min", kw: 350, ring: demoRing(3, 6) })}
+      ${demoRow({ cls: "full", name: "All in use", km: 47, min: "31 min", kw: 300, ring: demoRing(0, 4) })}
+      ${demoRow({ cls: "offline", name: "Out of order", km: 88, min: "58 min", ring: demoRing(0, 4, 4) })}`,
   },
   {
     title: "Worth the detour?",
     text: `<p>Chargers off the motorway show the <b>extra minutes</b> to get there and back, like <b>+7</b>.</p>
       <p>A grey arrow means you leave at an exit and carry on in the same direction. A <b>red</b> arrow means a round trip: you have to turn around.</p>
       <p><b>Easy to reach</b> at the top hides the round trips.</p>`,
-    demo: () => `${demoRow({ name: "Autohof Lohfelden", km: 23, min: "15 min", kw: 300, stat: "<strong>5/8</strong>", reach: exitMark(), detour: `<span class="dmin">+4</span>` })}
-      ${demoRow({ name: "Other side", km: 31, min: "20 min", kw: 350, stat: "<strong>2/6</strong>", reach: roundMark(), detour: `<span class="dmin round">+14</span>` })}`,
+    demo: () => `${demoRow({ name: "Autohof Lohfelden", km: 23, min: "15 min", kw: 300, ring: demoRing(5, 8, 1), reach: exitMark(), detour: `<span class="dmin">+4</span>` })}
+      ${demoRow({ name: "Other side", km: 31, min: "20 min", kw: 350, ring: demoRing(2, 6), reach: roundMark(), detour: `<span class="dmin round">+14</span>` })}`,
   },
   {
     title: "Your brands",
@@ -2885,7 +2970,7 @@ const SLIDES = [
         `<span class="brand-btn" aria-pressed="${i < 2}">${logoHtml(k)}${esc(BRAND[k].name)}</span>`).join("")}</div>`,
     demo: () => `${`<div class="row st free"><span class="marker" aria-hidden="true"></span><div><div class="name"><span class="label">Best</span></div>
         <div class="sub meta"><span class="when"><b>18</b>&nbsp;km&ensp;12 min</span></div></div>
-        <div class="avail multi"><span class="ml free">${logoHtml("ionity")}<span class="stat"><strong>2/6</strong></span></span><span class="ml full">${logoHtml("fastned")}<span class="stat"><strong>0/4</strong></span></span></div></div>`}`,
+        <div class="avail multi"><span class="ml free">${demoRing(2, 6)}${logoHtml("ionity")}</span><span class="ml full">${demoRing(0, 4)}${logoHtml("fastned")}</span></div></div>`}`,
   },
   {
     title: "On the road",
@@ -2951,10 +3036,10 @@ function helpHtml() {
 
   <h3>Free or not</h3>
   <div class="legend">
-    <div class="k">${dot("free")}</div><div class="v"><b class="kv" style="color:var(--free)">3/6</b>&ensp;3 of 6 chargers free right now.</div>
-    <div class="k">${dot("full")}</div><div class="v"><b class="kv" style="color:var(--full)">0/4</b>&ensp;All in use.</div>
-    <div class="k">${dot("offline")}</div><div class="v"><b>Offline</b>: reported out of order, or nothing has changed for hours.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old, outlined numbers more than 5 minutes; the dot keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (3 unless changed on the usage page). A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
+    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 free.</b> The ring shows all chargers there, one segment each: <b style="color:var(--free)">green</b> free, <b style="color:var(--danger)">red</b> in use, grey out of order (here 3 free, 4 in use, 1 broken out of 8). Press and hold for the numbers.</div>
+    <div class="k">${demoRing(0, 4)}</div><div class="v">All in use.</div>
+    <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Off</b>: reported out of order, or nothing has changed for hours.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (3 unless changed on the usage page). A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>

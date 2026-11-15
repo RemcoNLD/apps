@@ -1067,7 +1067,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.95";
+const APP_VERSION = "2026-11-15.96";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1799,7 +1799,18 @@ function turnAt(i) {
 // (at an exit the routing service sometimes says "keep right" to stay on the A15). Kept at a
 // motorway junction (knooppunt: a junction without an exit number), where staying on the road
 // does mean picking the right lanes.
+// Where the route leaves a motorway (A road) at this step: the road after it is another one or none.
+// Such a step is always shown, also when the routing service names the slip road after the motorway
+// ("keep right onto A27") or calls it straight on: otherwise the exit itself went missing (.90-.95)
+// and the next instruction was the roundabout after it.
+function leavesMotorway(t) {
+  const before = mainRoadAt(t.km - 0.3);
+  if (!before || !/^A/i.test(before.ref || "") || before.toKm > t.km + 0.8) return false;
+  const after = mainRoadAt(t.km + 1);
+  return !after || after.ref !== before.ref;
+}
 function turnShown(t) {
+  if ((t.type === 6 || [4, 5, 12, 13].includes(t.type)) && leavesMotorway(t)) return true;
   if (t.type === 6 || t.type === 8 || t.type === 11) return false;
   if (t.round || t.type === 9 || t.type === 10) return true;
   if ([4, 5, 12, 13].includes(t.type)) {
@@ -1818,7 +1829,8 @@ function nextTurn() {
   for (let i = 0; i < turns.length; i++) {
     if (turns[i][0] <= k + 0.03) continue;
     const t = turnAt(i);
-    if (turnShown(t)) return { ...t, next: turns[i + 1] };
+    // An exit the routing service calls "straight on": shown as keep right (exits are on the right in NL/DE).
+    if (turnShown(t)) return { ...t, type: t.type === 6 ? 13 : t.type, next: turns[i + 1] };
   }
   return null;
 }
@@ -3443,7 +3455,7 @@ function closureRow(m) {
   const u = state.user, [from, until] = closureWhen(m);
   const inside = m.fromKm <= u.km;
   const when = inside ? `<span class="when"><b>now</b>&ensp;${fmtKm(m.toKm - u.km)} km left</span>`
-    : `<span class="when"><b>${fmtKm(m.fromKm - u.km)}</b>&nbsp;km&ensp;${fmtClock(minAtKm(m.fromKm) - u.min)}</span>`;
+    : `<span class="when"><b>${fmtKm(m.fromKm - u.km)}</b>&nbsp;km</span>`; // no time: room for "until"
   const span = from > Date.now() ? `from ${dayTime(from)} to ${dayTime(until)}` : `until ${dayTime(until)}`;
   const busy = state.avoiding === m.id;
   return `<div class="row closure" title="${esc((m.c.dir ? `${m.c.dir}. ` : "") + (m.c.text || ""))}">
@@ -4360,7 +4372,7 @@ function helpHtml() {
   <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto. A roundabout is drawn with its exit where the road really leaves and the exit number in the middle ("2nd exit", or "straight on"). In the last 500 m the whole row pulses: a white band sweeps across it the way you turn (left to right for right, right to left for left), and straight on the whole row fades between black and white. It sweeps about once a second while you drive and twice as fast in the last 50 m; when you stand still (a traffic light), it sweeps three more times and then holds still in white until you drive off. A "keep left/right" where you simply stay on the same motorway isn't shown. On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Road closures</h3>
-  <p>Planned closures in the Netherlands and Germany show on the line as a red row (<b>A1 closed · Dortmund/Unna – Kamener Kreuz</b>), only when they're on your route, in your direction, and in force around the time you get there: with the distance, the time to get there and until when it's closed. Closures in the other direction, lane closures and closures for lorries only don't show. <b>Avoid</b> plans a new route around it; that stays for this trip (also when you're rerouted) until you plan a new route. The routing itself doesn't know these closures: without Avoid, the route still goes through. The closures are updated every few hours (the interval is set on the admin page). Town streets aren't included. If closures couldn't be loaded, or haven't been updated for longer than they should, a note says so after planning.</p>
+  <p>Planned closures in the Netherlands and Germany show on the line as a red row (<b>A1 closed · Dortmund/Unna – Kamener Kreuz</b>), only when they're on your route, in your direction, and in force around the time you get there: with the distance and until when it's closed. Closures in the other direction, lane closures and closures for lorries only don't show. <b>Avoid</b> plans a new route around it; that stays for this trip (also when you're rerouted) until you plan a new route. The routing itself doesn't know these closures: without Avoid, the route still goes through. The closures are updated every few hours (the interval is set on the admin page). Town streets aren't included. If closures couldn't be loaded, or haven't been updated for longer than they should, a note says so after planning.</p>
 
   <h3>Free or not</h3>
   <div class="legend">

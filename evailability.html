@@ -25,7 +25,7 @@
     --offline: #6c767d;
     --danger: #e0574f;
     --row-h: 86px;
-    --you-h: 52px; /* your own row, one line: You and the status */
+    --you-h: 64px; /* your own row, one line: the next turn (bigger since .91) */
     color-scheme: dark;
   }
   @media (prefers-color-scheme: light) {
@@ -413,18 +413,33 @@
   .row.you .turn { margin-left: 12px; display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; }
   .row.you .turn > * { flex-shrink: 0; }
   .turn-ico { width: 30px; height: 30px; color: var(--line); }
-  .turn-marker { justify-self: center; z-index: 1; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: var(--asphalt); }
-  .turn-marker .turn-ico { width: 46px; height: 46px; }
-  .row.you .turn .turn-how { font-weight: 800; color: var(--line); }
-  /* The last 500 m: the arrow and the distance pulse between white on black and black on white */
-  .turn-marker.soon, .row.you .turn.soon { animation: turnPulse 1.2s ease-in-out infinite alternate; }
-  .row.you .turn.soon { margin-left: 4px; padding: 4px 8px; border-radius: 10px; }
-  .turn-marker.soon .turn-ico, .row.you .turn.soon .dist, .row.you .turn.soon .turn-txt, .row.you .turn.soon .turn-how, .row.you .turn.soon .exit-sign { color: inherit; }
-  @keyframes turnPulse { from { background: #fff; color: #000; } to { background: #000; color: #fff; } }
-  @media (prefers-reduced-motion: reduce) { .turn-marker.soon, .row.you .turn.soon { animation: none; background: #fff; color: #000; } }
-  .row.you .turn .dist { font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--line); }
-  .row.you .turn .turn-txt { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; color: var(--line); }
-  .row.you .turn .rb { font-size: .95rem; }
+  .turn-marker { justify-self: center; z-index: 1; display: grid; place-items: center; width: 54px; height: 54px; border-radius: 12px; background: var(--asphalt); }
+  .turn-marker .turn-ico { width: 52px; height: 52px; }
+  .row.you .turn .turn-how { font-size: 1.15rem; font-weight: 800; color: var(--line); }
+  .row.you .turn .dist { font-size: 1.85rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--line); }
+  .row.you .turn .turn-txt { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 1.25rem; font-weight: 700; color: var(--line); }
+  .row.you .turn .rb { font-size: 1.15rem; }
+  /* The last 500 m (.91): the whole row pulses. A white band sweeps across it the way you turn
+     (left to right for a right turn, right to left for a left turn); straight on, the whole row
+     fades between black and white. The text is white with a "difference" blend, so it is black
+     wherever the background is white and white where it is black; road badges keep their colours. */
+  #drive .row.you.pulse { isolation: isolate; position: relative; }
+  .row.you.pulse::before { content: ""; position: absolute; inset: 2px -8px; border-radius: 12px; z-index: -1; background: #000; }
+  .row.you.pulse .turn-marker { background: transparent; mix-blend-mode: difference; }
+  .row.you.pulse .turn-ico { color: #fff; }
+  .row.you.pulse .turn .dist, .row.you.pulse .turn .turn-txt, .row.you.pulse .turn .turn-how,
+  .row.you.pulse .turn .exit-sign, .row.you.pulse .next-exit { color: #fff; mix-blend-mode: difference; }
+  .row.you.pulse-right::before, .row.you.pulse-left::before {
+    background: linear-gradient(90deg, #000 0 28%, #fff 44% 56%, #000 72% 100%); background-size: 260% 100%;
+    animation: sweepRight 1.1s linear infinite;
+  }
+  .row.you.pulse-left::before { animation-name: sweepLeft; }
+  .row.you.pulse-straight::before { animation: fadeRow 1.4s linear infinite; }
+  @keyframes sweepRight { from { background-position: 100% 0; } to { background-position: 0 0; } }
+  @keyframes sweepLeft { from { background-position: 0 0; } to { background-position: 100% 0; } }
+  /* Quick change, then hold: little time in the grey middle where the text is hardest to read */
+  @keyframes fadeRow { 0%, 40% { background-color: #000; } 50%, 90% { background-color: #fff; } 100% { background-color: #000; } }
+  @media (prefers-reduced-motion: reduce) { .row.you.pulse::before { animation: none !important; background: #fff !important; } }
   .next-exit { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; color: var(--muted); }
   .next-exit .dist { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--line); }
   .exit-sign { display: inline-flex; align-items: center; gap: 4px; max-width: 8.5em; padding: 1px 6px; border-radius: 5px; border: 1.5px solid currentColor; font-size: .85rem; font-weight: 700; color: var(--muted); overflow: hidden; }
@@ -1030,7 +1045,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.90";
+const APP_VERSION = "2026-11-15.91";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1820,7 +1835,15 @@ function nextExit(turnKm) {
 function exitSign(ref, name) {
   return `<span class="exit-sign">${ref ? `<b>${esc(ref)}</b>` : ""}${name ? `<span>${esc(name)}</span>` : ""}</span>`;
 }
+// Which way the last-500-m pulse sweeps: the way the instruction turns; roundabouts by their exit.
+let turnPulse = "";
+const LEFT_TYPES = [0, 2, 4, 9, 12], RIGHT_TYPES = [1, 3, 5, 13];
+function turnDir(t) {
+  if (t.round) return t.angle == null || Math.abs(t.angle) < 25 ? "straight" : t.angle > 0 ? "right" : "left";
+  return LEFT_TYPES.includes(t.type) ? "left" : RIGHT_TYPES.includes(t.type) ? "right" : "straight";
+}
 function turnRow() {
+  turnPulse = "";
   const u = state.user;
   const t = u.at != null && u.offKm <= ON_ROUTE_KM ? nextTurn() : null;
   if (!t) return `<span class="marker" aria-hidden="true"></span><div class="name">You</div>`;
@@ -1831,6 +1854,7 @@ function turnRow() {
     ? `<div class="next-exit">${exitSign(ex.ref, ex.name)}<span class="dist">${fmtDist(ex.km - u.km)}</span></div>` : "";
   // The last 500 m: the turn and its distance pulse white and black, so they stand out.
   const soon = t.km - u.km < 0.5 ? " soon" : "";
+  if (soon) turnPulse = turnDir(t);
   // The next turn takes the place of your arrow, big, at the end of the road line.
   return `<span class="turn-marker${soon}" aria-hidden="true">${turnIcon(t)}</span><div class="turn${soon}"><span class="dist">${fmtDist(t.km - u.km)}</span>${roundaboutText(t)}${atExit}${turnTarget(t)}</div>${right}`;
 }
@@ -3856,6 +3880,8 @@ function render() {
   // Your row: the next turn with a countdown, and the next exit on a motorway (routes planned
   // before .88 have no turns: then just "You"). The status time sits at the end of the bottom line.
   setHtml($("youRow"), turnRow());
+  const pulseCls = turnPulse ? ` pulse pulse-${turnPulse}` : "";
+  if ($("youRow").className !== `row you${pulseCls}`) $("youRow").className = `row you${pulseCls}`;
   setHtml($("locBar"), locationLine());
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
@@ -4098,7 +4124,7 @@ function helpHtml() {
   <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. Don't want these rows? In the brands button (top left), set <b>Main roads on the line</b> to <b>Changes only</b>, or just tap a road row (tap a road badge on the line to bring them back): then a badge sits on the line only where the road changes between chargers. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
   <p>The <b>☰ menu</b> top left holds New route and Help. Top right is the <b>status time</b> of the chargers (now, or how many minutes old; tap it to update, at most once a minute, but right away once after a failed update).</p>
-  <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto. A roundabout is drawn with its exit where the road really leaves and the exit number in the middle ("2nd exit", or "straight on"). In the last 500 m the arrow and distance pulse between white and black. A "keep left/right" where you simply stay on the same motorway isn't shown. On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
+  <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto. A roundabout is drawn with its exit where the road really leaves and the exit number in the middle ("2nd exit", or "straight on"). In the last 500 m the whole row pulses: a white band sweeps across it the way you turn (left to right for right, right to left for left), and straight on the whole row fades between black and white. A "keep left/right" where you simply stay on the same motorway isn't shown. On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Free or not</h3>
   <div class="legend">

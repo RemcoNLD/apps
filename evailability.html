@@ -932,7 +932,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.66";
+const APP_VERSION = "2026-11-15.67";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1898,12 +1898,12 @@ async function refreshFrance() {
   const mins = (ms) => Math.max(1, Math.ceil(ms / 60000));
   if (now < (state.frOffUntil || 0)) {
     return state.frOffReason === "off" ? "France live is switched off on the server"
-      : `France paused after an error, try again in ${mins(state.frOffUntil - now)} min`;
+      : `France paused after an error · next update in ${waitText(state.frOffUntil - now)}`;
   }
   const since = now - (state.frTriedAt || 0);
   if (since < FR_MIN_GAP_MS) {
     const ago = Math.floor(since / 60000);
-    return `France checked ${ago ? `${ago} min` : "less than a minute"} ago, next in ${mins(FR_MIN_GAP_MS - since)} min`;
+    return `France checked ${ago ? `${ago} min` : "less than a minute"} ago · next update in ${waitText(FR_MIN_GAP_MS - since)}`;
   }
   frBusy = true;
   state.frTriedAt = now;
@@ -2073,6 +2073,11 @@ function toast(text, ms = 2200) {
   $("toast").hidden = false;
   toastTimer = setTimeout(() => { $("toast").hidden = true; }, ms);
 }
+// How long until something can be asked again: seconds under 90 s, otherwise minutes.
+function waitText(ms) {
+  const sec = Math.max(1, Math.ceil(ms / 1000));
+  return sec < 90 ? `${sec} s` : `${Math.ceil(sec / 60)} min`;
+}
 let suppressClick = false;
 $("list").addEventListener("click", (e) => {
   const row = e.target.closest(".row.st[data-ids]");
@@ -2084,7 +2089,8 @@ $("list").addEventListener("click", (e) => {
   const due = members.filter((s) => !s.statusAt || now - s.statusAt >= TAP_MIN_MS);
   if (!due.length) {
     const last = Math.max(...members.map((s) => s.statusAt || 0));
-    toast(`Checked ${Math.max(1, Math.round((now - last) / 1000))} s ago`);
+    const next = Math.min(...members.map((s) => s.statusAt || 0)) + TAP_MIN_MS - now; // the first one that's due again
+    toast(`Checked ${Math.max(1, Math.round((now - last) / 1000))} s ago · next update in ${waitText(next)}`, 2800);
     return;
   }
   refreshOne(due.map((s) => s.id));

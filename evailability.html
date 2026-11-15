@@ -208,6 +208,10 @@
     padding: 16px 0 14px; /* room for road badges on the line at the top and bottom edge */
   }
   .list::-webkit-scrollbar { display: none; }
+  /* Temporary: fingerprint of what's loaded (Help > Debug line) */
+  .debugline { margin: -6px 16px 4px; font: 600 .72rem/1.3 ui-monospace, Menlo, monospace; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .debugline .bad { color: var(--danger); }
+  .debugline .ok { color: var(--free); }
   /* The page never zooms or shifts sideways (taps, swipes and the intro carousel still work) */
   html, body { overflow-x: hidden; touch-action: pan-x pan-y; }
   #drive { touch-action: pan-y; }
@@ -922,6 +926,7 @@
   </div>
   <div id="helpBody"></div>
   <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
+  <label class="check"><input id="debugToggle" type="checkbox"> Debug line while driving (versions and data sources)</label>
 </div>
 
 <div class="intro" id="intro" hidden role="dialog" aria-modal="true" aria-label="Introduction">
@@ -961,6 +966,7 @@
     <button id="mySide" class="toggle" aria-pressed="false">Easy to reach</button>
     <button type="button" class="help-btn" id="helpDrive" aria-label="Help and manual">?</button>
   </div>
+  <div class="debugline" id="debugLine" hidden></div>
   <div class="strip">
     <div class="row dest" id="destRow"></div>
     <div class="sticky-road" id="stickyRoad" hidden aria-hidden="true"></div>
@@ -977,7 +983,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.81";
+const APP_VERSION = "2026-11-15.82";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1369,6 +1375,41 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   // Names follow once rows are on screen (refreshStatus after the first render).
 }
 
+// ---- Debug line (temporary): which app and Worker versions are running and where the road numbers
+// came from, so a screenshot shows whether a deploy had finished. Help > "Debug line while driving".
+const DEBUG_KEY = "evailability-debug";
+const debugOn = () => { try { return localStorage.getItem(DEBUG_KEY) === "1"; } catch (_) { return false; } };
+let workerInfo = null, latestApp = null, debugCheckedAt = 0;
+async function refreshDebugInfo(force = false) {
+  if (!debugOn() || (!force && Date.now() - debugCheckedAt < 5 * 60000)) return;
+  debugCheckedAt = Date.now();
+  try { workerInfo = await (await fetch(WORKER + "/", { cache: "no-store" })).json(); } catch (_) { workerInfo = { error: true }; }
+  try { latestApp = (await (await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" })).text()).match(/APP_VERSION = "([^"]+)"/)?.[1] || null; } catch (_) { latestApp = null; }
+  renderDebug();
+}
+function renderDebug() {
+  const el = $("debugLine");
+  if (!el) return;
+  el.hidden = !debugOn() || $("drive").hidden;
+  if (el.hidden) return;
+  const short = (v) => (v ? String(v).replace(/^\d{4}-\d{2}-\d{2}\./, ".") : "?");
+  const app = `app ${short(APP_VERSION)}${latestApp ? (latestApp === APP_VERSION ? ` <span class="ok">✓</span>` : ` <span class="bad">(${short(latestApp)} out)</span>`) : ""}`;
+  const w = workerInfo?.error ? `<span class="bad">worker ?</span>`
+    : workerInfo ? `worker ${short(workerInfo.version)}${workerInfo.deployedAt ? ` @${new Date(workerInfo.deployedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}` : ""}${workerInfo.deployId ? ` ${workerInfo.deployId}` : ""}`
+    : "worker …";
+  const r = state.route;
+  const roads = !r ? "" : r.mapRoads ? `roads <span class="ok">map</span>` : mapBusy ? "roads map…" : r.mapTries >= 3 ? `roads <span class="bad">route (map failed)</span>` : r.mapTries ? `roads route (map retry ${r.mapTries})` : "roads route";
+  const planned = state.plannedAt ? ` · plan ${new Date(state.plannedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}` : "";
+  el.innerHTML = `${app} · ${w} · ${roads}${planned}`;
+}
+$("debugToggle").checked = debugOn();
+$("debugToggle").addEventListener("change", (e) => {
+  try { localStorage.setItem(DEBUG_KEY, e.target.checked ? "1" : "0"); } catch (_) {}
+  refreshDebugInfo(true); renderDebug();
+});
+setInterval(() => refreshDebugInfo(), 60000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshDebugInfo(true); });
+
 // ---- Road numbers from the map. The routing service names roads by its turn instructions, so a
 // road you join without a turn (Lunetten: A12 into A27) keeps the old number, or a road goes
 // missing altogether. So the route is matched to OpenStreetMap once after planning: the numbered
@@ -1379,7 +1420,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
 // routing service's list stays.
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
 const MAP_CLASSES = { motorway: 0, trunk: 1, primary: 2, secondary: 3 };
-let mapRun = 0;
+let mapRun = 0, mapBusy = false;
 async function overpass(q, ms = 15000) {
   let last = null;
   for (const url of OVERPASS) {
@@ -1400,6 +1441,10 @@ async function roadsFromMap() {
   const route = state.route;
   if (!route?.coords?.length) return;
   const run = ++mapRun;
+  mapBusy = true; renderDebug();
+  try { await matchRoads(route, run); } finally { if (run === mapRun) { mapBusy = false; renderDebug(); } }
+}
+async function matchRoads(route, run) {
   const { coords, km } = route;
   const total = route.distanceKm;
   const CHUNK = 100, STEP = 0.2, NEAR_M = 30, BOX_KM = 4;
@@ -1777,6 +1822,7 @@ function startDriving() {
   keepAwake();
   render();
   setTimeout(() => refreshStatus(false), 300); // what's on screen and not known yet
+  refreshDebugInfo(true);
 }
 
 function stopTracking() {
@@ -3461,6 +3507,7 @@ let touchingList = false, lastUserScroll = 0, selfScroll = false, renderLater = 
 function userScrolling() { return touchingList || Date.now() - lastUserScroll < 350; }
 function render() {
   if (!state.route) return;
+  renderDebug();
   if (userScrolling()) { clearTimeout(renderLater); renderLater = setTimeout(render, 400); return; }
   renderBrandsBtn();
   const r = state.route, u = state.user;

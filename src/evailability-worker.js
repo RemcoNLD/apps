@@ -37,6 +37,8 @@
 // Optional plain variable
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
+// Bumped with each change to this file, shown in the app's debug line.
+const WORKER_VERSION = "2026-11-15.82";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -2168,6 +2170,10 @@ async function route(request, env) {
     return json(request, {
       ok: true,
       service: "evailability proxy",
+      // Fingerprint for the app's debug line: which Worker code answers (set by Cloudflare per deploy).
+      version: WORKER_VERSION,
+      deployId: env.CF_VERSION_METADATA?.id?.slice(0, 8) || null,
+      deployedAt: env.CF_VERSION_METADATA?.timestamp || null,
       secrets: { ORS_API_KEY: !!env.ORS_API_KEY, OCM_API_KEY: !!env.OCM_API_KEY },
     });
   }

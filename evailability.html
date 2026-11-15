@@ -1073,7 +1073,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.101";
+const APP_VERSION = "2026-11-15.102";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1904,6 +1904,7 @@ function turnDir(t) {
 }
 function turnRow() {
   turnPulse = ""; turnFast = false;
+  if (state.arrived && state.arrivalDone) return `<span class="marker" aria-hidden="true"></span><div class="name">Arrived</div>`;
   const u = state.user;
   const t = u.at != null && u.offKm <= ON_ROUTE_KM ? nextTurn() : null;
   if (!t) return `<span class="marker" aria-hidden="true"></span><div class="name">You</div>`;
@@ -2495,6 +2496,8 @@ function onPosition(lonlat, accuracy, heading = null, speed = null) {
 // A mild celebration on arrival: a short confetti shower and a card. Then the screen may sleep.
 function celebrateArrival() {
   state.arrived = true;
+  state.arrivedAt = Date.now();
+  state.arrivalDone = false; // until Nice (or the card closes by itself): then the screen calms down
   save();
   const colors = ["#43b96d", "#2f63b8", "#f0a43a", "#e0574f", "#ffd200", "#9b59b6"];
   const box = document.createElement("div");
@@ -2517,7 +2520,10 @@ function celebrateArrival() {
   card.innerHTML = `<div class="big" aria-hidden="true">🎉</div><h2>You’ve arrived</h2><p>${esc(name)}, ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><button type="button">Nice</button>`;
   document.body.appendChild(card);
   requestAnimationFrame(() => card.classList.add("show"));
-  const close = () => { card.classList.remove("show"); setTimeout(() => card.remove(), 400); };
+  const close = () => {
+    card.classList.remove("show"); setTimeout(() => card.remove(), 400);
+    if (!state.arrivalDone) { state.arrivalDone = true; save(); render(); } // no more pulsing turn row
+  };
   card.querySelector("button").addEventListener("click", close);
   setTimeout(close, 8000);
   try { navigator.vibrate?.([60, 80, 60]); } catch (_) {}
@@ -4153,7 +4159,13 @@ function render() {
   const leftKm = r.distanceKm - u.km;
   const leftMin = r.min[r.min.length - 1] - u.min;
 
-  setHtml($("destRow"), `<span class="marker" aria-hidden="true"></span>
+  // After arrival (Nice pressed): when you arrived, no distance, time or roads ahead any more.
+  const done = state.arrived && state.arrivalDone;
+  if (done) setHtml($("destRow"), `<span class="marker" aria-hidden="true"></span>
+    <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
+      <div class="sub">Arrived${state.arrivedAt ? ` ${hhmm(state.arrivedAt)}` : ""}</div></div>
+    <div class="dist"><div class="km">✓</div></div>`);
+  else setHtml($("destRow"), `<span class="marker" aria-hidden="true"></span>
     <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
       <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead(3).length ? `<div class="sub roads">${roadsAhead(3).map(roadPartBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
     <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`);
@@ -4257,7 +4269,7 @@ function save() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       to: state.to, vias: state.vias || [], route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
-      planBrands: state.planBrands, arrived: !!state.arrived, avoid: state.avoid || [],
+      planBrands: state.planBrands, arrived: !!state.arrived, arrivedAt: state.arrivedAt || null, avoid: state.avoid || [],
     }));
   } catch (_) { /* storage full or blocked; the app still works */ }
 }
@@ -4268,7 +4280,7 @@ function restore() {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (!saved?.route) return;
     Object.assign(state, { to: saved.to, vias: saved.vias || (saved.via ? [saved.via] : []), route: saved.route, stations: saved.stations, statusAt: saved.statusAt,
-      planBrands: saved.planBrands || ["ionity"], arrived: !!saved.arrived, avoid: saved.avoid || [] });
+      planBrands: saved.planBrands || ["ionity"], arrived: !!saved.arrived, arrivedAt: saved.arrivedAt || null, arrivalDone: !!saved.arrived, avoid: saved.avoid || [] });
     loadClosures().then(() => render());
     $("sim").checked = !!saved.sim;
     startDriving();

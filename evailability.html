@@ -306,6 +306,7 @@
     position: fixed; z-index: 26; left: 0; right: 0; bottom: 0; max-width: 560px; margin: 0 auto;
     background: var(--asphalt-raised); border-radius: 18px 18px 0 0;
     padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 14px); box-shadow: 0 -8px 24px rgba(0,0,0,.3);
+    max-height: 88vh; overflow-y: auto; overscroll-behavior: contain; /* the name list can make it tall */
   }
   .navsheet h2 { margin: 0; font-size: 1.3rem; }
   .navsheet .sub { margin: 2px 0 12px; }
@@ -529,6 +530,11 @@
   .navsheet .hist b { color: var(--line); }
   .navsheet .hist .muted { color: var(--muted); font-size: .9rem; }
   .navsheet .namesrc { margin: -4px 0 12px; color: var(--muted); font-size: .8rem; line-height: 1.35; }
+  .namesrc .cands { margin-top: 6px; }
+  .namesrc .cand { padding-left: .6em; }
+  .namesrc .cand.used { color: var(--line); font-weight: 600; }
+  .namesrc .cand.skip { opacity: .6; }
+  .namesrc .r { opacity: .75; font-weight: 400; font-size: .92em; }
   .navsheet .hist .tip { color: var(--free); font-size: .9rem; font-weight: 700; }
   /* Demo strip: real row styles on a small piece of road */
   .demo { position: relative; padding: 4px 0; }
@@ -742,7 +748,7 @@
   </div>
   <ul id="fromResults" class="results"></ul>
 
-  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT</span></div>
+  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT, FR (tap)</span></div>
   <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
   <div class="brands-head" style="margin-top:14px"><span>Charging power</span><span class="hint">Change any time</span></div>
   <div class="power" role="group" aria-label="Minimum charging power" data-power>
@@ -846,7 +852,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-14.61";
+const APP_VERSION = "2026-11-14.62";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -866,12 +872,11 @@ const FRESH_MS = 60 * 1000;         // a charger checked within a minute isn't a
 const STALE_MS = 3 * 60 * 1000;     // further ones turn grey after 3 minutes; tap to refresh
 const OLD_MS = 5 * 60 * 1000;       // after 5 minutes the numbers are only outlined: really old
 // France: one national file for the whole country, which the server can read only now and then
-// (it costs more CPU than the free plan allows). So one lookup covers every French charger on the
-// route: every 2 minutes while the next French charger is on screen, otherwise every 5 minutes;
-// a tap on a French charger updates them all (at most once a minute).
-const FR_NEXT_EVERY_MS = 2 * 60 * 1000;
-const FR_EVERY_MS = 5 * 60 * 1000;
-const FR_MIN_GAP_MS = 60 * 1000;
+// (it costs more CPU than the free plan allows; automatic updates used up the Worker's allowance on
+// 14 Nov). So France is tap-only: a tap on a French charger updates every French charger on the
+// route at once, at most once per 3 minutes; after a failed lookup France pauses for 15 minutes.
+const FR_MIN_GAP_MS = 3 * 60 * 1000;
+const FR_FAIL_PAUSE_MS = 15 * 60 * 1000;
 const FR_MAX = 250; // French chargers per lookup, nearest ahead first
 const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
@@ -1131,7 +1136,8 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.stations = data.stations;
   state.planBrands = data.brands || ["ionity"];
   // Only the first few come with a status; the rest are fetched once they're on screen.
-  for (const s of state.stations) s.statusAt = s.statusChecked === false ? null : Date.now();
+  // French ones show ↻ until you tap one (France is tap-only).
+  for (const s of state.stations) s.statusAt = s.statusChecked === false || s.country === "FR" ? null : Date.now();
   state.statusAt = Date.now();
   state.user = { km: 0, min: 0, offKm: 0, acc: null, at: null };
   state.offCount = 0;
@@ -1635,8 +1641,8 @@ function statusBusy() {
 
 async function refreshOne(ids) {
   const picked = state.stations.filter((x) => ids.includes(x.id));
-  if (picked.some((x) => x.country === "FR") && !(await refreshFrance(true))) {
-    if (picked.every((x) => x.country === "FR")) toast("France updates at most once a minute");
+  if (picked.some((x) => x.country === "FR")) {
+    refreshFrance().then((why) => { if (why) toast(why, 3200); });
   }
   const list = picked.filter((x) => x.country !== "FR" && !(x.loadingAt && Date.now() - x.loadingAt < 20000));
   if (!list.length) return;
@@ -1738,7 +1744,6 @@ async function refreshStatus(force = true) {
   const inView = stationsInView();
   fetchDetours(detourCandidates(inView));
   fetchPlaces(); // rows on screen and the next few above them
-  refreshFrance(false);
   const todo = inView.filter((s) => s.country !== "FR" && !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
   if (!todo.length) return;
   for (const s of todo) s.loadingAt = now;
@@ -1756,41 +1761,47 @@ async function refreshStatus(force = true) {
   }
 }
 
-// France: all French chargers ahead in one lookup (see FR_NEXT_EVERY_MS). Returns false when it
-// didn't ask (too soon, nothing French ahead, or already asking).
+// France: all French chargers ahead in one lookup, only on a tap. Returns null when it asked,
+// otherwise why not, as a text for a toast.
 let frBusy = false;
-async function refreshFrance(force) {
-  if (frBusy || !state.route || $("drive").hidden || document.visibilityState !== "visible") return false;
+async function refreshFrance() {
+  if (frBusy) return "France is being updated";
+  if (!state.route) return "";
   const ahead = upcoming().filter((s) => s.country === "FR").slice(0, FR_MAX);
-  if (!ahead.length) return false;
+  if (!ahead.length) return "";
   const now = Date.now();
-  if (now < (state.frOffUntil || 0)) return false; // switched off on the server: ask again later
-  if (now - (state.frTriedAt || 0) < FR_MIN_GAP_MS) return false;
-  if (!force) {
-    const next = visibleAhead().find((s) => s.country === "FR");
-    const nextOnScreen = next && stationsInView().some((s) => s.id === next.id);
-    const never = stationsInView().some((s) => s.country === "FR" && !s.statusAt);
-    if (!never && now - (state.frAt || 0) < (nextOnScreen ? FR_NEXT_EVERY_MS : FR_EVERY_MS)) return false;
+  const mins = (ms) => Math.max(1, Math.ceil(ms / 60000));
+  if (now < (state.frOffUntil || 0)) {
+    return state.frOffReason === "off" ? "France live is switched off on the server"
+      : `France paused after an error, try again in ${mins(state.frOffUntil - now)} min`;
+  }
+  const since = now - (state.frTriedAt || 0);
+  if (since < FR_MIN_GAP_MS) {
+    const ago = Math.floor(since / 60000);
+    return `France checked ${ago ? `${ago} min` : "less than a minute"} ago, next in ${mins(FR_MIN_GAP_MS - since)} min`;
   }
   frBusy = true;
   state.frTriedAt = now;
   const shown = new Set(stationsInView().map((s) => s.id));
   for (const s of ahead) if (shown.has(s.id)) s.loadingAt = now; // the sweep, only where you can see it
   render();
+  let why = null;
   try {
     const r = await api("/fr-status", { stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 30000, false);
-    if (r.off) state.frOffUntil = Date.now() + 30 * 60 * 1000;
+    if (r.off) { state.frOffUntil = Date.now() + 30 * 60 * 1000; state.frOffReason = "off"; why = "France live is switched off on the server"; }
     applyStatus(r.status || {});
     state.frAt = Date.now();
     state.frError = null;
   } catch (e) {
     state.frError = e.message; // the old values stay and age: grey, then outlined
+    state.frOffUntil = Date.now() + FR_FAIL_PAUSE_MS; state.frOffReason = "error";
+    why = "France couldn’t be updated; paused for 15 min";
   } finally {
     for (const s of ahead) s.loadingAt = null;
     frBusy = false;
     save(); render();
   }
-  return true;
+  return why;
 }
 
 // After scrolling: wait until the list has been still for a moment, then fetch what's in view.
@@ -2275,27 +2286,36 @@ function shortName(n) {
 // (NDW's "name" turned out to be the street address, so it's only used when it names a service area.)
 const GENERIC_NAME = /^(charger|charging( station| point)?|laadpunt|laadstation|snellader|recharge|hpc|dc)?$/i;
 const AREA_WORDS = /\b(verzorgingsplaats|vzp|parkeerplaats|rasthof|raststätte|rastanlage|autohof|aire de|service area)\b/i;
-function siteName(s) {
+// Every name a charger could get, best source first. siteName() uses the first; the press-and-hold
+// sheet shows them all, so you can see whether another one was better.
+function nameCandidates(s) {
+  const out = [];
+  const add = (src, name) => { if (name && !out.some((o) => o.src === src)) out.push({ src, name }); };
   const own = shortName(s.name);
   const brandOnly = !String(s.name || "").replace(BRAND_WORDS, "").trim();
   // An earlier version copied NDW's street address into the name; treat that as no name.
   const fromLive = s.liveName && s.name === s.liveName;
-  const from = (src, name) => { s._nameFrom = src; return name; }; // shown in the press-and-hold sheet
-  if (!brandOnly && !fromLive && !GENERIC_NAME.test(own)) return from("charger’s own name", own);
-  s._needsPlace = true; // the Worker looks up the service area or town for these (see fetchPlaces)
+  const ownOk = !brandOnly && !fromLive && !GENERIC_NAME.test(own);
+  if (ownOk) add("charger’s own name", own);
   const parts = String(s.address || "").split(",").map((x) => x.trim()).filter(Boolean);
   const area = [s.liveName, ...parts].find((x) => x && AREA_WORDS.test(x));
-  if (area) return from("service area in the charger’s address", area.replace(AREA_WORDS, "").replace(/^[\s:–-]+/, "").trim() || area);
+  if (area) add("service area in the charger’s address", area.replace(AREA_WORDS, "").replace(/^[\s:–-]+/, "").trim() || area);
   const pl = placeOf(s);
-  if (pl?.area && !BRAND_WORDS.test(pl.area)) return from(pl.src === "station name" ? "fuel/charging station nearby (OpenStreetMap)" : "service area (OpenStreetMap)", pl.area);
+  if (pl?.area && !BRAND_WORDS.test(pl.area)) add(pl.src === "station name" ? "fuel/charging station nearby (OpenStreetMap)" : "service area (OpenStreetMap)", pl.area);
   // NDW's name, if it reads like a place and not a street address ("Mastpolder A58" yes, "Drebbelstraat 42" no).
   const live = String(s.liveName || "").replace(BRAND_WORDS, "").replace(/\b[AEN]\d{1,3}\b/g, "").replace(/\s+/g, " ").trim();
-  if (live.length >= 4 && !/\d/.test(live) && !/(straat|weg|laan|baan|dijk|plein|kade|singel|pad|steeg|gracht|\b[ZNOW]{2}\b)/i.test(live)) return from("live-status name (NDW)", live);
+  if (live.length >= 4 && !/\d/.test(live) && !/(straat|weg|laan|baan|dijk|plein|kade|singel|pad|steeg|gracht|\b[ZNOW]{2}\b)/i.test(live)) add("live-status name (NDW)", live);
   const town = parts.length > 1 ? parts[parts.length - 1] : null;
-  if (town) return from("town in the charger’s address", town);
-  if (pl?.town) return from("town (geocoder)", pl.town);
-  if (fromLive) return from("brand (no place found)", (BRAND[brandKey(s)] || {}).name || own);
-  return from("brand (no place found)", own);
+  if (town) add("town in the charger’s address", town);
+  if (pl?.town) add("town (geocoder)", pl.town);
+  if (!ownOk || !out.length) add("brand (no place found)", fromLive ? (BRAND[brandKey(s)] || {}).name || own : own);
+  return { list: out, ownOk, skippedOwn: !ownOk && own && !brandOnly && !fromLive ? own : null };
+}
+function siteName(s) {
+  const { list, ownOk } = nameCandidates(s);
+  if (!ownOk) s._needsPlace = true; // the Worker looks up the service area or town for these (see fetchPlaces)
+  s._nameFrom = list[0].src; // shown in the press-and-hold sheet
+  return list[0].name;
 }
 
 function updateNavSrc() {
@@ -2312,6 +2332,17 @@ function updateNavSrc() {
 function nameSourceHtml(members, label) {
   const s = members.find((m) => siteName(m) === label) || members[0];
   const lines = [`Name from: ${esc(s._nameFrom || "?")}${members.length > 1 ? ` (${esc((BRAND[brandKey(s)] || {}).name || brandKey(s))})` : ""}`];
+  const why = labelWhy.get(members.map((m) => m.id).join(" "));
+  if (why?.kept) lines.push(`Kept the name shown before; “${esc(why.best)}” is equally good, not better.`);
+  // Every candidate per charger, best first, with its rank (lower is better). ✓ = the row's name.
+  for (const m of members) {
+    const { list, skippedOwn } = nameCandidates(m);
+    const brand = esc((BRAND[brandKey(m)] || {}).name || brandKey(m));
+    const items = list.map((c) => `<div class="cand${c.name === label ? " used" : ""}">${c.name === label ? "✓" : "·"} “${esc(c.name)}” <span class="r">${esc(c.src)}, rank ${nameRank(m, c.src)}</span></div>`);
+    if (skippedOwn) items.unshift(`<div class="cand skip">✗ “${esc(skippedOwn)}” <span class="r">own name skipped (generic)</span></div>`);
+    lines.push(`<div class="cands"><b>${brand}</b>${items.join("")}</div>`);
+  }
+  lines.push(`<div class="r">Rank: lower is better. Shell’s own names count as 2.5 (fuel-station names).</div>`);
   const needing = members.filter((m) => { siteName(m); return m._needsPlace; });
   if (needing.length) {
     const m = needing.includes(s) ? s : needing[0];
@@ -2352,10 +2383,11 @@ const NAME_RANK = {
   "brand (no place found)": 7,
 };
 const WEAK_OWN_NAME = new Set(["shell"]);
-function nameRank(s) {
-  const r = NAME_RANK[s._nameFrom] ?? 7;
+function nameRank(s, src = s._nameFrom) {
+  const r = NAME_RANK[src] ?? 7;
   return r === 0 && WEAK_OWN_NAME.has(brandKey(s)) ? 2.5 : r;
 }
+const labelWhy = new Map(); // row (member ids) → { kept, best } for the press-and-hold sheet
 const shownName = new Map(); // charger id → { label, rank } last shown for its row
 function siteLabel(members) {
   const opts = members.map((m, i) => ({ label: siteName(m), rank: nameRank(m), i }));
@@ -2366,6 +2398,7 @@ function siteLabel(members) {
     .reduce((a, b) => (!a || b.rank < a.rank ? b : a), null);
   const pick = prev && prev.rank <= best.rank ? prev : best;
   for (const m of members) shownName.set(m.id, { label: pick.label, rank: pick.rank });
+  labelWhy.set(members.map((m) => m.id).join(" "), { kept: pick === prev && prev.label !== best.label, best: best.label });
   return pick.label;
 }
 
@@ -2920,7 +2953,7 @@ function helpHtml() {
     <div class="k">${dot("free")}</div><div class="v"><b class="kv" style="color:var(--free)">3/6</b>&ensp;3 of 6 chargers free right now.</div>
     <div class="k">${dot("full")}</div><div class="v"><b class="kv" style="color:var(--full)">0/4</b>&ensp;All in use.</div>
     <div class="k">${dot("offline")}</div><div class="v"><b>Offline</b>: reported out of order, or nothing has changed for hours.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old, outlined numbers more than 5 minutes; the dot keeps its colour. France is updated every 2 minutes while the next French charger is on screen, otherwise every 5 minutes; tap a French charger to update them all. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. Grey numbers are more than 3 minutes old, outlined numbers more than 5 minutes; the dot keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every 3 minutes. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>

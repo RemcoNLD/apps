@@ -6,7 +6,7 @@ A web app for the phone that shows the fast chargers along a driving route, with
 - **Usage page:** https://remconld.github.io/apps/admin.html
 - **Server (proxy):** https://ionity.remco-dv.workers.dev
 - **Code:** GitHub repo `RemcoNLD/apps` (branch `main`)
-- **State at the last update:** app `2026-11-14.61`, Worker deployed from commit of the same day. Open items: section 10. France: section 11.
+- **State at the last update:** app `2026-11-14.62`, Worker deployed from commit of the same day. Open items: section 10. France: section 11.
 
 No passwords, keys or tokens are in this document or in the repo. Where they're needed, this document names the secret and says where to set it.
 
@@ -266,7 +266,7 @@ The app asks for a code once per device. The Worker does the check, so the page 
 ---
 
 ### Names of rows with several brands (app `.61`)
-`siteLabel()` ranks each member's name by where it came from (`NAME_RANK`: own name, service area in the address, service area from OpenStreetMap, nearby station, NDW name, town in the address, town from the geocoder, brand), ties go to the member order (Ionity first). Shell's own names are fuel-station names, so they rank just below an OpenStreetMap service area (`WEAK_OWN_NAME`). A shown name sticks (`shownName`, per charger id) until a strictly better one appears, so a brand whose place lookup finishes later can't overwrite an equally good name. The press-and-hold sheet now names the brand the name came from.
+`siteLabel()` ranks each member's name by where it came from (`NAME_RANK`: own name, service area in the address, service area from OpenStreetMap, nearby station, NDW name, town in the address, town from the geocoder, brand), ties go to the member order (Ionity first). Shell's own names are fuel-station names, so they rank just below an OpenStreetMap service area (`WEAK_OWN_NAME`). A shown name sticks (`shownName`, per charger id) until a strictly better one appears, so a brand whose place lookup finishes later can't overwrite an equally good name. The press-and-hold sheet names the brand the name came from and lists, per charger, every candidate name (`nameCandidates()`) with its source and rank, ✓ on the one shown, and a note when an earlier, equally good name was kept.
 
 ## 9. Rename to EVailability: what's left
 
@@ -343,5 +343,7 @@ Build of 14 Nov 2026: 3,943 sites, 25,923 fast points, 710 kB (172 kB gzipped). 
 - Usage page: "transport.data.gouv.fr (France live)" with whole-file reads and index loads.
 
 **Switched off (app `.60`, 14 Nov 23:20):** in a simulated drive to France the whole-file reads used up the Worker's CPU allowance: route loading became slow and then `/plan` failed too ("Couldn't reach the server", the 1102 page has no CORS headers), while the usage page showed no quota overruns. `/fr-status` now answers `{status:{}, off:true}` without reading anything unless the Worker variable `FR_LIVE` is `on` (set it in the Cloudflare dashboard, it survives deploys because of `keep_vars`); the app then stops asking for 30 minutes. Turn it on only with Workers Paid or another way to read the file.
+
+**Tap-only (app `.62`, 15 Nov).** France is back on, but only on demand: French rows show ↻ after planning; a tap on a French charger updates all French chargers on the route in one `/fr-status` call, at most once per 3 minutes (toast "France checked … ago, next in … min"). After a failed call France pauses 15 minutes; when the server answers `off`, 30 minutes. The timer and scrolling never ask for France. Worker: France is on unless `FR_LIVE` = `off`; one read per Worker copy at most every 150 s. If 1102 errors still show up in the logs, switch it off and consider Workers Paid.
 
 **Still to do.** French sites from the index as a second source (like NDW) for sites Open Charge Map misses; merge Allego twin sites; French EVSE prefixes in `BRANDS` (only needed if the brand is recognised from live data elsewhere); watch the Worker logs for 1102 on `/fr-status`; if they're frequent, Workers Paid ($5/month). (2) Worker: load the index (memory, a day), FR in `LIVE_COUNTRIES`, one shared scan of the dynamic file per minute, `frStatus` per site (free = en_service and libre among live points; full; "not live" when the newest change is > 24 h old), FR sites from the index as a second source like NDW (`ndwTiles`-style), brand prefixes above. (3) App: source label and attribution, PAN FR on the usage page, `APP_VERSION`. (4) Test on a drive in France.

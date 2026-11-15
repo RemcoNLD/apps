@@ -1052,7 +1052,7 @@ async function frWhole(ids, url = FR_DYNAMIC_URL) {
 // Worker copy reads the file at most once per FR_SNAPSHOT_MS; all French chargers come from that read.
 const FR_INDEX_URL = "https://remconld.github.io/apps/data/fr-fast-sites.json"; // tools/build-fr-index.py
 const FR_INDEX_MS = 24 * 3600 * 1000;
-const FR_SNAPSHOT_MS = 90 * 1000;
+const FR_SNAPSHOT_MS = 150 * 1000; // at most one read per 2.5 min per Worker copy (the app taps at most every 3)
 const FR_NOT_LIVE_MS = 24 * 3600 * 1000; // newest change at a site older than this: its data looks frozen
 const FR_MATCH_KM = 0.6;   // Open Charge Map pin → index site of the same brand
 const FR_NEARBY_KM = 1.2;  // sites sent back for the app's pin matching (like NDW's nearby)
@@ -1993,9 +1993,10 @@ async function route(request, env) {
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/fr-status" && request.method === "POST") {
-    // Off unless the Worker variable FR_LIVE is "on": reading the national file costs more CPU than the
-    // free plan allows, and on 14 Nov it used up the Worker's allowance so that /plan failed too (1102).
-    if (env.FR_LIVE !== "on") return json(request, { status: {}, off: true });
+    // Reading the national file costs more CPU than the free plan allows; automatic updates used up the
+    // Worker's allowance on 14 Nov so that /plan failed too (1102). The app now asks only on a tap, at
+    // most every 3 minutes. Switch France off with the Worker variable FR_LIVE = "off".
+    if (env.FR_LIVE === "off") return json(request, { status: {}, off: true });
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
     return json(request, await frStatusFor(body.stations));

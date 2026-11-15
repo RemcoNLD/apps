@@ -326,7 +326,7 @@
   .row.st .marker.dot-free { background: var(--free); }
   .row.st .marker.dot-full { background: var(--full); }
   .row.st .marker.dot-offline { background: var(--offline); }
-  .row.st .marker.dot-nodata { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
+  .row.st .marker.dot-nodata, .row.st .marker.dot-frozen { background: var(--asphalt); border: 4px solid var(--muted); width: 26px; height: 26px; }
   /* Updating: a radar sweep turning inside the dot */
   .row.st .marker { position: relative; overflow: hidden; }
   .row.st .marker.scanning::after {
@@ -684,6 +684,19 @@
   .errtray.pop .err-msg { animation: errpop .9s ease-out; }
   @keyframes errpop { 0% { transform: scale(.96); box-shadow: 0 0 0 0 rgba(224,87,79,.6); } 40% { transform: scale(1.02); box-shadow: 0 0 0 8px rgba(224,87,79,0); } 100% { transform: scale(1); } }
   @media (prefers-reduced-motion: reduce) { .errtray.pop .err-msg { animation: none; } }
+
+  /* Not live (.66): the source hasn't changed this site for a day or more, so its numbers can't be trusted.
+     Ring and number grey, with a small "?" on the ring. */
+  .avr.frozen circle:not(.rg-empty) { stroke: var(--muted); }
+  .avr.frozen svg { opacity: .7; }
+  .avr.frozen .stat, .avr.frozen .stat strong { color: var(--muted) !important; }
+  .avr .frz {
+    position: absolute; right: -3px; top: -3px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--muted); color: var(--asphalt); font-size: .72rem; font-weight: 900; line-height: 18px; text-align: center;
+    box-shadow: 0 0 0 2px var(--asphalt);
+  }
+  .avail.multi .avr .frz { width: 15px; height: 15px; line-height: 15px; font-size: .62rem; }
+  .navsheet .frozen-note { color: var(--danger); }
 </style>
 </head>
 <body>
@@ -919,7 +932,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.65";
+const APP_VERSION = "2026-11-15.66";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2173,7 +2186,10 @@ function clockAndAgo(iso) {
   const t = Date.parse(iso || "");
   if (!Number.isFinite(t)) return null;
   const min = Math.max(0, Math.round((Date.now() - t) / 60000));
-  const clock = new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const d = new Date(t);
+  const hm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  // Older than ~a day: the time alone would read as today, so add the day.
+  const clock = min > 20 * 60 ? `${d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })} ${hm}` : hm;
   const ago = min < 1 ? "just now" : min < 90 ? `${min} min ago` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} ago`;
   return { clock, ago, min };
 }
@@ -2193,6 +2209,9 @@ function historyHtml(members) {
     }
     const full = clockAndAgo(st.lastFullAt);
     const changed = clockAndAgo(st.changedAt);
+    if (frozenFor(st)) {
+      return `<div>${logo}<span><b class="frozen-note">Probably not live.</b> The source last reported ${st.available} of ${st.total} free, but nothing has changed at the site since ${changed.clock} (${changed.ago}). The real state is unknown.</span></div>`;
+    }
     return `<div>${logo}<span><b>${st.available} of ${st.total} free.</b> ${full ? `Last full at ${full.clock} (${full.ago}).` : "Not seen full by this app recently."}</span></div>` +
       (changed ? `<div><span class="muted">Last change at the site: ${changed.clock} (${changed.ago})</span></div>` : "");
   }).filter(Boolean);
@@ -2580,11 +2599,23 @@ async function fetchPlaces(stations = namesToFetch()) {
   updateNavSrc();
 }
 
+// "Not live": a source that hasn't changed a site for a long time is most likely stuck, not quiet.
+// A busy site (4+ chargers) free for over a day without a single change: not believable. Small sites
+// can be quiet longer, so 3 days there. (Full for 3 h already counts as offline in the Worker.)
+const FROZEN_MS = 24 * 3600 * 1000, FROZEN_SMALL_MS = 72 * 3600 * 1000;
+function frozenFor(st) {
+  if (!st || st.available == null || st.state === "likely_offline") return 0;
+  const t = Date.parse(st.changedAt || "");
+  if (!Number.isFinite(t)) return 0;
+  const age = Date.now() - t;
+  return age > ((st.total || 0) >= 4 ? FROZEN_MS : FROZEN_SMALL_MS) ? age : 0;
+}
 function statusInfo(s) {
   const st = s.status;
   // Kept short: the station name gets the room. Colour says free (green) or full (orange).
   if (!st) return { cls: "nodata", text: `<span title="${s.country === "NL" ? "Status not found" : "No live data"}">–</span>` };
   if (st.available == null) return { cls: "nodata", text: `<span title="Status unknown">?</span>` };
+  if (frozenFor(st)) return { cls: "frozen", text: `<strong>${st.available}</strong>` };
   if (st.state === "free") return { cls: "free", text: `<strong>${st.available}</strong>` };
   if (st.state === "likely_offline") return { cls: "offline", text: `<strong>Off</strong>` };
   return { cls: "full", text: `<strong>0</strong>` };
@@ -2760,12 +2791,14 @@ function ringSvg(st) {
 function ringTitle(st) {
   const r = ringParts(st);
   if (!r) return "";
+  const fz = frozenFor(st);
+  if (fz) return `Probably not live: no change at the site for ${Math.round(fz / 3600000)} h. Last reported ${r.free} of ${r.total} free`;
   return [`${r.free} of ${r.total} free`, r.busy ? `${r.busy} in use` : "", r.off ? `${r.off} out of order` : ""].filter(Boolean).join(", ");
 }
 // info: from shownStatus (cls, text, old, st). extra: e.g. " changed".
 function availRing(info, extra = "") {
   const t = ringTitle(info.st);
-  return `<span class="avr ${info.cls}${info.old ? " old" : ""}${extra}"${t ? ` title="${esc(t)}"` : ""}>${ringSvg(info.st)}<span class="stat">${info.text}</span></span>`;
+  return `<span class="avr ${info.cls}${info.old ? " old" : ""}${extra}"${t ? ` title="${esc(t)}"` : ""}>${ringSvg(info.st)}<span class="stat">${info.text}</span>${info.cls === "frozen" || (info.st && frozenFor(info.st)) ? `<span class="frz" aria-hidden="true">?</span>` : ""}</span>`;
 }
 
 // Status of one charger as shown: free / full / offline / stale / nodata, plus its text.
@@ -2780,7 +2813,7 @@ function shownStatus(s) {
   info.st = s.status || null;
   return info;
 }
-const CLS_ORDER = ["free", "full", "offline", "stale", "nodata"];
+const CLS_ORDER = ["free", "full", "offline", "frozen", "stale", "nodata"];
 
 function stationRow(site, change, after) {
   const s = site.primary, members = site.members;
@@ -3114,6 +3147,7 @@ function helpHtml() {
     <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 free.</b> The ring shows all chargers there, one segment each: <b style="color:var(--free)">green</b> free, <b style="color:var(--danger)">red</b> in use, grey out of order (here 3 free, 4 in use, 1 broken out of 8). Press and hold for the numbers.</div>
     <div class="k">${demoRing(0, 4)}</div><div class="v">All in use.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Off</b>: reported out of order, or nothing has changed for hours.</div>
+    <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grey with ?</b>: probably not live. The source hasn't changed anything at this site for over a day (3 days for small sites), so the number is its last report and may be wrong. The dot on the line is hollow.</div>
     <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (3 unless changed on the usage page). A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>

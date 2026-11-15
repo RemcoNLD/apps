@@ -442,6 +442,7 @@
   .sub.loc { display: flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; color: var(--muted); }
   .sub.loc > * { flex-shrink: 0; }
   .sub.loc .place { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--line); font-weight: 600; }
+  .sub.loc .dbg { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 600 .78rem/1.2 ui-monospace, Menlo, monospace; color: var(--muted); }
   .sub.loc .warn { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--full); }
   .compass { width: 20px; height: 20px; transition: transform .6s; }
   .tl-road { border-radius: 8px; padding: 3px; background: var(--asphalt); }
@@ -926,7 +927,7 @@
   </div>
   <div id="helpBody"></div>
   <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
-  <label class="check"><input id="debugToggle" type="checkbox"> Debug line while driving (versions and data sources)</label>
+  <label class="check"><input id="debugToggle" type="checkbox"> Debug mode while driving (versions, data sources, route id, coordinates)</label>
   <p class="hint"><button type="button" id="copyRouteData" class="link">Copy route data</button> (road numbers and the routing service's step names, to paste in a chat for checking)</p>
 </div>
 
@@ -984,7 +985,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.86";
+const APP_VERSION = "2026-11-15.87";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1345,7 +1346,9 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
     // A town (not a street address) is passed on the main road nearest to it, not through its centre.
     body.viaSnap = state.vias.map((v) => v.exact === false && !v.snapped);
   }
+  if (debugOn()) body.debug = true; // the Worker keeps the whole routing result under an id (debug line)
   const data = await api("/plan", body);
+  if (data.debugError) reportError(data.debugError);
   // Keep the points as the Worker used them, so rerouting doesn't snap (or drive into town) again.
   if (Array.isArray(data.vias) && state.vias?.length === data.vias.length) {
     state.vias = state.vias.map((v, i) => body.viaSnap?.[i]
@@ -1369,6 +1372,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.offCount = 0;
   state.plannedAt = Date.now();
   data.route.plannedAt = state.plannedAt; // kept with the route, so the debug line knows after a reload
+  data.route.debugId = data.debugId || null; // where the Worker kept this routing result (debug mode)
   state.roadOverride = null; state.roadCheckedKm = null;
   state.viaReached = false;
   save();
@@ -1400,6 +1404,7 @@ function renderDebug() {
   //   Rm5:A27   roads from the map, 5 stretches, first A27 | R…  map lookup running
   //   Rr / Rr1 / Rx   routing service's list (map not yet / retry 1 / map failed)
   //   P1345   route planned 13:45
+  //   #k3x9q2 the Worker kept this routing result under that id (planned in debug mode; 30 days)
   const num = (v) => (v ? String(v).replace(/^\d{4}-\d{2}-\d{2}\./, "") : "?");
   const hm = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }).replace(":", "");
   const app = `A${num(APP_VERSION)}${latestApp ? (latestApp === APP_VERSION ? `<span class="ok">✓</span>` : `<span class="bad">&gt;${num(latestApp)}</span>`) : ""}`;
@@ -1413,7 +1418,8 @@ function renderDebug() {
     : r.mapTries >= 3 ? `<span class="bad">Rx</span>${summary}` : `Rr${r.mapTries || ""}${summary}`;
   const pAt = state.route?.plannedAt || state.plannedAt;
   const planned = pAt ? ` P${hm(pAt)}` : "";
-  el.innerHTML = `${app} ${w} ${roads}${planned}`;
+  const rid = r?.debugId ? ` #${r.debugId}` : r ? " #-" : "";
+  el.innerHTML = `${app} ${w} ${roads}${planned}${rid}`;
 }
 $("debugToggle").checked = debugOn();
 $("debugToggle").addEventListener("change", (e) => {
@@ -1427,6 +1433,8 @@ $("copyRouteData").addEventListener("click", async () => {
   const line = (x) => `${x.ref} ${x.fromKm}-${x.toKm}`;
   const text = [
     `EVailability ${APP_VERSION} · worker ${workerInfo?.version || "?"} · planned ${r.plannedAt ? new Date(r.plannedAt).toISOString() : "?"} · ${r.distanceKm} km · you at km ${state.user.km.toFixed(1)}`,
+    r.debugId ? `routing result: #${r.debugId} (kept by the Worker 30 days)` : "",
+    state.user.lonlat ? `you at ${state.user.lonlat[1].toFixed(5)},${state.user.lonlat[0].toFixed(5)} · heading ${state.heading != null ? Math.round(state.heading) + "°" : "?"} · ±${state.user.acc != null ? Math.round(state.user.acc) : "?"} m` : "",
     `roads (${r.mapRoads ? "map" : "route"}): ${(r.roads || []).map(line).join(", ")}`,
     r.stepRoads ? `route's own: ${r.stepRoads.map(line).join(", ")}` : "",
     `map tries: ${r.mapTries || 0}`,
@@ -1479,6 +1487,7 @@ async function matchRoads(route, run) {
   const total = route.distanceKm;
   const CHUNK = 100, STEP = 0.2, NEAR_M = 30, BOX_KM = 4;
   const samples = []; // {k, ref, intRef, cls}
+  const marks = new Map(); // landmarks for the location line: id -> [lon, lat, kind, name]
   let anyMatched = 0, n = 0;
   try {
     for (let c0 = 0; c0 < total; c0 += CHUNK) {
@@ -1498,6 +1507,8 @@ async function matchRoads(route, run) {
       const hw = `[highway~"^(${Object.keys(MAP_CLASSES).join("|")})$"][ref]`;
       const data = await overpass(`[out:json][timeout:20];(${boxes.map((b) => `way${hw}(${b});`).join("")});out tags geom;`);
       if (run !== mapRun || state.route !== route) return; // a newer route
+      await landmarksAlong(boxes, c0, c1, marks);
+      if (run !== mapRun || state.route !== route) return;
       // Segments in a grid (about 300 m cells) for quick lookups.
       const lat0 = coords[idx[0]][1], kx = 111.32 * Math.cos(lat0 * Math.PI / 180), ky = 110.57, CELL = 0.3;
       const grid = new Map();
@@ -1542,6 +1553,7 @@ async function matchRoads(route, run) {
     else reportError(`Road numbers from the map: ${e.message}. Using the route's own.`);
     return;
   }
+  if (run === mapRun && state.route === route && marks.size) { route.landmarks = [...marks.values()]; nearCache.key = null; save(); }
   // Only numbered roads are asked for, so town streets stay unmatched: a quarter is plenty.
   if (run !== mapRun || state.route !== route || !n || anyMatched / n < 0.25) return;
   // Stretches of the same number; gaps without a number (ramps, junctions) up to 3 km join the same road.
@@ -1572,6 +1584,50 @@ async function matchRoads(route, run) {
   state.roadOverride = null;
   save();
   render();
+}
+
+// Landmarks for the location line ("A17 Zevenbergen"): named motorway exits on the route (in the
+// same small boxes as the roads) and towns and villages near it (wider boxes every 10 km). One extra
+// map query per 100 km, right after the roads; if it fails the line just shows the badge.
+async function landmarksAlong(roadBoxes, c0, c1, marks) {
+  const wide = [];
+  for (let b0 = c0; b0 < c1; b0 += 10) {
+    const pts = [pointAtKm(b0), pointAtKm(Math.min(state.route.distanceKm, b0 + 5)), pointAtKm(Math.min(state.route.distanceKm, b0 + 10))];
+    const lats = pts.map((p) => p[1]), lons = pts.map((p) => p[0]);
+    const my = 0.07, mx = 0.07 / Math.cos(lats[0] * Math.PI / 180); // about 8 km
+    wide.push(`${(Math.min(...lats) - my).toFixed(4)},${(Math.min(...lons) - mx).toFixed(4)},${(Math.max(...lats) + my).toFixed(4)},${(Math.max(...lons) + mx).toFixed(4)}`);
+  }
+  const q = `[out:json][timeout:20];(${roadBoxes.map((b) => `node[highway=motorway_junction][name](${b});`).join("")}${wide.map((b) => `node[place~"^(city|town|village)$"][name](${b});`).join("")});out qt;`;
+  try {
+    const data = await overpass(q);
+    for (const e of data.elements || []) {
+      const t = e.tags || {};
+      const kind = t.highway === "motorway_junction" ? "x" : t.place === "city" ? "c" : t.place === "town" ? "t" : "v";
+      const name = t.name;
+      if (name && Number.isFinite(e.lat)) marks.set(e.id, [+e.lon.toFixed(5), +e.lat.toFixed(5), kind, name]);
+    }
+  } catch (_) { /* the line shows the badge alone */ }
+}
+// The nearest exit (within 2.5 km), else the nearest city, town or village (bigger places count from
+// further away). Worked out once per position.
+const nearCache = { key: null, val: null };
+function nearbyName(lonlat) {
+  const list = state.route?.landmarks;
+  if (!lonlat || !list?.length) return null;
+  const key = `${lonlat[0].toFixed(4)},${lonlat[1].toFixed(4)}`;
+  if (nearCache.key === key) return nearCache.val;
+  const LIMIT = { x: 2.5, c: 15, t: 8, v: 3 }, WEIGHT = { x: 1, c: 2.5, t: 1.5, v: 1 };
+  let exit = null, place = null;
+  for (const [lon, lat, kind, name] of list) {
+    const d = haversine(lonlat, [lon, lat]);
+    if (d > LIMIT[kind]) continue;
+    if (kind === "x") { if (!exit || d < exit.d) exit = { d, name }; continue; }
+    const score = d / WEIGHT[kind];
+    if (!place || score < place.score) place = { score, name };
+  }
+  nearCache.key = key;
+  nearCache.val = exit?.name || place?.name || null;
+  return nearCache.val;
 }
 
 // Second source of chargers in the Netherlands (NDW), for sites Open Charge Map doesn't have
@@ -2023,6 +2079,7 @@ async function lookUpWhere(onRoute, routeRoad = null) {
         }
         state.roadOverride = { ref, fromKm: routeRoad.fromKm, km: u.km };
       } else if (sure) state.roadOverride = null;
+      if (r.city) state.roadCity = { city: r.city, lonlat: at }; // fallback for the name after the badge
       const road = onMainRoadNow();
       if (road) state.loc = { kind: "road", road: withOverride(road), at: Date.now(), lonlat: u.lonlat, onRoute: true };
     } else {
@@ -2048,8 +2105,19 @@ function locationLine() {
   const h = state.heading;
   const parts = [`<span title="${h != null ? `Heading ${Math.round(h)}°` : "Heading not known yet"}">${COMPASS(h)}</span>`];
   if (loc.at) parts.push(`<span class="at">@${hhmm(loc.at)}</span>`);
-  if (loc.kind === "road" && loc.road) parts.push(roadPartBadge(loc.road));
-  else if (loc.kind === "place" && loc.ref) parts.push(roadBadge(loc.ref, loc.country || countryAt(u.km, u.km)));
+  // Debug mode: coordinates, heading and accuracy after the badge, instead of the place name.
+  const dbg = debugOn() ? `<span class="dbg">${u.lonlat ? `${u.lonlat[1].toFixed(5)},${u.lonlat[0].toFixed(5)}` : "?"} ${h != null ? `${Math.round(h)}°` : "–°"} ±${u.acc != null ? Math.round(u.acc) : "?"}m</span>` : "";
+  // After a badge: the nearest exit or town ("A17 Zevenbergen").
+  const near = () => {
+    if (dbg) return dbg;
+    const name = nearbyName(u.lonlat)
+      || (state.roadCity && u.lonlat && haversine(state.roadCity.lonlat, u.lonlat) < 5 ? state.roadCity.city : null);
+    return name ? `<span class="place">${esc(name)}</span>` : "";
+  };
+  if (loc.kind === "road" && loc.road) parts.push(roadPartBadge(loc.road) + near());
+  else if (loc.kind === "place" && loc.ref) parts.push(roadBadge(loc.ref, loc.country || countryAt(u.km, u.km))
+    + (dbg || (loc.city ? `<span class="place">${esc(loc.city)}</span>` : "")));
+  else if (dbg) parts.push(dbg);
   else if (loc.kind === "place" && (loc.city || loc.street)) parts.push(`<span class="place">${esc([loc.city, loc.street].filter(Boolean).join(", "))}</span>`);
   else if (state.whereBusy) parts.push(`<span class="place">…</span>`);
   const warn = !sim && fixAge > 30000 ? `GPS ${fixAge < 90000 ? `${Math.round(fixAge / 1000)} s` : `${Math.round(fixAge / 60000)} min`} old · tap to retry`
@@ -3793,7 +3861,7 @@ function helpHtml() {
   <h3>The screen while driving</h3>
   <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. Don't want these rows? In the brands button (top left), set <b>Main roads on the line</b> to <b>Changes only</b>, or just tap a road row (tap a road badge on the line to bring them back): then a badge sits on the line only where the road changes between chargers. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
-  <p>Your own row shows the status time (an error appears there too). The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge, or on smaller roads the town and street. On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
+  <p>Your own row shows the status time (an error appears there too). The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Free or not</h3>
   <div class="legend">

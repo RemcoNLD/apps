@@ -14,6 +14,8 @@
 //   GET  /logo/<brand>          the brand's site icon, fetched from its website and kept 7 days in KV
 //   GET  /debug/brands          which Open Charge Map operators each brand matches
 //   GET  /where?lat=&lon=       street and town at a point (for the location line off the main roads)
+//   GET  /debug/route/<id>      a routing result kept by a /plan with debug:true (app in debug mode), 30 days in KV
+//                               ?part=request|app|ors for one part (ors = the routing service's raw answer)
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /admin/settings        switches and values set on the usage page (same header)
@@ -38,7 +40,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-15.86";
+const WORKER_VERSION = "2026-11-15.87";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -442,6 +444,9 @@ const snapRadii = (points) => points.map(() => SNAP_RADIUS_M);
 // Routes are kept 15 minutes per Worker copy, by their exact points: picking a route option plans
 // through the same points the options were made with, so its route needn't be asked for again.
 const ROUTE_TTL_MS = 15 * 60 * 1000;
+// The routing service's raw answer per route object (kept only as long as the route itself is cached),
+// so a /plan in debug mode can store it.
+const rawRoute = new WeakMap();
 async function getRouteCached(env, points) {
   const key = `route:${JSON.stringify(points)}`;
   const hit = memoGet(key);
@@ -470,13 +475,15 @@ async function getRoute(env, points) {
   const countrySegs = f.properties?.extras?.countryinfo?.values || [];
   // Where the route is on a motorway-class road ("highway" bit of waycategory), as [from, to] indexes.
   const highwaySegs = (f.properties?.extras?.waycategory?.values || []).filter(([, , v]) => (v & 1) === 1).map(([a, b]) => [a, b]);
-  return {
+  const out = {
     coords, km, min, steps, countrySegs, highwaySegs, idIso: {},
     viaKm: firstEnd != null ? km[firstEnd] : null,
     viaKms: ends.map((i) => km[i]), // one per via point, in order
     distanceKm: (f.properties?.summary?.distance || 0) / 1000,
     durationMin: (f.properties?.summary?.duration || 0) / 60,
   };
+  rawRoute.set(out, { points, data });
+  return out;
 }
 
 // ---------------------------------------------------------------- road numbers
@@ -1415,7 +1422,7 @@ async function handlePlan(request, env) {
 
   // Send a lighter route to the app (about 25 m precision), with km and minutes per point.
   const keep = simplifyIndices(route.coords, 0.025);
-  return json(request, {
+  const result = {
     route: {
       distanceKm: Math.round(route.distanceKm * 10) / 10,
       durationMin: Math.round(route.durationMin),
@@ -1437,7 +1444,24 @@ async function handlePlan(request, env) {
     // Map tiles along the Dutch part of the route, for the second source of chargers (NDW).
     ndwTiles: ndwTilesAlong(route, env),
     generatedAt: new Date().toISOString(),
-  });
+  };
+  // Debug mode in the app: keep the whole routing result (request, the routing service's raw answer
+  // and what the app got) for 30 days under a short id, shown in the app's debug line.
+  // One KV write per plan, only for devices in debug mode.
+  if (body.debug === true && env.USAGE) {
+    const id = debugRouteId();
+    const raw = rawRoute.get(route) || null;
+    try {
+      await env.USAGE.put(`debugroute:${id}`, JSON.stringify({
+        id, at: result.generatedAt, worker: WORKER_VERSION,
+        request: body, ors: raw ? { points: raw.points, answer: raw.data } : { cached: "raw answer no longer kept (route came from the Worker's cache)" },
+        app: result,
+      }), { expirationTtl: DEBUG_ROUTE_TTL_S });
+      countCall("KV writes");
+      result.debugId = id;
+    } catch (e) { result.debugError = `Couldn't store the routing result: ${e.message}`; }
+  }
+  return json(request, result);
 }
 
 // ---------------------------------------------------------------- second source: NDW (NL)
@@ -2124,6 +2148,33 @@ async function handleStatus(request, env) {
 // about it: a 9-digit number that passes the "11-proef" (like a Dutch BSN). A right code gets a token
 // (HMAC of a fixed text with a server-side secret); the app keeps it and sends it as X-Access.
 // Changing ACCESS_SECRET (or, without it, OCM_API_KEY) signs everyone out.
+const DEBUG_ROUTE_TTL_S = 30 * 24 * 3600;
+// Short and easy to read off a screenshot: 6 letters/digits without look-alikes (0/o, 1/l/i).
+function debugRouteId() {
+  const abc = "23456789abcdefghjkmnpqrstuvwxyz";
+  const b = crypto.getRandomValues(new Uint8Array(6));
+  return [...b].map((x) => abc[x % abc.length]).join("");
+}
+async function handleDebugRoute(request, env, id, part) {
+  if (!/^[a-z0-9]{4,12}$/.test(id)) throw new HttpError(400, "Unknown route id");
+  if (!env.USAGE) throw new HttpError(503, "No KV store bound");
+  const text = await kvGet(env, `debugroute:${id}`);
+  if (!text) throw new HttpError(404, `No routing result ${id} (kept 30 days)`);
+  let body = text;
+  if (part) {
+    const rec = JSON.parse(text);
+    if (!(part in rec)) throw new HttpError(400, "part = request, app or ors");
+    body = JSON.stringify(rec[part]);
+  }
+  return new Response(body, {
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `inline; filename="evailability-route-${id}${part ? `-${part}` : ""}.json"`,
+      ...corsHeaders(request),
+    },
+  });
+}
+
 const PUBLIC_PATHS = new Set(["/", "/unlock", "/brands", "/admin/usage", "/admin/settings"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
@@ -2217,6 +2268,9 @@ async function route(request, env) {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new HttpError(400, "Add ?lat=..&lon=..");
     const h = Number(url.searchParams.get("heading"));
     return json(request, await whereAt(env, [lon, lat], url.searchParams.has("heading") && Number.isFinite(h) ? h : null));
+  }
+  if (path.startsWith("/debug/route/") && request.method === "GET") {
+    return handleDebugRoute(request, env, path.slice(13).toLowerCase(), url.searchParams.get("part"));
   }
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
   if (path === "/detours" && request.method === "POST") return handleDetours(request, env);

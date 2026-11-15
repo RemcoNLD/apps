@@ -97,6 +97,18 @@
 </div>
 <p id="msg" class="error" hidden></p>
 <div id="settings"></div>
+<div id="debugRoute" hidden>
+  <h2>Debug routes</h2>
+  <div class="card group">
+    <div class="row"><input id="routeId" type="text" placeholder="Route id, e.g. k3x9q2" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Route id" style="flex:1"></div>
+    <div class="session">
+      <button type="button" class="link" data-part="">Download all</button>
+      <button type="button" class="link" data-part="ors">Routing service only</button>
+      <button type="button" class="link" data-part="app">What the app got</button>
+    </div>
+    <div class="small muted" id="routeMsg">Routes planned in debug mode (Help &gt; Debug line) are kept 30 days. The id is after # on the app’s debug line.</div>
+  </div>
+</div>
 <div id="out"></div>
 
 <script>
@@ -232,6 +244,7 @@ function rememberToken(token) {
 function showLoggedIn(on) {
   $("login").hidden = on;
   $("session").hidden = !on;
+  $("debugRoute").hidden = !on;
 }
 
 async function load(token = $("pw").value.trim()) {
@@ -307,6 +320,37 @@ $("settings").addEventListener("change", (e) => {
 $("settings").addEventListener("click", (e) => {
   const b = e.target.closest("[data-reset]");
   if (b) saveSetting(b.dataset.reset, null);
+});
+
+// ---- Debug routes: a routing result the Worker kept for a plan made in debug mode, as a JSON file.
+$("debugRoute").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-part]");
+  if (!b) return;
+  const id = $("routeId").value.trim().replace(/^#/, "").toLowerCase();
+  const msg = $("routeMsg");
+  msg.classList.remove("error");
+  if (!id) { msg.textContent = "Enter a route id first."; return; }
+  msg.textContent = "Fetching…";
+  try {
+    const part = b.dataset.part;
+    const res = await fetch(`${WORKER}/debug/route/${encodeURIComponent(id)}${part ? `?part=${part}` : ""}`, { headers: { "X-Access": savedToken() } });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Error ${res.status}`);
+    const text = await res.text();
+    if (!part) {
+      try {
+        const rec = JSON.parse(text), r = rec.app?.route || {};
+        msg.textContent = `${id}: planned ${new Date(rec.at).toLocaleString()} · ${r.distanceKm} km · ${(rec.app?.stations || []).length} chargers · Worker ${rec.worker} · ${Math.round(text.length / 1024)} kB`;
+      } catch (_) { msg.textContent = "Downloaded."; }
+    } else msg.textContent = `Downloaded (${Math.round(text.length / 1024)} kB).`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+    a.download = `evailability-route-${id}${part ? `-${part}` : ""}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add("error");
+  }
 });
 
 $("login").addEventListener("submit", (e) => { e.preventDefault(); load(); });

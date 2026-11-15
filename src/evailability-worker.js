@@ -44,7 +44,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.98";
+const WORKER_VERSION = "2026-11-16.99";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1470,7 +1470,8 @@ async function handlePlan(request, env) {
   if (avoid && crowKm > 90 && spans.length === avoid.length && spans.every((sp) => Array.isArray(sp) && sp.length === 2 && sp.every(valid))) {
     for (let i = 0; i < avoid.length; i++) {
       const [a, b] = spans[i];
-      const around = await getRouteCached(env, [a, b], [avoid[i]]);
+      // With all avoid areas, so the way around one closure doesn't run through another.
+      const around = await getRouteCached(env, [a, b], avoid);
       const c = avoid[i].reduce((acc, p) => [acc[0] + p[0] / avoid[i].length, acc[1] + p[1] / avoid[i].length], [0, 0]);
       // Halfway along the detour, or failing that its point furthest from the closure.
       const half = around.km.at(-1) / 2;

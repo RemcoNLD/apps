@@ -1073,7 +1073,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.103";
+const APP_VERSION = "2026-11-16.104";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -3523,12 +3523,13 @@ function closureRow(m) {
   const when = inside ? `<span class="when"><b>now</b>&ensp;${fmtKm(m.toKm - u.km)} km left</span>`
     : `<span class="when"><b>${fmtKm(m.fromKm - u.km)}</b>&nbsp;km</span>`; // no time: room for "until"
   const span = from > Date.now() ? `from ${dayTime(from)} to ${dayTime(until)}` : `until ${dayTime(until)}`;
-  const busy = state.avoiding === m.id;
+  const busy = !!state.avoiding;
+  const label = closuresAhead().length > 1 ? "Avoid all" : "Avoid";
   return `<div class="row closure" title="${esc((m.c.dir ? `${m.c.dir}. ` : "") + (m.c.text || ""))}">
     <span class="marker" aria-hidden="true"></span>
     <div><div class="name"><span class="label">${esc(closureLabel(m))}</span></div>
       <div class="sub meta">${when}<span class="until">${esc(span)}</span></div></div>
-    <div class="avail"><button type="button" class="avoid" data-avoid="${esc(m.id)}" ${busy || state.rerouting ? "disabled" : ""}>${busy ? "…" : "Avoid"}</button></div>
+    <div class="avail"><button type="button" class="avoid" data-avoid="${esc(m.id)}" ${busy || state.rerouting ? "disabled" : ""}>${busy ? "…" : label}</button></div>
   </div>`;
 }
 // A small square on the route itself, halfway along the closed stretch: the routing service then
@@ -3539,27 +3540,37 @@ function avoidRing(m) {
   const r = (v) => +v.toFixed(6);
   return [[r(lon - dx), r(lat - dy)], [r(lon + dx), r(lat - dy)], [r(lon + dx), r(lat + dy)], [r(lon - dx), r(lat + dy)]];
 }
-async function avoidClosure(id) {
-  const m = closuresAhead().find((x) => x.id === id);
-  if (!m || state.rerouting) return;
-  state.avoiding = id; state.rerouting = true;
+// Avoid takes every closure shown on the route ahead at once (one replan), as other navigation does:
+// avoiding one at a time sent the new route straight into the next closure on the same road.
+// Up to 10 (the Worker's limit), nearest first.
+async function avoidClosure() {
+  const rows = closuresAhead().slice(0, 10);
+  if (!rows.length || state.rerouting) return;
+  state.avoiding = "all"; state.rerouting = true;
   render();
   const before = state.avoid || [];
-  const span = [pointAtKm(Math.max(0, m.fromKm - 8)), pointAtKm(Math.min(state.route.distanceKm, m.toKm + 8))]
-    .map((p) => p.map((v) => +v.toFixed(5)));
-  state.avoid = [...before.filter((a) => a.id !== id), { id, ring: avoidRing(m), span }].slice(-10);
-  showBanner("Planning a route around the closure…");
+  const ids = new Set(rows.map((m) => m.id));
+  const added = rows.map((m) => ({
+    id: m.id, ring: avoidRing(m),
+    span: [pointAtKm(Math.max(0, m.fromKm - 8)), pointAtKm(Math.min(state.route.distanceKm, m.toKm + 8))]
+      .map((p) => p.map((v) => +v.toFixed(5))),
+  }));
+  state.avoid = [...before.filter((a) => !ids.has(a.id)), ...added].slice(-10);
+  const n = rows.length, them = n === 1 ? "the closure" : `${n} closures`;
+  showBanner(`Planning a route around ${them}…`);
   try {
     await plan(await hereNow());
     state.stickToBottom = true;
     await loadClosures();
-    const still = matchClosures(state.route).some((x) => m.members.some((y) => y.id === x.id));
-    showBanner(still ? "No way around this closure found. The route still goes through it."
-      : "New route around the closure.", { ok: !still, hideAfter: 6000 });
+    const memberIds = new Set(rows.flatMap((m) => m.members.map((y) => y.id)));
+    const left = closuresAhead().filter((x) => x.members.some((y) => memberIds.has(y.id))).length;
+    showBanner(!left ? `New route around ${them}.`
+      : left === n ? `No way around ${n === 1 ? "this closure" : "these closures"} found. The route still goes through.`
+      : `New route around ${n - left} of ${n} closures; ${left} couldn’t be avoided.`, { ok: !left, hideAfter: 7000 });
   } catch (e) {
     state.avoid = before;
-    showBanner("Couldn’t plan a route around this closure. Try again in a moment.", { hideAfter: 8000 });
-    reportError(`Avoid closure: ${e.message}`); // details with the debug line on
+    showBanner(`Couldn’t plan a route around ${them}. Try again in a moment.`, { hideAfter: 8000 });
+    reportError(`Avoid closures: ${e.message}`); // details with the debug line on
   } finally {
     state.avoiding = null; state.rerouting = false;
     save();
@@ -4460,7 +4471,7 @@ function helpHtml() {
   <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto. A roundabout is drawn with its exit where the road really leaves and the exit number in the middle ("2nd exit", or "straight on"). In the last 500 m the whole row pulses: a white band sweeps across it the way you turn (left to right for right, right to left for left), and straight on the whole row fades between black and white. It sweeps about once a second while you drive and twice as fast in the last 50 m; when you stand still (a traffic light), it sweeps three more times and then holds still in white until you drive off. A "keep left/right" where you simply stay on the same motorway isn't shown. On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Road closures</h3>
-  <p>Planned closures in the Netherlands and Germany show on the line as a red row (<b>A1 closed · Dortmund/Unna – Kamener Kreuz</b>), only when they're on your route, in your direction, and in force around the time you get there: with the distance and until when it's closed. Closures in the other direction, lane closures and closures for lorries only don't show. <b>Avoid</b> plans a new route around it; that stays for this trip (also when you're rerouted) until you plan a new route. The routing itself doesn't know these closures: without Avoid, the route still goes through. The closures are updated every few hours (the interval is set on the admin page). Town streets aren't included. If closures couldn't be loaded, or haven't been updated for longer than they should, a note says so after planning.</p>
+  <p>Planned closures in the Netherlands and Germany show on the line as a red row (<b>A1 closed · Dortmund/Unna – Kamener Kreuz</b>), only when they're on your route, in your direction, and in force around the time you get there: with the distance and until when it's closed. Closures in the other direction, lane closures and closures for lorries only don't show. <b>Avoid</b> plans a new route around it; with more than one closure ahead the button says <b>Avoid all</b> and goes around all of them at once (up to 10). That stays for this trip (also when you're rerouted) until you plan a new route. The routing itself doesn't know these closures: without Avoid, the route still goes through. The closures are updated every few hours (the interval is set on the admin page). Town streets aren't included. If closures couldn't be loaded, or haven't been updated for longer than they should, a note says so after planning.</p>
 
   <h3>Free or not</h3>
   <div class="legend">

@@ -932,7 +932,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.68";
+const APP_VERSION = "2026-11-15.69";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2575,9 +2575,41 @@ function savePlaceCache() {
   if (keys.length > 400) for (const k of keys.slice(0, keys.length - 400)) delete placeCache[k];
   try { localStorage.setItem(PLACES_KEY, JSON.stringify(placeCache)); } catch (_) {}
 }
+// The cache is looked up around the charger, not only in its own ~100 m cell: the same site comes back
+// a little elsewhere on another route (Open Charge Map vs NDW position, a pin moved onto its live site),
+// which used to fall in the next cell and miss. Nearest entry within PLACE_NEAR_KM wins, an answer
+// with a working service-area search before one whose search failed (that one still has the town).
+const PLACE_NEAR_KM = 0.15;
+function cachedPlace(s) {
+  const la = +s.lat, lo = +s.lon;
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
+  let best = null, bestD = Infinity;
+  for (const dla of [-0.001, 0, 0.001]) for (const dlo of [-0.001, 0, 0.001]) {
+    const key = `${(la + dla).toFixed(3)},${(lo + dlo).toFixed(3)}`;
+    const c = placeCache[key];
+    if (!c || c.v !== PLACE_V) continue;
+    const [kla, klo] = key.split(",").map(Number);
+    const d = distKm({ lat: la, lon: lo }, Number.isFinite(c.lat) ? c : { lat: kla, lon: klo });
+    if (d > PLACE_NEAR_KM) continue;
+    const better = !best || ((c.ok !== false) !== (best.ok !== false) ? c.ok !== false : d < bestD);
+    if (better) { best = c; bestD = d; }
+  }
+  return best;
+}
 function placeOf(s) {
-  if (!s.place || s.place.v !== PLACE_V) { const c = placeCache[placeKey(s)]; if (c && c.v === PLACE_V) s.place = c; }
+  if (!s.place || s.place.v !== PLACE_V || (s.place.ok === false && !s.place.area)) {
+    const c = cachedPlace(s);
+    if (c && (!s.place || s.place.v !== PLACE_V || c.ok !== false || c.area)) s.place = c;
+  }
   return s.place;
+}
+// Keep an answer by position. Also when the service-area search failed: the town is still better
+// than the brand name next time (it's asked again anyway). A failed one never replaces a good one.
+function rememberPlace(s, place) {
+  const key = placeKey(s), old = placeCache[key];
+  if (place.ok === false && old && old.v === PLACE_V && old.ok !== false) return;
+  delete placeCache[key]; // re-added at the end: the newest are kept when the cache is trimmed
+  placeCache[key] = { ...place, lat: +s.lat, lon: +s.lon, at: Date.now() };
 }
 
 // Service area or town for chargers named only by their brand: asked once per charger, a few at a time.
@@ -2612,7 +2644,7 @@ async function fetchPlaces(stations = namesToFetch()) {
     const { places } = await api("/places", { points: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon })) }, PLACES_TIMEOUT_MS);
     for (const s of todo) if (places?.[s.id]) {
       s.place = places[s.id]; s.placeAt = now;
-      if (s.place.ok !== false) placeCache[placeKey(s)] = s.place;
+      rememberPlace(s, s.place);
     }
     savePlaceCache();
     save(); render();

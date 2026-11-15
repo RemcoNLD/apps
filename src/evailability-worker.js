@@ -13,6 +13,7 @@
 //   GET  /brands                the brands the app can show (key, name, colour)
 //   GET  /logo/<brand>          the brand's site icon, fetched from its website and kept 7 days in KV
 //   GET  /debug/brands          which Open Charge Map operators each brand matches
+//   GET  /where?lat=&lon=       street and town at a point (for the location line off the main roads)
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /admin/settings        switches and values set on the usage page (same header)
@@ -1643,6 +1644,24 @@ function snapToMainRoad(rough, p) {
   return best;
 }
 
+// Street and town at a point, for the app's location line when you're not on a numbered main road.
+// The app asks only after a turn, every few km on local roads, or on a tap; kept a day per ~20 m.
+async function whereAt(env, [lon, lat]) {
+  const key = `where:${lon.toFixed(4)},${lat.toFixed(4)}`;
+  const cached = memoGet(key);
+  if (cached !== undefined) return cached;
+  const url = `${PELIAS_BASE}/reverse?point.lat=${lat}&point.lon=${lon}&size=1&layers=address,street`;
+  const data = await fetchJson(url, { headers: orsHeaders(env) }, "Geocoder");
+  const p = data.features?.[0]?.properties || {};
+  const out = {
+    street: p.street || (p.layer === "street" ? p.name : null) || null,
+    city: p.locality || p.localadmin || p.county || null,
+    country: p.country_code || null,
+  };
+  memoSet(key, out, 24 * 3600 * 1000);
+  return out;
+}
+
 async function placeName(env, [lon, lat]) {
   const key = `place:${lon.toFixed(2)},${lat.toFixed(2)}`;
   const cached = memoGet(key);
@@ -2071,6 +2090,11 @@ async function route(request, env) {
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
     return json(request, await frStatusFor(body.stations));
+  }
+  if (path === "/where" && request.method === "GET") {
+    const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new HttpError(400, "Add ?lat=..&lon=..");
+    return json(request, await whereAt(env, [lon, lat]));
   }
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
   if (path === "/detours" && request.method === "POST") return handleDetours(request, env);

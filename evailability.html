@@ -401,6 +401,18 @@
   .tl-road.below { bottom: 0; }
   .tl-road.under-fab { visibility: hidden; }
   .tl-road.above { top: 0; transform: translate(-50%, -50%); }
+  .tl-road.mid { top: 50%; transform: translate(-50%, -50%); }
+  /* A main road on the timeline (every one up to the destination, chargers or not) */
+  .row.road { height: 46px; padding: 0; }
+  .row.road .sub.meta { font-size: 1rem; }
+  .row.road .len { color: var(--muted); }
+  .row.road .len::before { content: "↕ "; opacity: .7; }
+  /* Location line in your own row: compass, time of the last update, road or street */
+  .sub.loc { display: flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; color: var(--muted); }
+  .sub.loc > * { flex-shrink: 0; }
+  .sub.loc .place { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--line); font-weight: 600; }
+  .sub.loc .warn { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--full); }
+  .compass { width: 20px; height: 20px; transition: transform .6s; }
   .tl-road { border-radius: 8px; padding: 3px; background: var(--asphalt); }
   .tl-road .rb { display: block; font-size: .78rem; padding: 2px 5px 1px; }
   .tl-road .rb.shield, .sticky-road .rb.shield { padding: 1.5px; }
@@ -932,7 +944,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.70";
+const APP_VERSION = "2026-11-15.71";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1584,7 +1596,7 @@ function startGps() {
   if (state.watchId != null) navigator.geolocation.clearWatch(state.watchId);
   state.gpsStartedAt = Date.now();
   state.watchId = navigator.geolocation.watchPosition(
-    (p) => { state.gpsDenied = false; onPosition([p.coords.longitude, p.coords.latitude], p.coords.accuracy); },
+    (p) => { state.gpsDenied = false; onPosition([p.coords.longitude, p.coords.latitude], p.coords.accuracy, p.coords.heading, p.coords.speed); },
     (err) => {
       if (err.code === 1) state.gpsDenied = true;
       state.user.acc = null; render();
@@ -1610,7 +1622,8 @@ window.addEventListener("pageshow", () => { if (gpsActive() && lastFixAge() > 10
 // Tapping "You" when location is missing or old asks for it straight away. A tap is a user gesture,
 // which lets iOS show the permission question again after it was dropped.
 $("youRow").addEventListener("click", () => {
-  if (!gpsActive() || lastFixAge() < GPS_STALE_MS) return;
+  if (gpsActive() && lastFixAge() < GPS_STALE_MS) { updateLocation("tap", true); return; } // fresh fix: look up where you are now
+  if (!gpsActive()) return;
   toast("Asking for your location…");
   navigator.geolocation.getCurrentPosition(
     (p) => { state.gpsDenied = false; onPosition([p.coords.longitude, p.coords.latitude], p.coords.accuracy); startGps(); },
@@ -1632,10 +1645,125 @@ function startSimulation() {
   }, 1000);
 }
 
-function onPosition(lonlat, accuracy) {
+// ---- Location line (bottom row): compass, @time of the last update, road badge or town + street.
+// On a numbered main road of the route the badge comes from the route itself (free), so it's
+// confirmed with every GPS fix. On local roads (or off the route) the street needs a lookup, so
+// it's updated only when it's likely to have changed:
+//   - a turn: your heading changed 60° or more within a minute, driving (a junction, exit or
+//     roundabout; a 90° rule misses forks and slip roads), checked 4 s later so you're on the new road;
+//   - leaving a main road, leaving or rejoining the route;
+//   - every 2 km on local roads (streets change at straight crossings too);
+//   - a tap on your row.
+// At most one lookup every 20 s.
+const TURN_DEG = 60, TURN_WINDOW_MS = 60000, LOCAL_EVERY_KM = 2, WHERE_MIN_GAP_MS = 20000;
+const headingHist = []; // {at, h}
+let lastPt = null;
+function angleDiff(a, b) { return Math.abs(((a - b + 540) % 360) - 180); }
+function bearing([lon1, lat1], [lon2, lat2]) {
+  const r = Math.PI / 180, y = Math.sin((lon2 - lon1) * r) * Math.cos(lat2 * r);
+  const x = Math.cos(lat1 * r) * Math.sin(lat2 * r) - Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos((lon2 - lon1) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+function distM(a, b) { return haversine(a, b) * 1000; }
+function haversine([lon1, lat1], [lon2, lat2]) {
+  const r = Math.PI / 180, dLat = (lat2 - lat1) * r, dLon = (lon2 - lon1) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLon / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+// Heading from the GPS when moving (it's reliable then), otherwise from the last 25 m driven.
+function trackHeading(lonlat, heading, speed) {
+  let h = null;
+  if (heading != null && Number.isFinite(heading) && (speed == null || speed > 2)) h = heading;
+  if (!lastPt) lastPt = lonlat;
+  else if (distM(lastPt, lonlat) >= 25) { if (h == null) h = bearing(lastPt, lonlat); lastPt = lonlat; }
+  if (h == null) return;
+  state.heading = h;
+  const now = Date.now();
+  headingHist.push({ at: now, h });
+  while (headingHist.length && now - headingHist[0].at > TURN_WINDOW_MS) headingHist.shift();
+  const moving = speed == null || speed > 3; // ~10 km/h: no "turns" from GPS jitter at a standstill
+  if (moving && headingHist.some((x) => angleDiff(x.h, h) >= TURN_DEG)) {
+    headingHist.length = 0;
+    headingHist.push({ at: now, h });
+    clearTimeout(state.turnTimer);
+    state.turnTimer = setTimeout(() => updateLocation("turn", true), 4000);
+  }
+}
+function onMainRoadNow() {
+  const u = state.user;
+  if (u.at == null || u.offKm > ON_ROUTE_KM || (u.acc != null && u.acc > 100)) return null;
+  return mainRoadAt(u.km);
+}
+// force: a turn or a tap (always look again); otherwise only when the situation calls for it.
+function updateLocation(reason = "fix", force = false) {
+  const u = state.user;
+  if (u.at == null || !state.route) return;
+  const loc = state.loc || {};
+  const road = onMainRoadNow();
+  const onRoute = u.offKm <= ON_ROUTE_KM;
+  if (road) {
+    state.loc = { kind: "road", road, at: Date.now(), lonlat: u.lonlat, onRoute: true };
+    return;
+  }
+  const changed = loc.kind !== "place" || loc.onRoute !== onRoute;
+  const far = loc.lonlat && haversine(loc.lonlat, u.lonlat) >= LOCAL_EVERY_KM;
+  if (!(force || changed || far || reason === "tap")) return;
+  lookUpWhere(onRoute);
+}
+async function lookUpWhere(onRoute) {
+  const u = state.user;
+  const now = Date.now();
+  if (state.whereBusy || now - (state.whereAt || 0) < WHERE_MIN_GAP_MS) {
+    // Too soon: try again when allowed, so the street still follows.
+    clearTimeout(state.whereRetry);
+    state.whereRetry = setTimeout(() => updateLocation("retry", true), WHERE_MIN_GAP_MS - (now - (state.whereAt || 0)) + 500);
+    return;
+  }
+  state.whereBusy = true; state.whereAt = now;
+  const at = u.lonlat;
+  const prev = state.loc?.kind === "place" ? state.loc : null;
+  try {
+    const r = await api(`/where?lat=${at[1].toFixed(5)}&lon=${at[0].toFixed(5)}`, null, 8000, false);
+    const ref = r.street && /^[AN]\s?\d{1,3}[a-z]?$/i.test(r.street.trim()) ? r.street.replace(/\s/g, "").toUpperCase() : null;
+    state.loc = { kind: "place", city: r.city || null, street: ref ? null : r.street || null, ref, country: r.country || null,
+      at: Date.now(), lonlat: at, onRoute };
+  } catch (e) {
+    // Keep the last place; the time shows how old it is.
+    state.loc = prev ? { ...prev, lonlat: at, onRoute } : { kind: "place", city: null, street: null, at: null, lonlat: at, onRoute };
+  } finally {
+    state.whereBusy = false;
+    render();
+  }
+}
+const COMPASS = (h) => `<svg class="compass" viewBox="0 0 24 24" aria-hidden="true"${h != null ? ` style="transform:rotate(${Math.round(h)}deg)"` : ""}><circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".6"/><path d="M12 3.5 15.2 12H8.8z" fill="${h != null ? "#e0574f" : "currentColor"}"/><path d="M12 20.5 8.8 12h6.4z" fill="currentColor" opacity=".55"/></svg>`;
+const hhmm = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function locationLine() {
+  const u = state.user;
+  if (u.at == null) return `<span class="warn">${state.gpsDenied ? "Location blocked · tap here" : "Waiting for your location… tap to retry"}</span>`;
+  const fixAge = Date.now() - u.at;
+  const sim = $("sim").checked;
+  const loc = state.loc || {};
+  const h = state.heading;
+  const parts = [`<span title="${h != null ? `Heading ${Math.round(h)}°` : "Heading not known yet"}">${COMPASS(h)}</span>`];
+  if (loc.at) parts.push(`<span class="at">@${hhmm(loc.at)}</span>`);
+  if (loc.kind === "road" && loc.road) parts.push(roadPartBadge(loc.road));
+  else if (loc.kind === "place" && loc.ref) parts.push(roadBadge(loc.ref, loc.country || countryAt(u.km, u.km)));
+  else if (loc.kind === "place" && (loc.city || loc.street)) parts.push(`<span class="place">${esc([loc.city, loc.street].filter(Boolean).join(", "))}</span>`);
+  else if (state.whereBusy) parts.push(`<span class="place">…</span>`);
+  const warn = !sim && fixAge > 30000 ? `GPS ${fixAge < 90000 ? `${Math.round(fixAge / 1000)} s` : `${Math.round(fixAge / 60000)} min`} old · tap to retry`
+    : u.acc != null && u.acc > 100 ? `rough (±${Math.round(u.acc)} m)`
+    : u.offKm > ON_ROUTE_KM ? `${fmtKm(u.offKm)} km off route`
+    : "";
+  if (warn) parts.push(`<span class="warn">${warn}</span>`);
+  return parts.join("");
+}
+
+function onPosition(lonlat, accuracy, heading = null, speed = null) {
   const pr = project(lonlat);
   state.user = { km: pr.km, min: pr.min, offKm: pr.d, acc: accuracy, at: Date.now(), lonlat };
   state.lastFix = { lonlat, acc: accuracy, at: Date.now() };
+  trackHeading(lonlat, heading, speed);
+  updateLocation();
   const reliable = accuracy == null || accuracy < 100;
   state.offCount = reliable && pr.d > OFF_ROUTE_KM ? state.offCount + 1 : 0;
   // Once past a via point, it no longer matters for a new route.
@@ -2408,9 +2536,10 @@ function roadBadge(ref, country) {
 }
 const roadPartBadge = (r) => roadBadge(r.ref, r.country || countryAt(r.fromKm ?? r.toKm, r.toKm));
 
-function roadsAhead(limit = 4) {
-  const parts = (state.route?.roads || []).filter((r) => r.toKm > state.user.km + 1);
-  return parts.filter((r, i) => r.ref !== parts[i - 1]?.ref).slice(0, limit);
+// The breadcrumbs at the top: the main road you're on (or the next one), then the ones after it.
+// A road drops off the moment you've passed its end.
+function roadsAhead(limit = 3) {
+  return roadParts().filter((r) => r.toKm > state.user.km).slice(0, limit);
 }
 
 // Which country a stretch of road is in, judged from the chargers on or near it.
@@ -2733,8 +2862,23 @@ function statusInfo(s) {
 
 // Road changes drawn on the timeline: the road you'll be on from a point between two chargers.
 function roadParts() {
-  const parts = state.route?.roads || [];
-  return parts.filter((r, i) => r.ref !== parts[i - 1]?.ref);
+  const out = [];
+  for (const r of state.route?.roads || []) {
+    const last = out[out.length - 1];
+    if (last && last.ref === r.ref) last.toKm = Math.max(last.toKm, r.toKm);
+    else out.push({ ...r });
+  }
+  return out;
+}
+// The numbered main road at a km: the stretch you're on, or across an interchange (a gap of up
+// to 3 km between two stretches) the road you're joining. Nothing on local roads.
+function mainRoadAt(km) {
+  const parts = roadParts();
+  const i = parts.findIndex((p) => p.toKm >= km - 0.2);
+  if (i < 0) return null;
+  const p = parts[i];
+  if (p.fromKm <= km + 0.2) return p;
+  return i > 0 && p.fromKm - parts[i - 1].toKm <= 3 ? p : null;
 }
 function roadNow() {
   const k = state.user.km;
@@ -2925,6 +3069,17 @@ function shownStatus(s) {
 }
 const CLS_ORDER = ["free", "full", "offline", "frozen", "stale", "nodata"];
 
+// A main road on the timeline: its badge on the line, where it starts and how long it is.
+// The road you're on shows how far you stay on it.
+function roadRow(r, current) {
+  const u = state.user;
+  const len = Math.max(0, r.toKm - Math.max(r.fromKm, u.km));
+  const text = current
+    ? `<span class="when"><b>now</b>&ensp;${fmtKm(len)} km on it</span>`
+    : `<span class="when"><b>${fmtKm(r.fromKm - u.km)}</b>&nbsp;km&ensp;${fmtClock(minAtKm(r.fromKm) - u.min)}</span><span class="len">${fmtKm(r.toKm - r.fromKm)} km</span>`;
+  return `<div class="row road${current ? " now" : ""}"><span aria-hidden="true"></span>${tlBadge(r, "mid")}<div><div class="sub meta">${text}</div></div></div>`;
+}
+
 function stationRow(site, change, after) {
   const s = site.primary, members = site.members;
   const infos = members.map(shownStatus);
@@ -3025,22 +3180,14 @@ function render() {
 
   setHtml($("destRow"), `<span class="marker" aria-hidden="true"></span>
     <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
-      <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead(8).length ? `<div class="sub roads"><span>via&nbsp;</span>${roadsAhead(8).map(roadPartBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
+      <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead(3).length ? `<div class="sub roads">${roadsAhead(3).map(roadPartBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
     <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`);
   fitRoads($("destRow").querySelector(".sub.roads"));
 
   // What we know about your position. The road badge only when you're on the route with a recent fix:
   // projected from an old or off-route position it names a road you're not on.
-  const fixAge = u.at == null ? Infinity : Date.now() - u.at;
-  const sim = $("sim").checked;
-  const gps = u.at == null ? (state.gpsDenied ? "Location blocked · tap here" : "Waiting for your location… tap to retry")
-    : !sim && fixAge > 30000 ? `Last location ${fixAge < 90000 ? `${Math.round(fixAge / 1000)} s` : `${Math.round(fixAge / 60000)} min`} ago · tap to retry`
-    : u.acc != null && u.acc > 100 ? `Location rough (±${Math.round(u.acc)} m)`
-    : u.offKm > ON_ROUTE_KM ? `${fmtKm(u.offKm)} km off the route`
-    : "On route";
-  const badge = u.at != null && (sim || fixAge <= 30000) && u.offKm <= ON_ROUTE_KM && roadNow();
   setHtml($("youRow"), `<span class="marker" aria-hidden="true"></span>
-    <div><div class="name">You</div><div class="sub">${gps}${badge ? `&ensp;${roadPartBadge(badge)}` : ""}</div></div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`);
+    <div><div class="name">You</div><div class="sub loc">${locationLine()}</div></div><div class="age${state.statusError ? " err" : ""}" id="age"></div>`);
 
   // Every station ahead, nearest at the bottom next to you. Scroll up to look further.
   const all = upcomingShown();
@@ -3060,18 +3207,27 @@ function render() {
     }
   }
   const note = checking ? `<div class="empty">Checking detours${ahead.length ? " further ahead" : ""}…</div>` : "";
-  const parts = ahead.length
-    ? [...(note ? [{ key: "note", html: note }] : []), ...ahead.map((site, i) => ({
-        key: site.members.map((m) => m.id).join(" "),
-        html: stationRow(site,
-          roadChange(i ? ahead[i - 1].alongKm : -Infinity, site.alongKm),
-          i === ahead.length - 1 ? roadChange(site.alongKm, Infinity) : null).trim(),
-      })).reverse()]
-    : [{ key: "empty", html: checking ? note
-      : hiddenCount
-        ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
-        : `<div class="empty">No more chargers within 5 km of your route.</div>` }];
-  patchList(list, parts);
+  // In route order, nearest first: the road you're on, then chargers and every main road ahead
+  // (also stretches without any charger), up to the destination. Shown reversed (nearest at the bottom).
+  const inOrder = [];
+  const roads = roadParts();
+  const curRoad = u.at != null && u.offKm <= ON_ROUTE_KM ? mainRoadAt(u.km) : null;
+  if (curRoad) inOrder.push({ key: `road-${curRoad.fromKm}`, html: roadRow(curRoad, true) });
+  if (note) inOrder.push({ key: "note", html: note });
+  const nextRoads = roads.filter((p) => p.fromKm !== curRoad?.fromKm && p.fromKm > u.km);
+  let ri = 0;
+  const pushRoad = () => { const p = nextRoads[ri++]; inOrder.push({ key: `road-${p.fromKm}`, html: roadRow(p, false) }); };
+  for (const site of ahead) {
+    while (ri < nextRoads.length && nextRoads[ri].fromKm <= site.alongKm) pushRoad();
+    inOrder.push({ key: site.members.map((m) => m.id).join(" "), html: stationRow(site, null, null).trim() });
+  }
+  while (ri < nextRoads.length) pushRoad();
+  if (!ahead.length && !checking) {
+    inOrder.push({ key: "empty", html: hiddenCount
+      ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
+      : `<div class="empty">No more chargers within 5 km of your route.</div>` });
+  }
+  patchList(list, inOrder.reverse());
   // Stay at the bottom, or keep your place if you've scrolled up.
   const anchorEl = anchor && [...list.children].find((el) => el.dataset.k === anchor.k);
   const wantTop = state.stickToBottom ? list.scrollHeight - list.clientHeight
@@ -3210,7 +3366,7 @@ const SLIDES = [
       <p><b>Press and hold</b> a charger to see it in your map or navigation app, where you can start the route. Help is always behind the <b>?</b> at the top.</p>`,
     top: () => `<div class="banner ok" style="margin:0 0 14px"><span>You’ve left the route. New route planned.</span></div>`,
     demo: () => `<div class="row dest"><span class="marker" aria-hidden="true"></span><div><div class="name">Munich</div><div class="sub">Arrive 17:40</div>
-      <div class="sub roads"><span>via&nbsp;</span>${roadBadge("A3", "DE")}<span class="sep">›</span>${roadBadge("A5", "DE")}<span class="sep">›</span>${roadBadge("A8", "DE")}</div></div>
+      <div class="sub roads">${roadBadge("A3", "DE")}<span class="sep">›</span>${roadBadge("A5", "DE")}<span class="sep">›</span>${roadBadge("A8", "DE")}</div></div>
       <div class="dist"><div class="km">612<small>km</small></div><div class="min">6 h 10</div></div></div>${demoYou}`,
   },
 ];
@@ -3263,7 +3419,8 @@ function helpHtml() {
 
   <h3>The screen while driving</h3>
   <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
-  <p>Road numbers on the line show where you change roads, styled like that country's signs.</p>
+  <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
+  <p>Your own row shows a compass (pointing the way you're driving), the time of the last location update and the road badge, or on smaller roads the town and street. On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Free or not</h3>
   <div class="legend">

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -203,10 +203,14 @@
   }
   .list {
     flex: 1; min-height: 0; display: flex; flex-direction: column;
-    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    touch-action: pan-y; /* up and down only: no sideways drift, no pinch */
     padding: 16px 0 14px; /* room for road badges on the line at the top and bottom edge */
   }
   .list::-webkit-scrollbar { display: none; }
+  /* The page never zooms or shifts sideways (taps, swipes and the intro carousel still work) */
+  html, body { overflow-x: hidden; touch-action: pan-x pan-y; }
+  #drive { touch-action: pan-y; }
   .list > :first-child { margin-top: auto; } /* rows sit at the bottom, next to you */
   /* Fade at the top when there are more chargers above */
   .list.more-above { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 56px); mask-image: linear-gradient(to bottom, transparent 0, #000 56px); }
@@ -973,7 +977,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.78";
+const APP_VERSION = "2026-11-15.79";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1124,6 +1128,10 @@ async function api(path, body, timeoutMs, retry = true) {
 const ERR_KEY = "evailability-errors", ERR_MAX = 20;
 let errors = (() => { try { return JSON.parse(localStorage.getItem(ERR_KEY) || "[]").filter((e) => e && e.text); } catch (_) { return []; } })();
 function saveErrors() { try { localStorage.setItem(ERR_KEY, JSON.stringify(errors)); } catch (_) {} }
+// No pinch zoom (iOS ignores user-scalable=no in Safari, so stop its gestures here too).
+for (const ev of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+document.addEventListener("touchmove", (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
 function reportError(text) {
   text = String(text || "").replace(/\s+/g, " ").trim();
   if (!text) return;

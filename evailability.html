@@ -983,7 +983,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.83";
+const APP_VERSION = "2026-11-15.84";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1367,6 +1367,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   }
   state.offCount = 0;
   state.plannedAt = Date.now();
+  data.route.plannedAt = state.plannedAt; // kept with the route, so the debug line knows after a reload
   state.roadOverride = null; state.roadCheckedKm = null;
   state.viaReached = false;
   save();
@@ -1409,7 +1410,8 @@ function renderDebug() {
   const summary = `${rl.length}:${rl.find((x) => x.toKm > state.user.km)?.ref || "-"}`;
   const roads = !r ? "" : r.mapRoads ? `<span class="ok">Rm</span>${summary}` : mapBusy ? `R…${summary}`
     : r.mapTries >= 3 ? `<span class="bad">Rx</span>${summary}` : `Rr${r.mapTries || ""}${summary}`;
-  const planned = state.plannedAt ? ` P${hm(state.plannedAt)}` : "";
+  const pAt = state.route?.plannedAt || state.plannedAt;
+  const planned = pAt ? ` P${hm(pAt)}` : "";
   el.innerHTML = `${app} ${w} ${roads}${planned}`;
 }
 $("debugToggle").checked = debugOn();

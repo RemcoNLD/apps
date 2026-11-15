@@ -1069,7 +1069,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.99";
+const APP_VERSION = "2026-11-15.100";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -3179,7 +3179,7 @@ function historyHtml(members) {
     if (frozenFor(st)) {
       return `<div>${logo}<span><b class="frozen-note">Probably not live.</b> The source last reported ${st.available} of ${st.total} free, but nothing has changed at the site since ${changed.clock} (${changed.ago}). The real state is unknown.</span></div>`;
     }
-    return `<div>${logo}<span><b>${st.available} of ${st.total} free.</b> ${full ? `Last full at ${full.clock} (${full.ago}).` : "Not seen full by this app recently."}</span></div>` +
+    return `<div>${logo}<span><b>${st.available} of ${st.total} free.</b> ${full ? `Last full at ${full.clock} (${full.ago}).` : "" /* unknown: the app only knows what it happened to look at */}</span></div>` +
       (changed ? `<div><span class="muted">Last change at the site: ${changed.clock} (${changed.ago})</span></div>` : "");
   }).filter(Boolean);
   return lines.join("");

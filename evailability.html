@@ -977,7 +977,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.79";
+const APP_VERSION = "2026-11-15.80";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1365,7 +1365,127 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.viaReached = false;
   save();
   addNdwSites(data.ndwTiles || [], state.planBrands); // in the background: the route shows straight away
+  roadsFromMap(); // and the road numbers checked against the map
   // Names follow once rows are on screen (refreshStatus after the first render).
+}
+
+// ---- Road numbers from the map. The routing service names roads by its turn instructions, so a
+// road you join without a turn (Lunetten: A12 into A27) keeps the old number, or a road goes
+// missing altogether. So the route is matched to OpenStreetMap once after planning: the roads
+// within 30 m of the route line (one Overpass query per 150 km, straight from the phone, free),
+// every 200 m the one running the same way as the route, bigger roads first. Its number makes
+// the road list (breadcrumbs, timeline, your location). If the map can't be reached, the
+// routing service's list stays.
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+const MAP_CLASSES = { motorway: 0, trunk: 1, primary: 2, secondary: 3, tertiary: 4, motorway_link: 9, trunk_link: 9, primary_link: 9, secondary_link: 9 };
+let mapRun = 0;
+async function overpass(q, ms = 25000) {
+  let last = null;
+  for (const url of OVERPASS) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
+    try {
+      const res = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctl.signal });
+      if (!res.ok) throw new Error(`${new URL(url).host} ${res.status}`);
+      return await res.json();
+    } catch (e) { last = e; } finally { clearTimeout(t); }
+  }
+  throw last || new Error("map unavailable");
+}
+function normRef(v) {
+  const r = String(v || "").split(";")[0].replace(/\s+/g, "").toUpperCase();
+  return /^[ABDEMNRS]\d{1,4}[A-Z]?$/.test(r) ? r : null;
+}
+async function roadsFromMap() {
+  const route = state.route;
+  if (!route?.coords?.length) return;
+  const run = ++mapRun;
+  const { coords, km } = route;
+  const total = route.distanceKm;
+  const CHUNK = 150, STEP = 0.2, NEAR_M = 30;
+  const samples = []; // {k, ref, intRef, cls}
+  let anyMatched = 0, n = 0;
+  try {
+    for (let c0 = 0; c0 < total; c0 += CHUNK) {
+      const c1 = Math.min(total, c0 + CHUNK);
+      // The route line of this stretch (thinned to keep the query short).
+      const idx = [];
+      for (let i = 0; i < coords.length; i++) if (km[i] >= c0 - 0.5 && km[i] <= c1 + 0.5) idx.push(i);
+      if (idx.length < 2) continue;
+      const every = Math.max(1, Math.ceil(idx.length / 1200));
+      const line = idx.filter((_, j) => j % every === 0 || j === idx.length - 1).map((i) => `${coords[i][1].toFixed(5)},${coords[i][0].toFixed(5)}`).join(",");
+      const data = await overpass(`[out:json][timeout:25];way(around:${NEAR_M},${line})[highway~"^(${Object.keys(MAP_CLASSES).join("|")})$"];out tags geom;`);
+      if (run !== mapRun || state.route !== route) return; // a newer route
+      // Segments in a grid (about 300 m cells) for quick lookups.
+      const lat0 = coords[idx[0]][1], kx = 111.32 * Math.cos(lat0 * Math.PI / 180), ky = 110.57, CELL = 0.3;
+      const grid = new Map();
+      const cellKey = (x, y) => `${Math.floor(x / CELL)},${Math.floor(y / CELL)}`;
+      for (const w of data.elements || []) {
+        const g = w.geometry || [], tags = w.tags || {};
+        for (let i = 0; i < g.length - 1; i++) {
+          const a = [g[i].lon * kx, g[i].lat * ky], b = [g[i + 1].lon * kx, g[i + 1].lat * ky];
+          const seg = { a, b, tags };
+          const keys = new Set([cellKey(...a), cellKey(...b), cellKey((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)]);
+          for (const k of keys) { if (!grid.has(k)) grid.set(k, []); grid.get(k).push(seg); }
+        }
+      }
+      for (let k = Math.ceil(c0 / STEP) * STEP; k < c1; k += STEP) {
+        const p = pointAtKm(k), q = pointAtKm(Math.min(total, k + 0.05));
+        const x = p[0] * kx, y = p[1] * ky;
+        const rb = Math.atan2(q[1] * ky - y, q[0] * kx - x);
+        let best = null;
+        for (let gx = -1; gx <= 1; gx++) for (let gy = -1; gy <= 1; gy++) {
+          for (const sg of grid.get(`${Math.floor(x / CELL) + gx},${Math.floor(y / CELL) + gy}`) || []) {
+            const dx = sg.b[0] - sg.a[0], dy = sg.b[1] - sg.a[1], len2 = dx * dx + dy * dy || 1e-12;
+            const t = Math.max(0, Math.min(1, ((x - sg.a[0]) * dx + (y - sg.a[1]) * dy) / len2));
+            const d = Math.hypot(sg.a[0] + t * dx - x, sg.a[1] + t * dy - y) * 1000;
+            if (d > NEAR_M) continue;
+            let diff = Math.abs(Math.atan2(dy, dx) - rb) * 180 / Math.PI % 360;
+            if (diff > 180) diff = 360 - diff;
+            if (Math.min(diff, 180 - diff) > 25) continue; // crossing, not along the route
+            const cls = MAP_CLASSES[sg.tags.highway] ?? 9;
+            const score = d + cls * 6; // the bigger road wins unless clearly further from the route line
+            if (!best || score < best.score) best = { cls, d, score, tags: sg.tags };
+          }
+        }
+        n++;
+        if (best) anyMatched++;
+        const link = best && best.cls >= 9;
+        samples.push({ k, ref: best && !link ? normRef(best.tags.ref) : null, intRef: best && !link ? normRef(best.tags.int_ref) : null });
+      }
+    }
+  } catch (e) {
+    reportError(`Road numbers from the map: ${e.message}. Using the route's own.`);
+    return;
+  }
+  if (run !== mapRun || state.route !== route || !n || anyMatched / n < 0.6) return;
+  // Stretches of the same number; gaps without a number (ramps, junctions) up to 3 km join the same road.
+  const parts = [];
+  for (const sm of samples) {
+    const ref = sm.ref || (sm.intRef && /^E/.test(sm.intRef) ? sm.intRef : null);
+    if (!ref) continue;
+    const last = parts[parts.length - 1];
+    if (last && last.ref === ref && sm.k - last.toKm <= 3) { last.toKm = sm.k + STEP; if (sm.intRef) last.intRef = sm.intRef; }
+    else parts.push({ ref, intRef: sm.intRef, fromKm: sm.k, toKm: sm.k + STEP });
+  }
+  const roads = [];
+  for (const p of parts) {
+    const country = countryAt(p.fromKm, p.toKm);
+    let ref = p.ref;
+    if (ref[0] === "D" && country !== "FR") continue; // D numbers only mean a road in France
+    if (country === "BE" && ref[0] === "A" && p.intRef?.[0] === "E") ref = p.intRef; // Belgium signs its motorways by E number
+    const min = /^[NBRM]/.test(ref) ? 1 : ref[0] === "D" ? 2 : 5;
+    if (p.toKm - p.fromKm < min) continue;
+    const last = roads[roads.length - 1];
+    if (last && last.ref === ref) { last.toKm = p.toKm; continue; }
+    roads.push({ ref, country, fromKm: Math.round(p.fromKm * 10) / 10, toKm: Math.round(Math.min(p.toKm, total) * 10) / 10 });
+  }
+  if (!roads.length) return;
+  route.stepRoads = route.stepRoads || route.roads; // the routing service's list, kept for comparison
+  route.roads = roads;
+  route.mapRoads = true;
+  state.roadOverride = null;
+  save();
+  render();
 }
 
 // Second source of chargers in the Netherlands (NDW), for sites Open Charge Map doesn't have
@@ -3435,6 +3555,7 @@ function restore() {
       planBrands: saved.planBrands || ["ionity"], arrived: !!saved.arrived });
     $("sim").checked = !!saved.sim;
     startDriving();
+    if (!state.route.mapRoads) roadsFromMap();
     refreshStatus();
   } catch (_) { localStorage.removeItem(STORE_KEY); }
 }

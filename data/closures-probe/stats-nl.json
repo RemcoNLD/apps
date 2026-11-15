@@ -1,0 +1,16 @@
+{
+ "planningsfeed_wegwerkzaamheden_en_evenementen.xml.gz:bytes": 194620881,
+ "type:laneClosures": 844,
+ "type:roadClosed": 1314,
+ "skip:vehicles": 2268,
+ "type:useOfSpecifiedLanesOrCarriagewaysAllowed": 5536,
+ "type:lanesDeviated": 121,
+ "type:carriagewayClosures": 16015,
+ "skip:time": 6246,
+ "skip:no-main-line": 1479,
+ "type:other": 65,
+ "type:narrowLanes": 1,
+ "tijdelijke_verkeersmaatregelen_afsluitingen.xml.gz:bytes": 2310942,
+ "kept": 7296,
+ "duplicates": 40
+}

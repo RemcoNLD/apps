@@ -44,7 +44,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.97";
+const WORKER_VERSION = "2026-11-16.98";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -483,19 +483,25 @@ function turnsOf(route) {
     const to = pointAhead(route, from, 0.08);
     const after = to > from ? bearingDeg(C[from], C[to]) : null;
     const angle = before != null && after != null ? Math.round(signedTurn(before, after)) : null;
-    // Roundabout-shaped: within 200 m a right, then a longer left, then a right (right-hand traffic).
+    // Roundabout-shaped (an untagged roundabout the routing service calls "keep left/right" or a slight
+    // turn): within 200 m a right, then a long left, then a right (right-hand traffic). Since .97
+    // stricter, after a curvy junction in Houten (Dampolder) showed as a roundabout: only for keep and
+    // slight steps, at least 100° of left, and that left turn packed into 80 m (a roundabout is small;
+    // a bend in the road is not).
     let flags = "";
-    if (st.type !== 7 && before != null) {
-      let pos = 0, neg = 0, last = before;
+    if ([4, 5, 12, 13].includes(st.type) && before != null) {
+      let pos = 0, neg = 0, last = before, leftFrom = null, leftTo = null;
       const end = pointAhead(route, i0, 0.2);
       for (let i = i0; i < end; i++) {
         if (route.km[i + 1] - route.km[i] < 0.004) continue;
         const b = bearingDeg(C[i], C[i + 1]);
         const d = signedTurn(last, b);
-        if (d > 0) pos += d; else neg -= d;
+        if (d > 0) pos += d;
+        else if (d < 0) { neg -= d; if (leftFrom == null) leftFrom = route.km[i]; leftTo = route.km[i + 1]; }
         last = b;
       }
-      if (pos > 25 && neg > 60 && pos + neg > 120) flags += "r";
+      const leftKm = leftFrom == null ? Infinity : leftTo - leftFrom;
+      if (pos > 30 && neg >= 100 && pos + neg > 160 && leftKm <= 0.08) flags += "r";
     }
     out.push([Math.round(route.km[i0] * 100) / 100, st.type, name, st.exit_number || 0, angle, flags, prevName]);
     if (name) prevName = name;

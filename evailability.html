@@ -977,7 +977,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.80";
+const APP_VERSION = "2026-11-15.81";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1371,15 +1371,16 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
 
 // ---- Road numbers from the map. The routing service names roads by its turn instructions, so a
 // road you join without a turn (Lunetten: A12 into A27) keeps the old number, or a road goes
-// missing altogether. So the route is matched to OpenStreetMap once after planning: the roads
-// within 30 m of the route line (one Overpass query per 150 km, straight from the phone, free),
+// missing altogether. So the route is matched to OpenStreetMap once after planning: the numbered
+// roads in small boxes along the route line (one Overpass query per 100 km, straight from the
+// phone, free; boxes are quick for the map server, a long line search timed out),
 // every 200 m the one running the same way as the route, bigger roads first. Its number makes
 // the road list (breadcrumbs, timeline, your location). If the map can't be reached, the
 // routing service's list stays.
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
-const MAP_CLASSES = { motorway: 0, trunk: 1, primary: 2, secondary: 3, tertiary: 4, motorway_link: 9, trunk_link: 9, primary_link: 9, secondary_link: 9 };
+const MAP_CLASSES = { motorway: 0, trunk: 1, primary: 2, secondary: 3 };
 let mapRun = 0;
-async function overpass(q, ms = 25000) {
+async function overpass(q, ms = 15000) {
   let last = null;
   for (const url of OVERPASS) {
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
@@ -1401,19 +1402,26 @@ async function roadsFromMap() {
   const run = ++mapRun;
   const { coords, km } = route;
   const total = route.distanceKm;
-  const CHUNK = 150, STEP = 0.2, NEAR_M = 30;
+  const CHUNK = 100, STEP = 0.2, NEAR_M = 30, BOX_KM = 4;
   const samples = []; // {k, ref, intRef, cls}
   let anyMatched = 0, n = 0;
   try {
     for (let c0 = 0; c0 < total; c0 += CHUNK) {
       const c1 = Math.min(total, c0 + CHUNK);
-      // The route line of this stretch (thinned to keep the query short).
+      // Small boxes (every 4 km of route, 60 m margin) around this stretch: numbered roads only.
       const idx = [];
       for (let i = 0; i < coords.length; i++) if (km[i] >= c0 - 0.5 && km[i] <= c1 + 0.5) idx.push(i);
       if (idx.length < 2) continue;
-      const every = Math.max(1, Math.ceil(idx.length / 1200));
-      const line = idx.filter((_, j) => j % every === 0 || j === idx.length - 1).map((i) => `${coords[i][1].toFixed(5)},${coords[i][0].toFixed(5)}`).join(",");
-      const data = await overpass(`[out:json][timeout:25];way(around:${NEAR_M},${line})[highway~"^(${Object.keys(MAP_CLASSES).join("|")})$"];out tags geom;`);
+      const boxes = [];
+      for (let b0 = c0; b0 < c1; b0 += BOX_KM) {
+        const pts = idx.filter((i) => km[i] >= b0 - 0.2 && km[i] <= b0 + BOX_KM + 0.2).map((i) => coords[i]);
+        pts.push(pointAtKm(b0), pointAtKm(Math.min(total, b0 + BOX_KM)));
+        const lats = pts.map((p) => p[1]), lons = pts.map((p) => p[0]);
+        const m = 0.0006;
+        boxes.push(`${(Math.min(...lats) - m).toFixed(5)},${(Math.min(...lons) - m).toFixed(5)},${(Math.max(...lats) + m).toFixed(5)},${(Math.max(...lons) + m).toFixed(5)}`);
+      }
+      const hw = `[highway~"^(${Object.keys(MAP_CLASSES).join("|")})$"][ref]`;
+      const data = await overpass(`[out:json][timeout:20];(${boxes.map((b) => `way${hw}(${b});`).join("")});out tags geom;`);
       if (run !== mapRun || state.route !== route) return; // a newer route
       // Segments in a grid (about 300 m cells) for quick lookups.
       const lat0 = coords[idx[0]][1], kx = 111.32 * Math.cos(lat0 * Math.PI / 180), ky = 110.57, CELL = 0.3;
@@ -1449,15 +1457,18 @@ async function roadsFromMap() {
         }
         n++;
         if (best) anyMatched++;
-        const link = best && best.cls >= 9;
-        samples.push({ k, ref: best && !link ? normRef(best.tags.ref) : null, intRef: best && !link ? normRef(best.tags.int_ref) : null });
+        samples.push({ k, ref: best ? normRef(best.tags.ref) : null, intRef: best ? normRef(best.tags.int_ref) : null });
       }
     }
   } catch (e) {
-    reportError(`Road numbers from the map: ${e.message}. Using the route's own.`);
+    // Try again in 2 minutes (3 tries per route); meanwhile the routing service's list stays.
+    route.mapTries = (route.mapTries || 0) + 1;
+    if (route.mapTries < 3) setTimeout(() => { if (state.route === route && !route.mapRoads) roadsFromMap(); }, 120000);
+    else reportError(`Road numbers from the map: ${e.message}. Using the route's own.`);
     return;
   }
-  if (run !== mapRun || state.route !== route || !n || anyMatched / n < 0.6) return;
+  // Only numbered roads are asked for, so town streets stay unmatched: a quarter is plenty.
+  if (run !== mapRun || state.route !== route || !n || anyMatched / n < 0.25) return;
   // Stretches of the same number; gaps without a number (ramps, junctions) up to 3 km join the same road.
   const parts = [];
   for (const sm of samples) {

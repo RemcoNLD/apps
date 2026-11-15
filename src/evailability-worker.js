@@ -38,7 +38,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-15.85";
+const WORKER_VERSION = "2026-11-15.86";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -455,7 +455,7 @@ async function getRoute(env, points) {
   const data = await fetchJson(`${ORS_BASE}/directions/driving-car/geojson`, {
     method: "POST",
     headers: orsHeaders(env),
-    body: JSON.stringify({ coordinates: points, radiuses: snapRadii(points), instructions: true, extra_info: ["countryinfo"] }),
+    body: JSON.stringify({ coordinates: points, radiuses: snapRadii(points), instructions: true, extra_info: ["countryinfo", "waycategory"] }),
   }, "Routing");
   const f = data.features?.[0];
   if (!f) throw new HttpError(502, "Routing returned no route");
@@ -468,8 +468,10 @@ async function getRoute(env, points) {
   const firstEnd = ends.length ? ends[0] : null;
   // Which country each part of the route is in (routing service's own country IDs).
   const countrySegs = f.properties?.extras?.countryinfo?.values || [];
+  // Where the route is on a motorway-class road ("highway" bit of waycategory), as [from, to] indexes.
+  const highwaySegs = (f.properties?.extras?.waycategory?.values || []).filter(([, , v]) => (v & 1) === 1).map(([a, b]) => [a, b]);
   return {
-    coords, km, min, steps, countrySegs, idIso: {},
+    coords, km, min, steps, countrySegs, highwaySegs, idIso: {},
     viaKm: firstEnd != null ? km[firstEnd] : null,
     viaKms: ends.map((i) => km[i]), // one per via point, in order
     distanceKm: (f.properties?.summary?.distance || 0) / 1000,
@@ -575,11 +577,22 @@ function roadRef(name) {
 // The sequence of numbered roads along the route, with where each starts and ends (km).
 function roadsAlong(route) {
   const parts = [];
-  for (const st of route.steps) {
-    const [a, b] = st.way_points || [];
+  const steps = route.steps;
+  for (let si = 0; si < steps.length; si++) {
+    const st = steps[si];
+    let [a, b] = st.way_points || [];
     if (a == null || b == null) continue;
-    const ref0 = roadRef(st.name);
-    if (!ref0) continue;
+    let ref0 = roadRef(st.name);
+    if (!ref0) {
+      // A step named after a local street that runs on onto a motorway without an instruction
+      // ("De Staart" in Houten, then 26 km of A27 until the next turn): from where the route
+      // gets onto the motorway, it's the motorway the next numbered step names.
+      const hw = (route.highwaySegs || []).find(([ha, hb]) => hb > a && ha < b);
+      const next = steps.slice(si + 1).find((x) => roadRef(x.name));
+      if (!hw || !next || route.km[b] - route.km[Math.max(a, hw[0])] < 2) continue;
+      a = Math.max(a, hw[0]);
+      ref0 = roadRef(next.name);
+    }
     // Split the step where it crosses a border.
     const pieces = [];
     for (const [sa, sb] of route.countrySegs || []) {
@@ -604,8 +617,8 @@ function roadsAlong(route) {
     // Skip short connectors (a few km of motorway at an interchange), but keep every N or B road
     // of 1 km or more: they're short by nature and you want to see you'll use them (N3 at Dordrecht).
     // Per country: NL/BE/FR N, BE R (ring), AT/DE B, FR M (métropole) from 1 km; FR D from 2 km;
-    // motorways (A, AT S, E) from 5 km.
-    .filter((p) => p.toKm - p.fromKm >= (/^[NBRM]/.test(p.ref) ? 1 : p.ref[0] === "D" ? 2 : 5))
+    // motorways (A, AT S, E) from 3 km (A16 between the A15 and the N3).
+    .filter((p) => p.toKm - p.fromKm >= (/^[NBRM]/.test(p.ref) ? 1 : p.ref[0] === "D" ? 2 : 3))
     .map((p) => ({ ref: p.ref, country: p.country, fromKm: Math.round(p.fromKm * 10) / 10, toKm: Math.round(p.toKm * 10) / 10 }));
 }
 

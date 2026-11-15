@@ -984,7 +984,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.85";
+const APP_VERSION = "2026-11-15.86";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1559,7 +1559,7 @@ async function matchRoads(route, run) {
     let ref = p.ref;
     if (ref[0] === "D" && country !== "FR") continue; // D numbers only mean a road in France
     if (country === "BE" && ref[0] === "A" && p.intRef?.[0] === "E") ref = p.intRef; // Belgium signs its motorways by E number
-    const min = /^[NBRM]/.test(ref) ? 1 : ref[0] === "D" ? 2 : 5;
+    const min = /^[NBRM]/.test(ref) ? 1 : ref[0] === "D" ? 2 : 3;
     if (p.toKm - p.fromKm < min) continue;
     const last = roads[roads.length - 1];
     if (last && last.ref === ref) { last.toKm = p.toKm; continue; }

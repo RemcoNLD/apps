@@ -415,9 +415,14 @@
   .turn-ico { width: 30px; height: 30px; color: var(--line); }
   .turn-marker { justify-self: center; z-index: 1; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: var(--asphalt); }
   .turn-marker .turn-ico { width: 46px; height: 46px; }
-  .turn-marker.soon .turn-ico { color: var(--sign-blue); }
+  .row.you .turn .turn-how { font-weight: 800; color: var(--line); }
+  /* The last 500 m: the arrow and the distance pulse between white on black and black on white */
+  .turn-marker.soon, .row.you .turn.soon { animation: turnPulse 1.2s ease-in-out infinite alternate; }
+  .row.you .turn.soon { margin-left: 4px; padding: 4px 8px; border-radius: 10px; }
+  .turn-marker.soon .turn-ico, .row.you .turn.soon .dist, .row.you .turn.soon .turn-txt, .row.you .turn.soon .turn-how, .row.you .turn.soon .exit-sign { color: inherit; }
+  @keyframes turnPulse { from { background: #fff; color: #000; } to { background: #000; color: #fff; } }
+  @media (prefers-reduced-motion: reduce) { .turn-marker.soon, .row.you .turn.soon { animation: none; background: #fff; color: #000; } }
   .row.you .turn .dist { font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--line); }
-  .row.you .turn.soon .dist, .row.you .turn.soon .turn-ico { color: var(--sign-blue, #1d4fa3); }
   .row.you .turn .turn-txt { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; color: var(--line); }
   .row.you .turn .rb { font-size: .95rem; }
   .next-exit { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; color: var(--muted); }
@@ -1025,7 +1030,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-15.89";
+const APP_VERSION = "2026-11-15.90";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1700,50 +1705,114 @@ function nearbyName(lonlat) {
 // calls): the next one ahead with a countdown and the road you turn onto. On a motorway, the next exit
 // (number and name, your side of the road only) counts down on the right, unless that's where you turn.
 const TURN_ANGLE = { 0: -90, 1: 90, 2: -135, 3: 135, 4: -45, 5: 45, 6: 0, 8: 45, 12: -35, 13: 35 };
-function turnIcon(type, exitNo) {
+const SVG_LINE = 'fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"';
+// Arrowhead with its tip at (x, y), pointing at ang degrees (0 = up, + = clockwise).
+function arrowHead(x, y, ang, size = 6.5) {
+  const r = Math.PI / 180, pt = (d, a) => `${(x + d * Math.sin((ang + a) * r)).toFixed(1)},${(y - d * Math.cos((ang + a) * r)).toFixed(1)}`;
+  return `<path d="M${pt(0, 0)} L${pt(size, 150)} L${pt(size, -150)}Z" fill="currentColor"/>`;
+}
+// A roundabout seen from the driver: you come in at the bottom and drive round anticlockwise
+// (right-hand traffic) to the exit, which sits where the road really leaves (angle: 0 straight on,
+// + right, − left). The part you drive is drawn thick, the rest thin; the exit number in the middle.
+function roundaboutIcon(angle, exitNo) {
   const svg = (inner) => `<svg class="turn-ico" viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
-  const head = (x, y, ang) => { // arrowhead at (x, y) pointing at ang degrees (0 = up)
-    const r = Math.PI / 180, pt = (d, a) => `${(x + d * Math.sin((ang + a) * r)).toFixed(1)},${(y - d * Math.cos((ang + a) * r)).toFixed(1)}`;
-    return `<path d="M${pt(0, 0)} L${pt(6.5, 150)} L${pt(6.5, -150)}Z" fill="currentColor"/>`;
-  };
-  const line = 'fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"';
-  if (type === 10) return svg(`<path d="M7 21V4" ${line}/><path d="M7 4h11l-3 4 3 4H7" fill="currentColor"/>`); // arrive: flag
-  if (type === 9) return svg(`<path d="M16 22V10a5 5 0 0 0-10 0v6" ${line}/>${head(6, 19, 180)}`); // U-turn
-  if (type === 7) {
-    return svg(`<circle cx="12" cy="10" r="5" ${line}/><path d="M12 22v-7" ${line}/>${exitNo ? `<text x="12" y="12.6" text-anchor="middle" font-size="7.5" font-weight="800" fill="currentColor">${exitNo}</text>` : ""}`);
-  }
-  const ang = TURN_ANGLE[type] ?? 0, r = Math.PI / 180;
+  const cx = 12, cy = 12.2, R = 5.4, rad = Math.PI / 180;
+  const at = (a, d) => [cx + d * Math.sin(a * rad), cy - d * Math.cos(a * rad)];
+  // Exit direction: straight on = 0 (top). Round it so nearly-straight looks straight.
+  let ex = angle == null ? 0 : Math.abs(angle) < 20 ? 0 : angle;
+  ex = Math.max(-160, Math.min(160, ex));
+  // Driven arc: from the entry (bottom, 180°) anticlockwise to the exit, i.e. decreasing angles.
+  const end = ex; // in [-160, 160]
+  const sweep = 180 - end; // degrees driven, 20..340
+  const [sx, sy] = at(180, R), [eX, eY] = at(end, R);
+  const large = sweep > 180 ? 1 : 0;
+  // SVG arcs with sweep-flag 0 go anticlockwise on screen.
+  const arc = `<path d="M${sx.toFixed(1)} ${sy.toFixed(1)} A${R} ${R} 0 ${large} 0 ${eX.toFixed(1)} ${eY.toFixed(1)}" ${SVG_LINE}/>`;
+  const [ox, oy] = at(end, 9);
+  const out = `<path d="M${eX.toFixed(1)} ${eY.toFixed(1)} L${ox.toFixed(1)} ${oy.toFixed(1)}" ${SVG_LINE}/>${arrowHead(...at(end, 11.9), end, 4.2)}`;
+  const ring = `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>`;
+  const num = exitNo ? `<text x="${cx}" y="${cy + 2.2}" text-anchor="middle" font-size="6.2" font-weight="900" fill="currentColor">${exitNo}</text>` : "";
+  return svg(`${ring}<path d="M12 23V${(cy + R).toFixed(1)}" ${SVG_LINE}/>${arc}${out}${num}`);
+}
+function turnIcon(t) {
+  const svg = (inner) => `<svg class="turn-ico" viewBox="0 0 24 24" aria-hidden="true">${inner}</svg>`;
+  if (t.type === 10) return svg(`<path d="M7 21V4" ${SVG_LINE}/><path d="M7 4h11l-3 4 3 4H7" fill="currentColor"/>`); // arrive: flag
+  if (t.type === 9) return svg(`<path d="M16 22V10a5 5 0 0 0-10 0v6" ${SVG_LINE}/>${arrowHead(6, 19, 180)}`); // U-turn
+  if (t.round) return roundaboutIcon(t.angle, t.exitNo);
+  const ang = TURN_ANGLE[t.type] ?? 0, r = Math.PI / 180;
   const bx = 12 - 4 * Math.sin(ang * r), by = 13; // the bend leans away from the turn so the arrow stays centred
   const ex = bx + 8 * Math.sin(ang * r), ey = by - 8 * Math.cos(ang * r);
-  return svg(`<path d="M${bx.toFixed(1)} 22V${by} L${ex.toFixed(1)} ${ey.toFixed(1)}" ${line}/>${head(ex + 1.5 * Math.sin(ang * r), ey - 1.5 * Math.cos(ang * r), ang)}`);
+  return svg(`<path d="M${bx.toFixed(1)} 22V${by} L${ex.toFixed(1)} ${ey.toFixed(1)}" ${SVG_LINE}/>${arrowHead(ex + 1.5 * Math.sin(ang * r), ey - 1.5 * Math.cos(ang * r), ang)}`);
 }
 function fmtDist(km) {
   if (km < 0.95) return `${Math.max(0, Math.round(km * 20) * 50)} m`;
   return `${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
 }
+const refIn = (name) => normRef(((name || "").match(/\b[ABNE] ?\d{1,3}[a-z]?\b/) || [])[0]);
+// One step as an object. Turns from .90 on carry the real angle, a roundabout flag (also for a
+// roundabout the routing service calls "keep left") and the road before; older ones don't.
+function turnAt(i) {
+  const t = state.route.turns[i];
+  return { km: t[0], type: t[1], name: t[2] || "", exitNo: t[3] || 0, angle: t[4] ?? null, round: t[1] === 7 || (t[5] || "").includes("r"), prev: t[6] || "", i };
+}
+// Steps that need no instruction: going straight on, leaving a roundabout (its entry already said
+// which exit), and on a motorway a "keep left/right" where you simply stay on the same road
+// (at an exit the routing service sometimes says "keep right" to stay on the A15). Kept at a
+// motorway junction (knooppunt: a junction without an exit number), where staying on the road
+// does mean picking the right lanes.
+function turnShown(t) {
+  if (t.type === 6 || t.type === 8 || t.type === 11) return false;
+  if (t.round || t.type === 9 || t.type === 10) return true;
+  if ([4, 5, 12, 13].includes(t.type)) {
+    const ref = refIn(t.name);
+    const same = ref && ref === refIn(t.prev);
+    const knooppunt = (state.route.exits || []).some(([km, ref2]) => !ref2 && Math.abs(km - t.km) < 1.5);
+    if (same && !knooppunt) return false;
+    if (!ref && t.name && t.name === t.prev && t.angle != null && Math.abs(t.angle) < 20) return false;
+  }
+  return true;
+}
 function nextTurn() {
   const turns = state.route?.turns;
   if (!turns?.length) return null;
   const k = state.user.km;
-  const i = turns.findIndex(([km]) => km > k + 0.03);
-  return i < 0 ? null : { km: turns[i][0], type: turns[i][1], name: turns[i][2], exitNo: turns[i][3], next: turns[i + 1] };
+  for (let i = 0; i < turns.length; i++) {
+    if (turns[i][0] <= k + 0.03) continue;
+    const t = turnAt(i);
+    if (turnShown(t)) return { ...t, next: turns[i + 1] };
+  }
+  return null;
+}
+// The street you're on according to the route (the last named step behind you).
+function routeStreetAt(k) {
+  const names = state.route?.stepNames || (state.route?.turns || []).filter((t) => t[2]).map((t) => [t[0], t[2]]);
+  let name = null;
+  for (const [km, n] of names) { if (km <= k + 0.02) name = n; else break; }
+  return name;
 }
 // What the turn leads onto: the numbered road there (as on the timeline), else the step's street name.
 function turnTarget(t) {
   if (t.type === 10) return `<span class="turn-txt">${esc(state.to?.label?.split(",")[0] || "Destination")}</span>`;
   const road = mainRoadAt(t.km + 0.4);
   if (road && road.fromKm >= t.km - 1.5 && road.fromKm <= t.km + 1.5) return roadPartBadge(withOverride(road));
-  const ref = normRef((t.name.match(/\b[ABDEMNRS] ?\d{1,4}[a-z]?\b/) || [])[0]);
+  const ref = refIn(t.name);
   if (ref) return roadBadge(ref, countryAt(t.km, t.km));
   // An unnamed slip road: name the road it leads to, if that comes right after.
   const name = t.name || (t.next && t.next[0] - t.km < 2 ? t.next[2] : "");
   return name ? `<span class="turn-txt">${esc(name)}</span>` : "";
 }
+const ORD = (n) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
+// For a roundabout: which exit, or "straight on" when the routing service didn't count them.
+function roundaboutText(t) {
+  if (!t.round) return "";
+  const what = t.exitNo ? `${ORD(t.exitNo)} exit` : t.angle != null && Math.abs(t.angle) < 30 ? "straight on" : "";
+  return what ? `<span class="turn-how">${what}</span>` : "";
+}
 function nextExit(turnKm) {
   const exits = state.route?.exits;
   const u = state.user;
   if (!exits?.length || !onMainRoadNow()) return null;
-  const x = exits.find(([km]) => km > u.km + 0.03);
+  const x = exits.find(([km, ref]) => km > u.km + 0.03 && ref); // numbered exits only (not knooppunten)
   if (!x || x[0] - u.km > 30) return null;
   if (turnKm != null && Math.abs(turnKm - x[0]) < 1.2) return { ...x, isTurn: true };
   return { km: x[0], ref: x[1], name: x[2] };
@@ -1760,9 +1829,10 @@ function turnRow() {
   const atExit = ex?.isTurn && ex[1] ? `<span class="exit-sign"><b>${esc(ex[1])}</b></span>` : "";
   const right = ex && !ex.isTurn
     ? `<div class="next-exit">${exitSign(ex.ref, ex.name)}<span class="dist">${fmtDist(ex.km - u.km)}</span></div>` : "";
+  // The last 500 m: the turn and its distance pulse white and black, so they stand out.
   const soon = t.km - u.km < 0.5 ? " soon" : "";
   // The next turn takes the place of your arrow, big, at the end of the road line.
-  return `<span class="turn-marker${soon}" aria-hidden="true">${turnIcon(t.type, t.exitNo)}</span><div class="turn${soon}"><span class="dist">${fmtDist(t.km - u.km)}</span>${atExit}${turnTarget(t)}</div>${right}`;
+  return `<span class="turn-marker${soon}" aria-hidden="true">${turnIcon(t)}</span><div class="turn${soon}"><span class="dist">${fmtDist(t.km - u.km)}</span>${roundaboutText(t)}${atExit}${turnTarget(t)}</div>${right}`;
 }
 
 // Second source of chargers in the Netherlands (NDW), for sites Open Charge Map doesn't have
@@ -1784,7 +1854,15 @@ async function addNdwSites(tiles, brands) {
       const id = `ndw-${x.id}`;
       if (state.stations.some((s) => s.id === id || s.status?.liveId === x.id)) continue;
       // Already there from Open Charge Map (same brand, same place): the live matching handles it.
-      if (state.stations.some((s) => brandKey(s) === x.brand && distKm(s, x) <= 0.25)) continue;
+      // But Open Charge Map sometimes lists a fast site with only slow sockets or no power at all
+      // (Fastned Blommendaal at Meerkerk), which hid it behind the power filter, and a hidden row
+      // never gets the live status that would correct it. NDW's power counts for it right away.
+      const twin = state.stations.find((s) => brandKey(s) === x.brand && distKm(s, x) <= 0.25);
+      if (twin) {
+        if (x.maxKw > (twin.maxKw || 0)) { twin.maxKw = x.maxKw; added++; }
+        if (!twin.points && x.points) twin.points = x.points;
+        continue;
+      }
       const pr = projectPoint(x.lat, x.lon);
       if (!pr || pr.d > NDW_CORRIDOR_KM || pr.km < state.user.km - PASSED_KM) continue;
       state.stations.push({
@@ -2253,7 +2331,14 @@ function locationLine() {
   else if (loc.kind === "place" && loc.ref) parts.push(roadBadge(loc.ref, loc.country || countryAt(u.km, u.km))
     + (dbg || (loc.city ? `<span class="place">${esc(loc.city)}</span>` : "")));
   else if (dbg) parts.push(dbg);
-  else if (loc.kind === "place" && (loc.city || loc.street)) parts.push(`<span class="place">${esc([loc.city, loc.street].filter(Boolean).join(", "))}</span>`);
+  else if (loc.kind === "place" && (loc.city || loc.street)) {
+    // On the route, the street the route takes wins over a side road next to it that the
+    // address lookup picked (De Rede, not the service road beside it).
+    const onRoute = u.offKm != null && u.offKm <= ON_ROUTE_KM && (u.acc == null || u.acc < 100);
+    const street = (onRoute && routeStreetAt(u.km)) || loc.street;
+    const shown = street && refIn(street) ? loc.street : street; // a road number belongs in a badge, not here
+    parts.push(`<span class="place">${esc([loc.city, shown].filter(Boolean).join(", "))}</span>`);
+  }
   else if (state.whereBusy) parts.push(`<span class="place">…</span>`);
   const warn = !sim && fixAge > 30000 ? `GPS ${fixAge < 90000 ? `${Math.round(fixAge / 1000)} s` : `${Math.round(fixAge / 60000)} min`} old · tap to retry`
     : u.acc != null && u.acc > 100 ? `rough (±${Math.round(u.acc)} m)`
@@ -2287,10 +2372,16 @@ function onPosition(lonlat, accuracy, heading = null, speed = null) {
     state.route.viaKm = state.route.viaKms[0] ?? null;
     save();
   }
-  // Arrived: within 150 m of the end of the route, after having been further away.
+  // Arrived: within 150 m of the end of the route (or of the destination itself), after having been
+  // further away. "Further away" is kept with the route, so a reload near the end doesn't lose it,
+  // and a route planned from more than 500 m away counts too. A rough fix (up to 150 m) is enough
+  // when it puts you at the end.
   const left = state.route.distanceKm - pr.km;
-  if (left > 0.5) state.wasAway = true;
-  if (!state.arrived && state.wasAway && reliable && pr.d < 0.3 && left < 0.15) celebrateArrival();
+  if (left > 0.5 && !state.route.wasAway) { state.route.wasAway = true; save(); }
+  const away = state.wasAway || state.route.wasAway || state.route.distanceKm > 0.5;
+  const toDest = state.to && Number.isFinite(state.to.lat) ? haversine([state.to.lon, state.to.lat], lonlat) : Infinity;
+  const near = (pr.d < 0.3 && left < 0.15) || toDest < 0.15;
+  if (!state.arrived && away && (accuracy == null || accuracy < 150) && near) celebrateArrival();
   if (state.arrived) state.offCount = 0; // parking past the destination isn't leaving the route
   // Right after planning, still near the start: the start was a rough position, not a wrong turn.
   // Plan again from here without the "left the route" message.
@@ -2825,6 +2916,11 @@ $("list").addEventListener("touchstart", () => { touchingList = true; }, { passi
 for (const ev of ["touchend", "touchcancel"]) $("list").addEventListener(ev, () => { touchingList = false; lastUserScroll = Date.now(); }, { passive: true });
 // ---- tap: update (at most once a minute) · press and hold: navigate there
 const TAP_MIN_MS = 60 * 1000;
+// A charger whose last lookup gave nothing usable (the "–" or "?" ring) may be tapped again right
+// away, once; if that try fails too, the minute applies. (Waiting a minute for a tap would be no
+// better than the automatic round.)
+const statusUnusable = (s) => !s.status || s.status.available == null;
+const retryAllowed = (s, now = Date.now()) => statusUnusable(s) && !(s.retryAt && now - s.retryAt < TAP_MIN_MS);
 let toastTimer = null;
 function toast(text, ms = 2200) {
   clearTimeout(toastTimer);
@@ -2849,11 +2945,13 @@ $("list").addEventListener("click", (e) => {
   // refreshFrance() either asks or says when France can be asked again.
   if (members.some((s) => s.country === "FR")) {
     refreshFrance().then((why) => { if (why) toast(why, 3200); });
-    const rest = members.filter((s) => s.country !== "FR" && (!s.statusAt || now - s.statusAt >= TAP_MIN_MS));
+    const rest = members.filter((s) => s.country !== "FR" && (!s.statusAt || now - s.statusAt >= TAP_MIN_MS || retryAllowed(s, now)));
+    for (const s of rest) if (statusUnusable(s)) s.retryAt = now;
     if (rest.length) refreshOne(rest.map((s) => s.id));
     return;
   }
-  const due = members.filter((s) => !s.statusAt || now - s.statusAt >= TAP_MIN_MS);
+  const due = members.filter((s) => !s.statusAt || now - s.statusAt >= TAP_MIN_MS || retryAllowed(s, now));
+  for (const s of due) if (statusUnusable(s)) s.retryAt = now;
   if (!due.length) {
     const last = Math.max(...members.map((s) => s.statusAt || 0));
     const next = Math.min(...members.map((s) => s.statusAt || 0)) + TAP_MIN_MS - now; // the first one that's due again
@@ -3999,8 +4097,8 @@ function helpHtml() {
   <h3>The screen while driving</h3>
   <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. Don't want these rows? In the brands button (top left), set <b>Main roads on the line</b> to <b>Changes only</b>, or just tap a road row (tap a road badge on the line to bring them back): then a badge sits on the line only where the road changes between chargers. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
-  <p>The <b>☰ menu</b> top left holds New route and Help. Top right is the <b>status time</b> of the chargers (now, or how many minutes old; tap it to update, at most once a minute).</p>
-  <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto (a roundabout shows its exit number). On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
+  <p>The <b>☰ menu</b> top left holds New route and Help. Top right is the <b>status time</b> of the chargers (now, or how many minutes old; tap it to update, at most once a minute, but right away once after a failed update).</p>
+  <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto. A roundabout is drawn with its exit where the road really leaves and the exit number in the middle ("2nd exit", or "straight on"). In the last 500 m the arrow and distance pulse between white and black. A "keep left/right" where you simply stay on the same motorway isn't shown. On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Free or not</h3>
   <div class="legend">
@@ -4037,7 +4135,7 @@ function helpHtml() {
   <ul>
     <li><b>Scroll up</b> to see chargers further ahead. The blue arrow brings you back to the next ones.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
-    <li><b>Tap a charger</b> to update its status (at most once a minute). <b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps or Waze (tap Route or Go there to drive to it) or Flitsmeister, or to copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
+    <li><b>Tap a charger</b> to update its status (at most once a minute; a charger without a usable status can be tapped again right away, once). <b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps or Waze (tap Route or Go there to drive to it) or Flitsmeister, or to copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${esc(awakeText())} If it still turns off, check that Low Power Mode is off.</li>
     <li>When you arrive, there's a small celebration, and the screen may turn off again.</li>
@@ -4074,7 +4172,16 @@ $("newRoute").addEventListener("click", closeMenu);
 // Tap the status time: update the chargers on screen (at most once a minute, like a tap on a row).
 $("age").addEventListener("click", () => {
   if (statusBusy()) return;
-  if (state.statusAt && Date.now() - state.statusAt < TAP_MIN_MS) { toast("Updated less than a minute ago"); return; }
+  const now = Date.now();
+  // After a failed update, or with chargers on screen that got nothing usable: one try right away.
+  if (state.statusAt && now - state.statusAt < TAP_MIN_MS) {
+    const failedRetry = state.statusError && !(state.topRetryAt && now - state.topRetryAt < TAP_MIN_MS);
+    const empty = stationsInView().filter((s) => s.country !== "FR" && retryAllowed(s, now));
+    if (failedRetry) { state.topRetryAt = now; for (const s of empty) s.retryAt = now; refreshStatus(true); return; }
+    if (empty.length) { for (const s of empty) s.retryAt = now; refreshOne(empty.map((s) => s.id)); return; }
+    toast(`Updated less than a minute ago · next in ${waitText(state.statusAt + TAP_MIN_MS - now)}`);
+    return;
+  }
   refreshStatus(true);
 });
 $("helpClose").addEventListener("click", () => { $("help").hidden = true; });

@@ -40,7 +40,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-15.88";
+const WORKER_VERSION = "2026-11-15.90";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -444,6 +444,55 @@ const snapRadii = (points) => points.map(() => SNAP_RADIUS_M);
 // Routes are kept 15 minutes per Worker copy, by their exact points: picking a route option plans
 // through the same points the options were made with, so its route needn't be asked for again.
 const ROUTE_TTL_MS = 15 * 60 * 1000;
+// ---- Turn geometry for turn-by-turn: how much the road really turns at each step, worked out from
+// the full route shape (the step types alone call a roundabout where you go straight a "keep left").
+function pointBack(route, i, km) { // index about km before i
+  let j = i;
+  while (j > 0 && route.km[i] - route.km[j] < km) j--;
+  return j;
+}
+function pointAhead(route, i, km) {
+  let j = i;
+  while (j < route.coords.length - 1 && route.km[j] - route.km[i] < km) j++;
+  return j;
+}
+const signedTurn = (a, b) => ((b - a + 540) % 360) - 180; // + = right
+function turnsOf(route) {
+  const C = route.coords;
+  const out = [];
+  let prevName = "";
+  for (const st of route.steps) {
+    const name = st.name && st.name !== "-" ? st.name : "";
+    if (!st.way_points) continue;
+    if ([6, 11].includes(st.type)) { if (name) prevName = name; continue; }
+    const i0 = st.way_points[0], i1 = st.way_points[1] ?? i0;
+    const b0 = pointBack(route, i0, 0.06);
+    const before = b0 < i0 ? bearingDeg(C[b0], C[i0]) : null;
+    // After: for a roundabout from where you leave it, otherwise 150-250 m on.
+    const from = st.type === 7 || st.type === 8 ? i1 : pointAhead(route, i0, 0.15);
+    const to = pointAhead(route, from, 0.08);
+    const after = to > from ? bearingDeg(C[from], C[to]) : null;
+    const angle = before != null && after != null ? Math.round(signedTurn(before, after)) : null;
+    // Roundabout-shaped: within 200 m a right, then a longer left, then a right (right-hand traffic).
+    let flags = "";
+    if (st.type !== 7 && before != null) {
+      let pos = 0, neg = 0, last = before;
+      const end = pointAhead(route, i0, 0.2);
+      for (let i = i0; i < end; i++) {
+        if (route.km[i + 1] - route.km[i] < 0.004) continue;
+        const b = bearingDeg(C[i], C[i + 1]);
+        const d = signedTurn(last, b);
+        if (d > 0) pos += d; else neg -= d;
+        last = b;
+      }
+      if (pos > 25 && neg > 60 && pos + neg > 120) flags += "r";
+    }
+    out.push([Math.round(route.km[i0] * 100) / 100, st.type, name, st.exit_number || 0, angle, flags, prevName]);
+    if (name) prevName = name;
+  }
+  return out;
+}
+
 // The routing service's raw answer per route object (kept only as long as the route itself is cached),
 // so a /plan in debug mode can store it.
 const rawRoute = new WeakMap();
@@ -1436,8 +1485,13 @@ async function handlePlan(request, env) {
       // Turn-by-turn for your row: [km where it happens, type, road name, roundabout exit] per step
       // (type: 0 left, 1 right, 2/3 sharp, 4/5 slight, 6 straight, 7 roundabout, 9 U-turn, 10 arrive,
       // 11 depart, 12 keep left, 13 keep right). Already in the routing answer, so no extra calls.
-      turns: route.steps.filter((st) => st.way_points && ![6, 11].includes(st.type))
-        .map((st) => [Math.round(route.km[st.way_points[0]] * 100) / 100, st.type, st.name && st.name !== "-" ? st.name : "", st.exit_number || 0]),
+      // Each: [km, type, road name, roundabout exit, net turn angle (degrees, + = right), flags, name of
+      // the road before]. Flag "r": the shape is a roundabout even if the step doesn't say so (a
+      // "keep left" into an untagged roundabout where you go straight on).
+      turns: turnsOf(route),
+      // The road name at every step, also where you just go on: the street you're on (location line).
+      stepNames: route.steps.filter((st) => st.way_points && st.name && st.name !== "-")
+        .map((st) => [Math.round(route.km[st.way_points[0]] * 100) / 100, st.name]),
       debugSteps: route.steps.filter((st) => st.name && st.name !== "-" && st.way_points).map((st) => [Math.round(route.km[st.way_points[0]] * 10) / 10, st.name]).slice(0, 120),
       coords: keep.map((i) => [+route.coords[i][0].toFixed(5), +route.coords[i][1].toFixed(5)]),
       km: keep.map((i) => Math.round(route.km[i] * 100) / 100),

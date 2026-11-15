@@ -32,14 +32,34 @@ def now():
     return datetime.now(timezone.utc)
 
 
-def due():
-    if os.environ.get("FORCE") == "true":
-        return True, "forced"
-    hours = 12
+def interval():
+    """Hours between updates from the admin page; 0 = paused."""
     try:
-        hours = int(json.loads(get(f"{WORKER}/closures/schedule", 20)).get("hours") or 12)
+        h = json.loads(get(f"{WORKER}/closures/schedule", 20)).get("hours")
+        return 12 if h is None else int(h)
     except Exception as e:
         print("Interval not readable, using 12 h:", e)
+        return 12
+
+
+def mark_paused(paused):
+    """Paused: the file keeps its closures but says so, and the app shows a notice instead of them."""
+    try:
+        d = json.load(open(OUT))
+    except Exception:
+        return
+    if bool(d.get("paused")) == paused:
+        return
+    d["paused"] = paused
+    json.dump(d, open(OUT, "w"), separators=(",", ":"), ensure_ascii=False)
+    print("Marked", "paused" if paused else "running")
+
+
+def due(hours):
+    if os.environ.get("FORCE") == "true":
+        return True, "forced"
+    if hours == 0:
+        return False, "paused on the admin page"
     try:
         last = json.load(open(OUT)).get("generatedAt")
         age = (now() - datetime.fromisoformat(last)).total_seconds() / 3600
@@ -276,11 +296,15 @@ def autobahn():
 
 
 def main():
-    ok, why = due()
+    hours = interval()
+    ok, why = due(hours)
     print("Due:" if ok else "Skip:", why)
     if not ok:
+        mark_paused(hours == 0)
         return
-    out = {"generatedAt": now().isoformat(timespec="seconds"), "sources": {}, "closures": []}
+    # A manual run while paused fetches once; the file then says paused again (so the app warns).
+    out = {"generatedAt": now().isoformat(timespec="seconds"), "hours": hours, "paused": hours == 0,
+           "sources": {}, "closures": []}
     for key, fn in (("nl", ndw), ("de", autobahn)):
         try:
             items, info = fn()

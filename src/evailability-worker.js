@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.110";
+const WORKER_VERSION = "2026-11-16.111";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -211,11 +211,11 @@ function checkAdmin(request, env) {
 // meaning (if any), else the default. Secrets (API keys, passwords) stay in Cloudflare.
 const SETTINGS = [
   { key: "paidUntil", type: "date", label: "Workers Paid until", def: () => "",
-    help: "The last day of a Cloudflare Workers Paid period (Billing > Subscriptions, 'Ending on'). Until then: France without a gap between updates, a short pause after an error, and the usage page shows the Paid allowances. After it everything returns to the free settings by itself. Empty: free plan." },
+    help: "The last day of a Cloudflare Workers Paid period (Billing > Subscriptions, 'Ending on'). Until then: France updates by itself (every 2 minutes unless set below), a short pause after an error, more chargers ahead kept fresh, and the usage page shows the Paid allowances. After it everything returns to the free settings by itself. Empty: free plan." },
   { key: "frLive", type: "bool", label: "France live (tap)", def: (env) => env.FR_LIVE !== "off",
     help: "Off: French chargers show no live data and nothing is read. Each read costs more CPU than the free plan allows." },
-  { key: "frGapMin", type: "number", min: 1, max: 60, label: "France: minutes between updates (free plan)", def: () => 5,
-    help: "On the free plan: a tap within this time gets the last read instead of a new one. Not used while Workers Paid is on (see above)." },
+  { key: "frGapMin", type: "number", min: 1, max: 60, label: "France: minutes between updates", def: () => "",
+    help: "Empty: 2 minutes on Workers Paid (France then also updates by itself at this interval), 5 on the free plan. A value you enter belongs to the plan it was entered under: when the plan changes (the paid-until date passes), it is dropped and the new plan's default applies. On the free plan, a tap within this time gets the last read." },
   { key: "ndwDiscovery", type: "bool", label: "Netherlands: extra chargers from NDW", def: (env) => env.NDW_DISCOVERY !== "off",
     help: "Sites Open Charge Map doesn't have, found in NDW's live data along the route." },
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
@@ -224,6 +224,7 @@ const SETTINGS = [
     help: "How often the GitHub job fetches planned closures (NL, DE). It wakes every 6 hours and skips until this much time has passed; Run workflow on GitHub always updates." },
 ];
 let SET = null; // this request's settings (loaded at the start of each request, see route)
+let SAVED = {};  // what's actually saved (incl. hidden keys such as frGapPlan)
 async function loadSettings(env) {
   let saved = memoGet("settings");
   if (saved === undefined) {
@@ -234,6 +235,7 @@ async function loadSettings(env) {
   const out = {};
   for (const d of SETTINGS) out[d.key] = saved[d.key] !== undefined && saved[d.key] !== "" ? saved[d.key] : d.def(env);
   SET = out;
+  SAVED = saved;
   return { values: out, saved };
 }
 const setting = (env, key) => (SET || {})[key] ?? SETTINGS.find((d) => d.key === key)?.def(env);
@@ -241,7 +243,14 @@ const setting = (env, key) => (SET || {})[key] ?? SETTINGS.find((d) => d.key ===
 const paidUntil = (env) => String(setting(env, "paidUntil") || "");
 const isPaid = (env) => { const u = paidUntil(env); return !!u && new Date().toISOString().slice(0, 10) <= u; };
 // France timing per plan: on Paid a read costs nothing that matters, so no gap and a short pause.
-const frGapMinNow = (env) => (isPaid(env) ? 0 : Number(setting(env, "frGapMin")) || 5);
+const frGapDefault = (env) => (isPaid(env) ? 2 : 5);
+const frGapMinNow = (env) => {
+  const v = Number(SAVED.frGapMin);
+  const plan = isPaid(env) ? "paid" : "free";
+  // A saved value only counts under the plan it was entered under (the one value from before this
+  // existed was set for the paid trial, so untagged counts as paid).
+  return v > 0 && (SAVED.frGapPlan || "paid") === plan ? v : frGapDefault(env);
+};
 const frPauseMinNow = (env) => (isPaid(env) ? 2 : 15);
 
 async function handleSettings(request, env) {
@@ -269,7 +278,9 @@ async function handleSettings(request, env) {
         if (!Number.isFinite(v) || v < d.min || v > d.max) throw new HttpError(400, `${d.label}: ${d.min} to ${d.max}`);
       } else v = String(v).trim().slice(0, 100);
       next[d.key] = v;
+      if (d.key === "frGapMin") next.frGapPlan = isPaid(env) ? "paid" : "free"; // the plan it was entered under
     }
+    if (given.frGapMin === null || given.frGapMin === "") delete next.frGapPlan;
     await env.USAGE.put("settings", JSON.stringify(next));
     countCall("KV writes");
     memoSet("settings", next, 60 * 1000);
@@ -277,7 +288,9 @@ async function handleSettings(request, env) {
   const { values, saved } = await loadSettings(env);
   return json(request, {
     settings: SETTINGS.map((d) => ({ key: d.key, type: d.type, label: d.label, help: d.help, min: d.min, max: d.max, options: d.options,
-      value: values[d.key], default: d.def(env), changed: saved[d.key] !== undefined })),
+      value: d.key === "frGapMin" && saved.frGapMin !== undefined && (saved.frGapPlan || "paid") !== (isPaid(env) ? "paid" : "free") ? "" : values[d.key],
+      default: d.key === "frGapMin" ? frGapDefault(env) : d.def(env),
+      changed: d.key === "frGapMin" ? saved.frGapMin !== undefined && (saved.frGapPlan || "paid") === (isPaid(env) ? "paid" : "free") : saved[d.key] !== undefined })),
     note: "Other Worker copies pick up a change within a minute.",
   });
 }
@@ -1366,7 +1379,9 @@ function frSitesNear(index, brand, lat, lon, km) {
 let frSnapState = null; // { at, promise } — one read shared by every request in this Worker copy
 async function frSnapshot(index) {
   // Free plan: at most one read per gap. Paid: a read is reused for a minute at most.
-  const ttl = isPaid(null) ? 110 * 1000 : Math.max(FR_SNAPSHOT_MS, frGapMinNow(null) * 60 * 1000 - 30 * 1000);
+  // Paid: a read is reused until just before the next update is due. Free: at most one read per gap.
+  const ttl = isPaid(null) ? Math.max(50 * 1000, frGapMinNow(null) * 60 * 1000 - 10 * 1000)
+    : Math.max(FR_SNAPSHOT_MS, frGapMinNow(null) * 60 * 1000 - 30 * 1000);
   if (frSnapState && Date.now() - frSnapState.at < ttl) return frSnapState.promise;
   const promise = frWhole(index.ids).then((w) => ({ rows: w.rows, at: new Date().toISOString() }));
   frSnapState = { at: Date.now(), promise };

@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.102";
+const WORKER_VERSION = "2026-11-16.103";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1358,7 +1358,7 @@ async function frStatusFor(stations) {
 // request every 10 s per IP is allowed across all endpoints (2 per minute per stall, per token). So
 // Belgium is tap-only and stall by stall: /be-status matches the app's pins to index sites (no call to
 // Eco-Movement), /be-evse asks one stall; the app paces them and fills the ring as answers come in.
-const BE_INDEX_URL = "https://remconld.github.io/apps/data/be-fast-sites.json";
+const BE_INDEX_URL = "https://remconld.github.io/apps/data/be-fast-sites.json?v=2"; // bump v after a rebuild (Cloudflare caches it an hour)
 const BE_STATUS_BASE = "https://nap-be.eco-movement.com/datex2/v1/status/";
 const BE_GAP_MS = 10 * 1000;       // Eco-Movement: 1 request per 10 s per IP
 const BE_EVSE_TTL_MS = 60 * 1000;  // a stall's answer is reused for a minute

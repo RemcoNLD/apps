@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.108";
+const WORKER_VERSION = "2026-11-16.109";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1623,9 +1623,11 @@ async function observe(env, id, nowState) {
 async function statusForMany(stations, env) {
   const out = {};
   // Stations arrive in route order, so these are the ones you reach first.
-  const nl = stations.filter((s) => s.country === "NL").slice(0, MAX_STATUS_LOOKUPS);
-  const at = stations.filter((s) => s.country === "AT").slice(0, MAX_AT_LOOKUPS);
-  const de = stations.filter((s) => s.country === "DE").slice(0, MAX_DE_LOOKUPS);
+  // Workers Paid: far more outgoing calls per request are allowed, so more sites per round.
+  const paid = isPaid(env);
+  const nl = stations.filter((s) => s.country === "NL").slice(0, paid ? 60 : MAX_STATUS_LOOKUPS);
+  const at = stations.filter((s) => s.country === "AT").slice(0, paid ? 12 : MAX_AT_LOOKUPS);
+  const de = stations.filter((s) => s.country === "DE").slice(0, paid ? 40 : MAX_DE_LOOKUPS);
   const list = [...nl, ...de, ...at];
   for (let i = 0; i < list.length; i += 5) { // max 5 at a time (NDW allows 10 per second)
     const batch = list.slice(i, i + 5);
@@ -1757,7 +1759,7 @@ async function handlePlan(request, env) {
   // for the chargers it shows. With many brands, asking for everything would waste quota.
   const det = cachedDetours(route, stations);
   // Only the first few (the ones on screen right after planning); the app fetches the rest itself.
-  const first = stations.slice(0, 8);
+  const first = stations.slice(0, isPaid(env) ? 20 : 8);
   const status = await statusForMany(first, env);
   const checked = new Set(first.filter((s) => status[s.id] != null || !LIVE_COUNTRIES.has(s.country)).map((s) => s.id));
   stations = stations.map((s) => {
@@ -1796,6 +1798,7 @@ async function handlePlan(request, env) {
     },
     stations,
     brands,
+    paid: isPaid(env), // Workers Paid: the app updates France by itself and more chargers ahead
     vias, // as used: a town via point moved onto its nearest main road
     // Map tiles along the Dutch part of the route, for the second source of chargers (NDW).
     ndwTiles: ndwTilesAlong(route, env),
@@ -2496,7 +2499,7 @@ async function handleLogo(request, env, key) {
 async function handleStatus(request, env) {
   const body = await request.json().catch(() => ({}));
   const stations = Array.isArray(body.stations) ? body.stations : [];
-  return json(request, { status: await statusForMany(stations, env), checkedAt: new Date().toISOString() });
+  return json(request, { status: await statusForMany(stations, env), checkedAt: new Date().toISOString(), paid: isPaid(env) });
 }
 
 // ---------------------------------------------------------------- access

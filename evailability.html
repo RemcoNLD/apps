@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.116"><!-- shown on the apps page; keep equal to APP_VERSION below -->
+<meta name="app-version" content="2026-11-16.117"><!-- shown on the apps page; keep equal to APP_VERSION below -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1076,7 +1076,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.116";
+const APP_VERSION = "2026-11-16.117";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1126,6 +1126,12 @@ const tapOnly = (s) => s.country === "FR" || s.country === "BE";
 const viaStatus = (s) => !tapOnly(s);
 // Workers Paid (the server says so with each answer, and switches back by itself after the paid-until
 // date): France updates by itself like NL/DE, and more chargers ahead are kept up to date.
+// Any answer that says Paid also lifts the France gap straight away (it was remembered from the free plan).
+function setPaid(v) {
+  if (typeof v !== "boolean") return;
+  state.paid = v;
+  if (v) { FR_MIN_GAP_MS = 0; FR_FAIL_PAUSE_MS = Math.min(FR_FAIL_PAUSE_MS, 2 * 60 * 1000); }
+}
 const PAID_AHEAD = 15;        // chargers ahead (beyond those on screen) updated each round
 const PAID_STATUS_BATCH = 8;  // stations per /status call
 const PAID_FR_GAP_MS = 2 * 60 * 1000; // France by itself: every 2 minutes (each read is the whole country, 9.5 MB)
@@ -1485,7 +1491,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.route = data.route;
   state.stations = data.stations;
   state.planBrands = data.brands || ["ionity"];
-  state.paid = !!data.paid;
+  setPaid(!!data.paid);
   // Only the first few come with a status; the rest are fetched once they're on screen.
   // French ones show ↻ until you tap one (France is tap-only).
   for (const s of state.stations) s.statusAt = s.statusChecked === false || tapOnly(s) ? null : Date.now();
@@ -2655,7 +2661,7 @@ async function fetchStatus(stations) {
   const status = {};
   for (let i = 0; i < batches.length; i += 3) { // 3 batches at a time
     const res = await Promise.all(batches.slice(i, i + 3).map((b) => api("/status", { stations: b }, 20000)));
-    for (const r of res) { Object.assign(status, r.status); if (typeof r.paid === "boolean") state.paid = r.paid; }
+    for (const r of res) { Object.assign(status, r.status); setPaid(r.paid); }
   }
   applyStatus(status);
 }
@@ -2920,7 +2926,7 @@ async function refreshFrance(tap = null) { // tap: the tapped row (null when the
     if (r.gapMin >= 0) FR_MIN_GAP_MS = r.gapMin * 60 * 1000; // 0 on Workers Paid, else the usage page's setting
     if (r.pauseMin > 0) FR_FAIL_PAUSE_MS = r.pauseMin * 60 * 1000;
     applyStatus(r.status || {});
-    if (typeof r.paid === "boolean") state.paid = r.paid;
+    setPaid(r.paid);
     state.frAt = Date.now();
     state.frError = null;
   } catch (e) {

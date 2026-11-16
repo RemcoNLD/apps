@@ -1076,7 +1076,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.111";
+const APP_VERSION = "2026-11-16.112";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2871,15 +2871,26 @@ async function refreshFrance() {
   if (!ahead.length) return "";
   const now = Date.now();
   const mins = (ms) => Math.max(1, Math.ceil(ms / 60000));
-  if (now < (state.frOffUntil || 0)) {
+  // Debug mode: a second tap within 5 s pushes through the pause or the gap (not the server's off
+  // switch). Each read costs more CPU than the free plan allows, so repeated forcing can use up the
+  // Worker's allowance for everything (14 Nov). The server still reuses a read of the last 2.5 min.
+  const forced = debugOn() && now - (state.frForceArmedAt || 0) < 5000;
+  const push = (text) => {
+    if (!debugOn()) return text;
+    state.frForceArmedAt = now;
+    return `${text} · debug: tap again to update anyway`;
+  };
+  if (now < (state.frOffUntil || 0) && !(forced && state.frOffReason !== "off")) {
     return state.frOffReason === "off" ? "France live is switched off on the server"
-      : `France paused after an error · next update in ${waitText(state.frOffUntil - now)}`;
+      : push(`France paused after an error · next update in ${waitText(state.frOffUntil - now)}`);
   }
   const since = now - (state.frTriedAt || 0);
-  if (since < FR_MIN_GAP_MS) {
+  if (since < FR_MIN_GAP_MS && !forced) {
     const ago = Math.floor(since / 60000);
-    return `France checked ${ago ? `${ago} min` : "less than a minute"} ago · next update in ${waitText(FR_MIN_GAP_MS - since)}`;
+    return push(`France checked ${ago ? `${ago} min` : "less than a minute"} ago · next update in ${waitText(FR_MIN_GAP_MS - since)}`);
   }
+  state.frForceArmedAt = 0;
+  if (forced) toast("France: forced update (debug) · this read may hit the free plan's CPU limit", 3200);
   frBusy = true;
   state.frTriedAt = now;
   const shown = new Set(stationsInView().map((s) => s.id));

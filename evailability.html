@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.115"><!-- shown on the apps page; keep equal to APP_VERSION below -->
+<meta name="app-version" content="2026-11-16.116"><!-- shown on the apps page; keep equal to APP_VERSION below -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1076,7 +1076,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.115";
+const APP_VERSION = "2026-11-16.116";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1539,7 +1539,7 @@ function renderDebug() {
   const hm = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }).replace(":", "");
   const app = `A${num(APP_VERSION)}${latestApp ? (latestApp === APP_VERSION ? `<span class="ok">✓</span>` : `<span class="bad">&gt;${num(latestApp)}</span>`) : ""}`;
   const w = workerInfo?.error ? `<span class="bad">W?</span>`
-    : workerInfo ? `W${num(workerInfo.version)}${workerInfo.deployedAt ? `@${hm(workerInfo.deployedAt)}` : ""}${workerInfo.deployId ? `.${workerInfo.deployId.slice(0, 4)}` : ""}`
+    : workerInfo ? `W${num(workerInfo.version)}${state.paid ? "$" : ""}${workerInfo.deployedAt ? `@${hm(workerInfo.deployedAt)}` : ""}${workerInfo.deployId ? `.${workerInfo.deployId.slice(0, 4)}` : ""}`
     : "W…";
   const r = state.route;
   const rl = r?.roads || [];
@@ -2747,7 +2747,7 @@ function statusBusy() {
 async function refreshOne(ids) {
   const picked = state.stations.filter((x) => ids.includes(x.id));
   if (picked.some((x) => x.country === "FR")) {
-    refreshFrance().then((why) => { if (why) toast(why, 3200); });
+    refreshFrance(ids.join(" ")).then((why) => { if (why) toast(why, 3200); });
   }
   const list = picked.filter((x) => !tapOnly(x) && !(x.loadingAt && Date.now() - x.loadingAt < 20000));
   if (!list.length) return;
@@ -2880,7 +2880,7 @@ async function refreshStatus(force = true) {
 // France: all French chargers ahead in one lookup, only on a tap. Returns null when it asked,
 // otherwise why not, as a text for a toast.
 let frBusy = false;
-async function refreshFrance() {
+async function refreshFrance(tap = null) { // tap: the tapped row (null when the app updates by itself)
   if (frBusy) return "France is being updated";
   if (!state.route) return "";
   const ahead = upcoming().filter((s) => s.country === "FR").slice(0, FR_MAX);
@@ -2890,10 +2890,11 @@ async function refreshFrance() {
   // Debug mode: a second tap within 5 s pushes through the pause or the gap (not the server's off
   // switch). Each read costs more CPU than the free plan allows, so repeated forcing can use up the
   // Worker's allowance for everything (14 Nov). The server still reuses a read of the last 2.5 min.
-  const forced = debugOn() && now - (state.frForceArmedAt || 0) < 5000;
+  // Only a second tap on the same row counts (a scroll that ends on another row is no confirmation).
+  const forced = debugOn() && tap && state.frForceRow === tap && now - (state.frForceArmedAt || 0) < 5000;
   const push = (text) => {
-    if (!debugOn()) return text;
-    state.frForceArmedAt = now;
+    if (!debugOn() || !tap) return text;
+    state.frForceArmedAt = now; state.frForceRow = tap;
     return `${text} · debug: tap again to update anyway`;
   };
   if (now < (state.frOffUntil || 0) && !(forced && state.frOffReason !== "off")) {
@@ -3199,7 +3200,7 @@ $("list").addEventListener("click", (e) => {
   // French chargers follow France's own gap (usage page setting), not the 1-minute tap rule:
   // refreshFrance() either asks or says when France can be asked again.
   if (members.some(tapOnly)) {
-    if (members.some((s) => s.country === "FR")) refreshFrance().then((why) => { if (why) toast(why, 3200); });
+    if (members.some((s) => s.country === "FR")) refreshFrance(row.dataset.ids).then((why) => { if (why) toast(why, 3200); });
     if (members.some((s) => s.country === "BE")) refreshBelgium(members).then((why) => { if (why) toast(why, 3200); });
     const rest = members.filter((s) => !tapOnly(s) && (!s.statusAt || now - s.statusAt >= TAP_MIN_MS || retryAllowed(s, now)));
     for (const s of rest) if (statusUnusable(s)) s.retryAt = now;

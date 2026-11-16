@@ -36,6 +36,12 @@ a.app.dragging { transition:box-shadow .18s ease; z-index:2; box-shadow:0 12px 2
 #refresh:active { transform:scale(.96); }
 #refresh:focus-visible { outline:3px solid var(--ink); outline-offset:2px; }
 @media (prefers-reduced-motion: reduce) { a.app { transition:none; } }
+  /* Version tag, top right of a tile; green when it changed since you last opened that app */
+  a.app { position: relative; }
+  a.app .name { padding-right: 3.2em; }
+  .ver { position: absolute; top: 10px; right: 14px; font-size: .8rem; font-weight: 600; color: var(--muted, #8a97a0);
+    padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; opacity: .8; }
+  .ver.new { color: #43b96d; opacity: 1; }
 </style>
 </head>
 <body>
@@ -166,10 +172,49 @@ a.app.dragging { transition:box-shadow .18s ease; z-index:2; box-shadow:0 12px 2
 })();
 </script>
 <script>
-// Reload from the network, bypassing the cached copy (home-screen apps have no pull-to-refresh)
-document.getElementById("refresh").addEventListener("click", () => {
-  location.replace(location.pathname + "?v=" + Date.now());
-});
+// Version per app (top right of its tile), read fresh from the site: the <meta name="app-version">
+// near the top of each app's page, fetched past every cache. Each tile then links to its file with
+// ?v=<version>: a URL the phone hasn't seen before, so it loads that version straight away instead
+// of an older cached copy. Green: changed since you last opened it from here.
+(function () {
+  const SEEN = "apps-seen-versions";
+  let seen = {};
+  try { seen = JSON.parse(localStorage.getItem(SEEN) || "{}"); } catch (e) {}
+  const tiles = [...document.querySelectorAll("a.app")].filter((a) => !/^https?:/.test(a.getAttribute("href")));
+  const short = (v) => { const m = /\d{4}-(\d\d)-(\d\d)\.(\d+)/.exec(v); return m ? "v" + m[3] : v; };
+  async function check(a) {
+    const base = a.dataset.base || (a.dataset.base = a.getAttribute("href"));
+    let tag = a.querySelector(".ver");
+    if (!tag) { tag = document.createElement("span"); tag.className = "ver"; a.appendChild(tag); }
+    tag.textContent = "…"; tag.classList.remove("new");
+    try {
+      const res = await fetch(base + (base.includes("?") ? "&" : "?") + "t=" + Date.now(), { cache: "no-store", headers: { Range: "bytes=0-1023" } });
+      const head = (await res.text()).slice(0, 1024);
+      const v = /name="app-version" content="([^"]+)"/.exec(head)?.[1];
+      if (!v) { tag.remove(); return; }
+      tag.textContent = short(v);
+      tag.title = "Version " + v;
+      a.href = base + (base.includes("?") ? "&" : "?") + "v=" + encodeURIComponent(v);
+      a.dataset.ver = v;
+      if (seen[a.dataset.id] && seen[a.dataset.id] !== v) tag.classList.add("new");
+      if (!seen[a.dataset.id]) { seen[a.dataset.id] = v; save(); }
+    } catch (e) { tag.textContent = "?"; tag.title = "Version couldn’t be checked"; }
+  }
+  function save() { try { localStorage.setItem(SEEN, JSON.stringify(seen)); } catch (e) {} }
+  const checkAll = () => tiles.forEach(check);
+  checkAll();
+  // Opening an app marks its version as seen.
+  document.getElementById("list").addEventListener("click", (e) => {
+    const a = e.target.closest("a.app[data-ver]");
+    if (a) { seen[a.dataset.id] = a.dataset.ver; save(); }
+  });
+  // Coming back to this page (home-screen apps stay open in the background): check again.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) checkAll(); });
+  // Refresh: this page itself fresh from the network, which then checks every app again.
+  document.getElementById("refresh").addEventListener("click", () => {
+    location.replace(location.pathname + "?v=" + Date.now());
+  });
+})();
 </script>
 </body>
 </html>

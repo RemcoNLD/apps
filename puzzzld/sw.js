@@ -1,5 +1,6 @@
 // Puzzzld offline cache: serve from cache straight away, refresh it in the background.
 const CACHE = "puzzzld-v1";
+// Opened from the apps page with ?v=<version>: network first, so a new version shows at once.
 const CORE = ["./", "index.html", "words/nl-cross.txt"];
 
 self.addEventListener("install", e => {
@@ -16,6 +17,10 @@ self.addEventListener("fetch", e => {
   const fonts = /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname);
   if (!ours && !fonts) return;
   e.respondWith(caches.open(CACHE).then(async c => {
+    if (ours && req.mode === "navigate" && url.searchParams.has("v")) {
+      try { const r = await fetch(req, { cache: "no-store" }); if (r.ok) c.put(req, r.clone()); return r; }
+      catch (_) { return (await c.match(req, { ignoreSearch: true })) || Response.error(); }
+    }
     const hit = await c.match(req, { ignoreSearch: ours });
     const net = fetch(req).then(r => { if (r && (r.ok || r.type === "opaque")) c.put(req, r.clone()); return r; }).catch(() => hit);
     return hit || net;

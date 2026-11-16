@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.123"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-16.124"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -645,6 +645,7 @@
   .lock-box .input { font-size: 1.3rem; letter-spacing: .08em; }
   .lock-box .primary { margin-top: 14px; }
   .lock-box .error { margin-top: 12px; }
+  .lock-box #lockRetry { margin-top: 4px; font-size: 1rem; }
   /* Availability history in the press-and-hold sheet */
   .navsheet .hist { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--asphalt); }
   .navsheet .hist div { display: flex; gap: 8px; align-items: baseline; line-height: 1.4; }
@@ -1071,6 +1072,7 @@
     <input id="lockCode" class="input" type="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX" aria-label="Access key">
     <button type="button" class="primary" id="lockBtn">Open</button>
     <p class="error" id="lockError" hidden></p>
+    <button type="button" class="link" id="lockRetry" hidden>Check again</button>
   </div>
 </div>
 
@@ -1281,10 +1283,13 @@ async function api(path, body, timeoutMs, retry = true) {
     finally { if (timer) clearTimeout(timer); }
   }
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401) { // key no longer valid (switched off, replaced, deleted): ask again, saying why
-    try { localStorage.removeItem(ACCESS_KEY); } catch (_) {}
-    showLock(data.error);
-  }
+  if (res.status === 401) { // key not valid (now): ask again, saying why
+    // Switched off is a pause: keep the token, so the app opens again by itself once it's switched back
+    // on (Check again, or any later request). Replaced, deleted or no key: forget it, a key is needed.
+    const paused = data.reason === "off";
+    if (!paused) try { localStorage.removeItem(ACCESS_KEY); } catch (_) {}
+    showLock(data.error, paused);
+  } else if (res.ok && !$("lock").hidden && accessToken()) hideLock(); // switched back on
   if (!res.ok) throw new Error(data.error || `The server answered ${res.status}`);
   return data;
 }
@@ -1348,11 +1353,23 @@ window.addEventListener("unhandledrejection", (ev) => reportError(`App error: ${
 renderErrors();
 
 // ---- access code: asked once, checked by the server; the token it returns is kept on this device
-function showLock(why) {
+function showLock(why, paused = false) {
+  const wasHidden = $("lock").hidden;
   $("lock").hidden = false;
-  if (why) { $("lockError").textContent = why; $("lockError").hidden = false; }
-  setTimeout(() => $("lockCode").focus(), 50);
+  if (why) { $("lockError").textContent = paused ? `${why} It opens again once it’s switched back on.` : why; $("lockError").hidden = false; }
+  $("lockRetry").hidden = !paused;
+  if (wasHidden && !paused) setTimeout(() => $("lockCode").focus(), 50); // paused: no keyboard over the message
 }
+function hideLock() {
+  $("lock").hidden = true; $("lockError").hidden = true; $("lockRetry").hidden = true;
+  if (!booted) boot();
+}
+$("lockRetry").addEventListener("click", async () => {
+  $("lockRetry").disabled = true;
+  try { await api("/me", null, 15000, false); hideLock(); refreshMe(); }
+  catch (e) { if (!/switched off/i.test(e.message)) { $("lockError").textContent = e.message; $("lockError").hidden = false; } }
+  finally { $("lockRetry").disabled = false; }
+});
 // Personal keys look like 7K3F-M9QX-2HTB (the last character is a check, see the Worker); the old
 // 9-digit code works too while it's switched on. Spaces, dashes and case don't matter.
 const KEY_ABC = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -1383,9 +1400,8 @@ async function unlock() {
       data.name ? localStorage.setItem(ACCESS_NAME_KEY, data.name) : localStorage.removeItem(ACCESS_NAME_KEY);
       localStorage.setItem(DEBUG_ALLOWED_KEY, data.debug ? "1" : "0");
     } catch (_) {}
-    $("lock").hidden = true;
     $("lockCode").value = "";
-    if (!booted) boot();
+    hideLock();
   } catch (e) {
     $("lockError").textContent = /fetch|load failed|network/i.test(e.message) ? "Couldn’t reach the server. Try again." : e.message;
     $("lockError").hidden = false;

@@ -53,7 +53,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.113";
+const WORKER_VERSION = "2026-11-16.114";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -141,7 +141,7 @@ function json(request, data, status = 200) {
 }
 
 class HttpError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
+  constructor(status, message, reason) { super(message); this.status = status; this.reason = reason; }
 }
 
 // ---------------------------------------------------------------- usage counting
@@ -2744,13 +2744,14 @@ async function whoIs(request, env, url) {
     const [, id, gen, sig] = given.split(".");
     if (!id || !sig || !sameText(sig, await userSig(env, id, gen))) return null;
     const u = (await loadUsers(env)).find((x) => x.id === id);
-    if (!u) throw new HttpError(401, "This access key no longer exists. Ask for a new one.");
-    if (String(u.gen || 1) !== gen) throw new HttpError(401, "This access key was replaced. Enter the new one.");
-    if (u.active === false) throw new HttpError(401, "This access key has been switched off.");
+    if (!u) throw new HttpError(401, "This access key no longer exists. Ask for a new one.", "deleted");
+    if (String(u.gen || 1) !== gen) throw new HttpError(401, "This access key was replaced. Enter the new one.", "replaced");
+    // "off" is a pause: the app keeps its token and works again once the key is switched back on.
+    if (u.active === false) throw new HttpError(401, "This access key is switched off for now.", "off");
     return { id, name: u.label, debug: !!u.debug };
   }
   if (sameText(given, await accessToken(env))) {
-    if (!setting(env, "legacyCode")) throw new HttpError(401, "The old access code no longer works. Enter your personal key.");
+    if (!setting(env, "legacyCode")) throw new HttpError(401, "The old access code no longer works. Enter your personal key.", "legacy-off");
     return { id: "legacy", debug: false };
   }
   // The admin password works too (handy for opening /debug/… pages in a browser: ?access=<password>).
@@ -3044,7 +3045,7 @@ export default {
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
       console.log("Error", status, e.message);
-      return json(request, { error: e.message }, status);
+      return json(request, e.reason ? { error: e.message, reason: e.reason } : { error: e.message }, status);
     } finally {
       ctx?.waitUntil?.(flushUsage(env, urgent).catch(() => {}));
     }

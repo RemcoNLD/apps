@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.105";
+const WORKER_VERSION = "2026-11-16.106";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1219,34 +1219,51 @@ async function frPiece(total, part, parts, ids, url = FR_DYNAMIC_URL) {
 }
 
 // The whole live file, read as a stream (no Range needed): rows for the wanted ids, newest horodatage wins.
+// Lean scan (about half the CPU of splitting every line): most lines belong to operators we don't
+// show, so the first five characters (country + operator code) are checked first without making a
+// string; only lines whose prefix is in the index are cut up.
+const frKey5 = (t, p) => ((((t.charCodeAt(p + 2) * 128 + t.charCodeAt(p + 3)) * 128 + t.charCodeAt(p + 4)) * 128 + t.charCodeAt(p)) * 128 + t.charCodeAt(p + 1));
+let frPrefixCache = null; // { ids, set }
 async function frWhole(ids, url = FR_DYNAMIC_URL) {
   countCall("PAN FR");
   const res = await fetch(url);
   if (!res.ok || !res.body) throw new HttpError(502, `French live file: HTTP ${res.status}`);
+  if (frPrefixCache?.ids !== ids) frPrefixCache = { ids, set: new Set([...ids].filter((id) => id.length > 5).map((id) => frKey5(id, 0))) };
+  const prefixes = frPrefixCache.set;
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   const rows = {};
   let rest = "", lines = 0, bytes = 0;
-  const take = (line) => {
-    const comma = line.indexOf(",");
-    if (comma <= 0) return;
-    const id = line.slice(0, comma);
-    if (!ids.has(id)) return;
-    const [etat, occupation, horodatage] = line.slice(comma + 1).replace(/\r$/, "").split(",");
-    const prev = rows[id];
-    if (!prev || String(horodatage) > String(prev.horodatage)) rows[id] = { etat, occupation, horodatage };
+  const scan = (text, last) => {
+    let pos = 0, nl;
+    for (;;) {
+      nl = text.indexOf("\n", pos);
+      if (nl < 0) { if (!last) break; nl = text.length; if (nl <= pos) break; }
+      lines++;
+      if (nl - pos > 6 && prefixes.has(frKey5(text, pos))) {
+        const comma = text.indexOf(",", pos);
+        if (comma > pos && comma < nl) {
+          const id = text.slice(pos, comma);
+          if (ids.has(id)) {
+            const end = text.charCodeAt(nl - 1) === 13 ? nl - 1 : nl;
+            const [etat, occupation, horodatage] = text.slice(comma + 1, end).split(",");
+            const prev = rows[id];
+            if (!prev || String(horodatage) > String(prev.horodatage)) rows[id] = { etat, occupation, horodatage };
+          }
+        }
+      }
+      pos = nl + 1;
+      if (pos >= text.length) break;
+    }
+    return pos >= text.length ? "" : text.slice(pos);
   };
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     bytes += value.length;
-    const text = rest + dec.decode(value, { stream: true });
-    let pos = 0, nl;
-    while ((nl = text.indexOf("\n", pos)) >= 0) { take(text.slice(pos, nl)); lines++; pos = nl + 1; }
-    rest = text.slice(pos);
+    rest = scan(rest + dec.decode(value, { stream: true }), false);
   }
-  rest += dec.decode();
-  if (rest) { take(rest); lines++; }
+  scan(rest + dec.decode(), true);
   return { bytes, lines, rows };
 }
 

@@ -680,6 +680,10 @@
   .legend .dot { width: 22px; height: 22px; border-radius: 50%; }
   .legend .dot.ring { border: 4px solid var(--muted); }
   .legend .kv { font-weight: 800; font-size: 1.15rem; }
+  .account { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 14px;
+    padding: 10px 12px; border: 1px solid var(--line, rgba(127,127,127,.3)); border-radius: 10px; }
+  .account #accountWho { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account #logoutBtn.sure { color: var(--danger); font-weight: 800; }
   .help-actions { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
   .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
   /* Splash screen on a fresh start (not when the app comes back from the background).
@@ -1008,6 +1012,10 @@
     <h2 id="helpTitle">How it works</h2>
     <button type="button" class="link" id="helpClose">Close</button>
   </div>
+  <div class="account" id="account">
+    <span id="accountWho"></span>
+    <button type="button" class="link" id="logoutBtn">Log out</button>
+  </div>
   <div id="helpBody"></div>
   <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
   <label class="check"><input id="debugToggle" type="checkbox"> Debug mode while driving (versions, data sources, route id, coordinates)</label>
@@ -1076,7 +1084,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.119";
+const APP_VERSION = "2026-11-16.120";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1229,6 +1237,7 @@ if (navigator.onLine === false) setTimeout(() => setOffline(true), 0); // alread
 // A dropped connection (Safari: "Load failed") gets one more try after a short pause.
 // If the server is busy, a second try usually works.
 const ACCESS_KEY = "evailability-access";
+const ACCESS_NAME_KEY = "evailability-access-name"; // the key's label, shown in Help
 const accessToken = () => { try { return localStorage.getItem(ACCESS_KEY) || ""; } catch (_) { return ""; } };
 async function api(path, body, timeoutMs, retry = true) {
   const headers = { "X-Access": accessToken() };
@@ -1336,6 +1345,7 @@ async function unlock() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.token) throw new Error(data.error || "That code isn’t right.");
     localStorage.setItem(ACCESS_KEY, data.token);
+    try { data.name ? localStorage.setItem(ACCESS_NAME_KEY, data.name) : localStorage.removeItem(ACCESS_NAME_KEY); } catch (_) {}
     $("lock").hidden = true;
     $("lockCode").value = "";
     if (!booted) boot();
@@ -4751,7 +4761,29 @@ function helpHtml() {
 }
 const SPLASH_OFF_KEY = "evailability-splash-off";
 function splashOff() { try { return !!localStorage.getItem(SPLASH_OFF_KEY); } catch (_) { return false; } }
+// Top of Help: who this device is signed in as, and Log out (tap twice, so it isn't done by accident).
+function renderAccount() {
+  let name = ""; try { name = localStorage.getItem(ACCESS_NAME_KEY) || ""; } catch (_) {}
+  const tok = accessToken();
+  $("accountWho").textContent = !tok ? "Not signed in" : tok.startsWith("u1.") ? `Signed in${name ? ` as ${name}` : " with a personal key"}` : "Signed in with the old shared code";
+  $("logoutBtn").hidden = !tok;
+  $("logoutBtn").textContent = "Log out"; $("logoutBtn").classList.remove("sure");
+}
+let logoutTimer = null;
+$("logoutBtn").addEventListener("click", () => {
+  const b = $("logoutBtn");
+  if (!b.classList.contains("sure")) {
+    b.textContent = "Tap again to log out"; b.classList.add("sure");
+    clearTimeout(logoutTimer); logoutTimer = setTimeout(renderAccount, 4000);
+    return;
+  }
+  clearTimeout(logoutTimer);
+  try { localStorage.removeItem(ACCESS_KEY); localStorage.removeItem(ACCESS_NAME_KEY); } catch (_) {}
+  $("help").hidden = true;
+  showLock();
+});
 function openHelp() {
+  renderAccount();
   $("helpBody").innerHTML = helpHtml();
   $("help").hidden = false;
   $("help").scrollTop = 0;

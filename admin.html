@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.1"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="2026-11-16.2"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -43,10 +43,15 @@
   .session { display: flex; gap: 18px; margin: 12px 0 4px; }
   .link { padding: 0; background: none; color: var(--blue); font-weight: 600; text-decoration: underline; }
   .card { background: var(--card); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
-  .group h3 { margin: 0 0 8px; font-size: .95rem; letter-spacing: .02em; text-transform: uppercase; color: var(--muted, #93a0a8); }
-  .group .line { padding: 8px 0; }
+  .gtitle { font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  .gtitle .info, .set-name .info { display: inline-flex; align-items: center; justify-content: center; width: 1.15em; height: 1.15em; margin-left: 7px;
+    border: 1.5px solid currentColor; border-radius: 50%; font-size: .8em; font-style: italic; font-family: Georgia, serif; text-transform: none; vertical-align: 1px; }
+  .gtitle[aria-expanded="true"] .info { background: var(--muted); color: var(--card); border-color: var(--muted); }
+  .gnote { margin: -2px 0 6px; }
+  .group h3 { margin: 0 0 4px; font-size: .95rem; letter-spacing: .02em; text-transform: uppercase; color: var(--muted, #93a0a8); }
+  .group .line { padding: 6px 0; }
   .group .line + .line { border-top: 1px solid rgba(127,127,127,.18); }
-  .group > .small.muted:last-child { margin-top: 6px; }
+
   .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .name { font-weight: 700; }
   .num { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
@@ -216,8 +221,13 @@ function render(d) {
     return `<div class="line"><div class="row"><span class="name">${esc(label || LABELS[k] || k)}</span>
       <span class="num">${fmt(n)}${lim ? ` / ${fmt(lim.limit)}` : ""}</span></div>${lim ? bar(n, lim.limit) : ""}</div>`;
   };
-  const group = (title, body, note = "") =>
-    `<div class="card group"><h3>${esc(title)}</h3>${body}${note ? `<div class="small muted">${note}</div>` : ""}</div>`;
+  // Fixed explanations (limits, resets) sit behind the ⓘ in the title; only what changes is in view.
+  let noteN = 0;
+  const group = (title, body, note = "") => {
+    const id = `note-${noteN++}`;
+    return `<div class="card group"><h3>${note ? `<button type="button" class="gtitle" data-note="${id}" aria-expanded="false">${esc(title)}<span class="info" aria-hidden="true">i</span></button>` : esc(title)}</h3>
+      ${note ? `<div class="small muted gnote" id="${id}" hidden>${note}</div>` : ""}${body}</div>`;
+  };
 
   html += `<h2>Today</h2>`;
   html += group("Cloudflare", ["Worker requests", "KV reads", "KV writes"].map((k) => line(k)).join(""),
@@ -247,15 +257,13 @@ function render(d) {
   }
   html += group("OpenRouteService", orsBody, "Limits as OpenRouteService reports them.");
 
-  html += group("Open Charge Map", line("Open Charge Map", "Calls"), "No daily limit published; blocks bursts.");
-  html += group("NDW (Netherlands live)", line("NDW", "Calls"), "Open data, no daily limit published.");
-  html += group("MobiData BW (Germany live)", line("MobiData BW", "Calls"), "Open data, no daily limit published.");
-  html += group("E-Control (Austria live)", line("E-Control", "Calls"), "No daily limit published.");
-  html += group("transport.data.gouv.fr (France live)", line("PAN FR", "Whole-file reads") + line("PAN FR index", "Index loads"), "Open data. Each read is the whole country (~9.5 MB) and costs more CPU than the free plan allows per request.");
-
-  // Everything else: brand logos, the backup place search, and anything counted that isn't listed above.
-  const rest = ["Logo fetch", "Nominatim", ...Object.keys(calls)].filter((k, i, a) => a.indexOf(k) === i && !used.has(k) && calls[k] != null);
-  if (rest.length) html += group("Other", rest.map((k) => line(k)).join(""), "No daily limits published.");
+  // Sources without a daily limit: one card, a line each.
+  const free = [["Open Charge Map", "Open Charge Map"], ["NDW", "NDW (Netherlands live)"], ["MobiData BW", "MobiData BW (Germany live)"],
+    ["E-Control", "E-Control (Austria live)"], ["PAN FR", "France live: whole-file reads"], ["PAN FR index", "France index loads"]];
+  const rest = ["Logo fetch", "Nominatim", ...Object.keys(calls)].filter((k, i, a) => a.indexOf(k) === i && !used.has(k)
+    && !free.some(([f]) => f === k) && calls[k] != null);
+  html += group("Other sources", free.map(([k, label]) => line(k, label)).join("") + rest.map((k) => line(k)).join(""),
+    "None of these publishes a daily limit. Open Charge Map blocks bursts of calls. France live: each read is the whole country (~9.5 MB) and costs more CPU than the Worker's free plan allows per request. NDW, MobiData BW and transport.data.gouv.fr are open data.");
 
   if (d.days.length) {
     // Always 7 days, oldest left and today right; days before the first count are empty.
@@ -303,6 +311,8 @@ function render(d) {
   $("out").innerHTML = html;
   // Tapping a bar shows that day's number under the row's bars; tapping it again hides it.
   $("out").onclick = (e) => {
+    const nb = e.target.closest("[data-note]");
+    if (nb) { const n = $(nb.dataset.note); n.hidden = !n.hidden; nb.setAttribute("aria-expanded", String(!n.hidden)); return; }
     const col = e.target.closest(".spark .col[data-tip]");
     if (!col) return;
     const bar = col.querySelector("span");

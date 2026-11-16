@@ -56,6 +56,18 @@
   .small { font-size: .9rem; }
   .note { border-left: 4px solid var(--warn); }
   .error { color: var(--bad); }
+  /* Last 7 days: a row per source with today's number and the week as bars */
+  .week { padding: 4px 16px; }
+  .wk { display: flex; align-items: center; gap: 14px; padding: 12px 0; }
+  .wk + .wk { border-top: 1px solid rgba(127,127,127,.18); }
+  .wk-l { flex: 1; min-width: 0; }
+  .wk-l .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wk-r { text-align: right; flex: none; min-width: 5.5em; }
+  .wk-r .num { font-size: 1.3rem; }
+  .spark { display: flex; align-items: flex-end; gap: 4px; height: 30px; margin-top: 8px; max-width: 220px; }
+  .spark span { flex: 1; background: var(--muted); opacity: .45; border-radius: 3px 3px 1px 1px; }
+  .spark span.today { background: var(--ok); opacity: 1; }
+  .spark span.zero { opacity: .2; }
   .table-wrap { overflow-x: auto; background: var(--card); border-radius: 12px; }
   table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
   th, td { padding: 9px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
@@ -233,10 +245,22 @@ function render(d) {
   if (d.days.length > 1) {
     const days = d.days.slice().reverse();
     const keys = [...new Set(days.flatMap((x) => Object.keys(x.calls || {})))];
-    html += `<h2>Last 7 days</h2><div class="table-wrap"><table>
-      <thead><tr><th>Source</th>${days.map((x) => `<th>${new Date(x.day).toLocaleDateString("en-GB", { weekday: "short", day: "numeric" })}</th>`).join("")}</tr></thead>
-      <tbody>${keys.map((k) => `<tr><td>${esc(LABELS[k] || k)}</td>${days.map((x) => `<td>${x.calls?.[k] != null ? fmt(x.calls[k]) : "–"}</td>`).join("")}</tr>`).join("")}</tbody>
-    </table></div>`;
+    // One row per source: today's number big on the right (always in view), the week as small bars
+    // (oldest left, today brightest on the right) and the 7-day total. Busiest sources first.
+    const total = (k) => days.reduce((n, x) => n + (x.calls?.[k] || 0), 0);
+    keys.sort((a, b) => total(b) - total(a));
+    const dayName = (x) => new Date(x.day).toLocaleDateString("en-GB", { weekday: "short", day: "numeric" });
+    html += `<h2>Last 7 days</h2><div class="card week">${keys.map((k) => {
+      const vals = days.map((x) => x.calls?.[k] || 0), max = Math.max(1, ...vals), today = vals[vals.length - 1];
+      return `<div class="wk">
+        <div class="wk-l"><div class="name">${esc(LABELS[k] || k)}</div>
+          <div class="spark" aria-label="${esc(days.map((x, i) => `${dayName(x)}: ${vals[i]}`).join(", "))}">${vals.map((v, i) =>
+            `<span class="${i === vals.length - 1 ? "today" : ""}${v ? "" : " zero"}" style="height:${v ? Math.max(8, Math.round(v / max * 100)) : 4}%" title="${esc(dayName(days[i]))}: ${fmt(v)}"></span>`).join("")}</div></div>
+        <div class="wk-r"><div class="num">${today ? fmt(today) : "–"}</div><div class="small muted">today</div>
+          <div class="small muted">${fmt(total(k))} in 7 d</div></div>
+      </div>`;
+    }).join("")}</div>
+    <p class="small muted">Bars: one per day, ${esc(dayName(days[0]))} to today (brightest), each source on its own scale. Tap and hold a bar for its number.</p>`;
   }
   html += `<p class="small muted" style="margin-top:18px">Days run in UTC. Cloudflare can run several copies of the Worker;
     each saves its own count, so Worker and source counts are close, not exact. OpenRouteService figures come from ORS itself.</p>`;

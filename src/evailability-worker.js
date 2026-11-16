@@ -10,6 +10,9 @@
 //                               -> route + chargers of those brands along it (detour minutes only when cached)
 //   POST /status                {stations:[{id, lat, lon, country, brand}]}
 //   POST /fr-status             {stations:[{id, lat, lon, brand}]}  France, from one national file (read at most every 90 s)
+//   POST /be-status             {stations:[{id, lat, lon, brand}]}  Belgium: pins → index sites with their stall ids (no live call)
+//   GET  /be-evse?id=<evse>     Belgium: one stall's live status (Eco-Movement; at most one call per 10 s, else retryAfterMs)
+//   GET  /debug/be?id=<evse>    Belgium: raw Eco-Movement answer for one stall
 //                               -> live availability per station (NL, DE, AT)
 //   POST /detours               {items:[{id, lat, lon, a:[lon,lat], b:[lon,lat]}]} (max 20)
 //                               -> detour minutes per charger (a, b: route points 3 km before and after it)
@@ -38,13 +41,14 @@
 //   OCM_API_KEY   Open Charge Map key
 //   ECONTROL_API_KEY  Austrian charging register (E-Control) key
 //   ADMIN_TOKEN   password for the usage page (admin.html)
+//   ECO_BE_TOKEN  Eco-Movement Belgium DATEX II token (live status per stall)
 // Optional KV binding
 //   USAGE         keeps the usage counts per day (without it they live in memory only)
 // Optional plain variable
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.99";
+const WORKER_VERSION = "2026-11-16.100";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1326,6 +1330,122 @@ async function frStatusFor(stations) {
   return { status: out, checkedAt: snap.at, index: index.built, gapMin: Number(setting(null, "frGapMin")) || 3 };
 }
 
+// Belgium live status (Eco-Movement, DATEX II). The static index (tools/build-be-index.py) gives each
+// site's fast DC stalls; live status exists only per stall (/datex2/v1/status/{evse_id}), and only one
+// request every 10 s per IP is allowed across all endpoints (2 per minute per stall, per token). So
+// Belgium is tap-only and stall by stall: /be-status matches the app's pins to index sites (no call to
+// Eco-Movement), /be-evse asks one stall; the app paces them and fills the ring as answers come in.
+const BE_INDEX_URL = "https://remconld.github.io/apps/data/be-fast-sites.json";
+const BE_STATUS_BASE = "https://nap-be.eco-movement.com/datex2/v1/status/";
+const BE_GAP_MS = 10 * 1000;       // Eco-Movement: 1 request per 10 s per IP
+const BE_EVSE_TTL_MS = 60 * 1000;  // a stall's answer is reused for a minute
+const BE_MATCH_KM = 0.6, BE_NEARBY_KM = 1.2, BE_MAX_STATIONS = 150, BE_CELL = 0.02;
+
+let beIndexState = null;
+async function beIndex() {
+  if (beIndexState && Date.now() - beIndexState.at < 24 * 3600 * 1000) return beIndexState.promise;
+  const promise = (async () => {
+    countCall("BE index");
+    const res = await fetch(BE_INDEX_URL, { cf: { cacheTtl: 3600 } });
+    if (!res.ok) throw new HttpError(502, `Belgium index: HTTP ${res.status}`);
+    const data = await res.json();
+    const grid = new Map();
+    data.sites.forEach(([brand, lat, lon, maxKw, name, evseIds], i) => {
+      const site = { key: `be${i}`, brand, lat, lon, maxKw, name, evseIds };
+      const k = `${brand}|${Math.floor(lat / BE_CELL)}|${Math.floor(lon / BE_CELL)}`;
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(site);
+    });
+    return { built: data.built, grid, count: data.sites.length };
+  })();
+  beIndexState = { at: Date.now(), promise };
+  promise.catch(() => { if (beIndexState?.promise === promise) beIndexState = null; });
+  return promise;
+}
+function beSitesNear(index, brand, lat, lon, km) {
+  const out = [];
+  const cy = Math.floor(lat / BE_CELL), cx = Math.floor(lon / BE_CELL);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    for (const s of index.grid.get(`${brand}|${cy + dy}|${cx + dx}`) || []) {
+      const d = haversineKm([s.lon, s.lat], [lon, lat]);
+      if (d <= km) out.push({ s, d });
+    }
+  }
+  return out.sort((a, b) => a.d - b.d);
+}
+async function beStatusFor(stations) {
+  const index = await beIndex();
+  const out = {};
+  const site = (s) => ({ be: true, available: null, total: s.evseIds.length, evseIds: s.evseIds, maxKw: s.maxKw,
+    source: "Eco-Movement (BE)" });
+  for (const st of stations.slice(0, BE_MAX_STATIONS)) {
+    const near = beSitesNear(index, brandOf(st.brand).key, Number(st.lat), Number(st.lon), BE_NEARBY_KM);
+    if (!near.length || near[0].d > BE_MATCH_KM) { out[st.id] = null; continue; }
+    const main = near[0].s;
+    out[st.id] = {
+      ...site(main), liveId: main.key, liveLat: main.lat, liveLon: main.lon,
+      nearby: near.slice(0, 4).map(({ s }) => ({ id: s.key, lat: s.lat, lon: s.lon, name: s.name || null, ...site(s) })),
+    };
+  }
+  return { status: out, index: index.built, gapMs: BE_GAP_MS };
+}
+
+// DATEX II v3 refill point status → the app's kinds.
+const BE_KIND = {
+  available: "free",
+  charging: "busy", occupied: "busy", reserved: "busy", blocked: "busy",
+  faulted: "off", inoperative: "off", outoforder: "off", outofstock: "off", unavailable: "off", removed: "off", planned: "off",
+};
+// Finds the stall's status in the answer without relying on the exact nesting (the Belgian profile isn't
+// published; it follows the German NAP mapping). /debug/be shows the raw answer if this misreads it.
+function beParseStatus(data, evse) {
+  const norm = (x) => String(x || "").replace(/\*/g, "").toUpperCase();
+  const want = norm(evse);
+  const all = [];
+  const walk = (o) => {
+    if (!o || typeof o !== "object") return;
+    if (Array.isArray(o)) { for (const x of o) walk(x); return; }
+    const st = o.status?.value ?? (typeof o.status === "string" ? o.status : null);
+    if (st && BE_KIND[String(st).toLowerCase()] !== undefined || st === "unknown") {
+      all.push({ ref: o.reference?.idG ?? o.idG ?? o.evseId ?? null, raw: st, lastUpdated: o.lastUpdated || o.statusUpdateTime || null });
+    }
+    for (const v of Object.values(o)) walk(v);
+  };
+  walk(data);
+  const pick = all.find((x) => x.ref && norm(x.ref) === want) || all[0];
+  return pick ? { raw: pick.raw, kind: BE_KIND[String(pick.raw).toLowerCase()] || "unknown", lastUpdated: pick.lastUpdated } : null;
+}
+
+let beNextAt = 0;        // this Worker copy's next allowed call (the IP limit is shared, so it's only a guide)
+let beBlockedUntil = 0;  // after a 429: Eco-Movement's own wait
+async function beEvse(env, evse) {
+  if (!env.ECO_BE_TOKEN) throw new HttpError(500, "ECO_BE_TOKEN is not set");
+  if (!/^[A-Z0-9*\-_.]{4,64}$/i.test(evse)) throw new HttpError(400, "Bad EVSE id");
+  const hit = memoGet(`be:${evse}`);
+  if (hit) return { ...hit, cached: true };
+  const now = Date.now();
+  const wait = Math.max(beNextAt, beBlockedUntil) - now;
+  if (wait > 0) return { evse, retryAfterMs: wait };
+  beNextAt = now + BE_GAP_MS;
+  countCall("Eco-Movement BE");
+  const res = await fetch(BE_STATUS_BASE + encodeURIComponent(evse), {
+    headers: { Authorization: `Bearer ${env.ECO_BE_TOKEN}`, Accept: "application/json" },
+  });
+  if (res.status === 429) {
+    const ra = Number(res.headers.get("retry-after")) || Number(res.headers.get("x-ratelimit-reset")) || 10;
+    const ms = ra > 1e9 ? ra * 1000 - Date.now() : ra * 1000; // seconds, or an epoch time
+    beBlockedUntil = Date.now() + Math.min(Math.max(ms, 5000), 120000);
+    return { evse, retryAfterMs: beBlockedUntil - Date.now(), limited: true };
+  }
+  if (res.status === 404) { const r = { evse, kind: "unknown", note: "not found", checkedAt: new Date().toISOString() }; memoSet(`be:${evse}`, r, BE_EVSE_TTL_MS); return r; }
+  if (!res.ok) throw new HttpError(502, `Eco-Movement BE: HTTP ${res.status}`);
+  const parsed = beParseStatus(await res.json().catch(() => null), evse);
+  const r = { evse, kind: parsed?.kind || "unknown", raw: parsed?.raw || null, lastUpdated: parsed?.lastUpdated || null,
+    checkedAt: new Date().toISOString() };
+  memoSet(`be:${evse}`, r, BE_EVSE_TTL_MS);
+  return r;
+}
+
 async function liveStatus(station, env) {
   if (!LIVE_COUNTRIES.has(station.country)) return null;
   const brand = brandOf(station.brand);
@@ -2380,7 +2500,7 @@ async function route(request, env) {
       version: WORKER_VERSION,
       deployId: env.CF_VERSION_METADATA?.id?.slice(0, 8) || null,
       deployedAt: env.CF_VERSION_METADATA?.timestamp || null,
-      secrets: { ORS_API_KEY: !!env.ORS_API_KEY, OCM_API_KEY: !!env.OCM_API_KEY },
+      secrets: { ORS_API_KEY: !!env.ORS_API_KEY, OCM_API_KEY: !!env.OCM_API_KEY, ECO_BE_TOKEN: !!env.ECO_BE_TOKEN },
     });
   }
   if (path === "/geocode" && request.method === "GET") {
@@ -2406,6 +2526,25 @@ async function route(request, env) {
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
     return json(request, await frStatusFor(body.stations));
+  }
+  if (path === "/be-status" && request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
+    return json(request, await beStatusFor(body.stations));
+  }
+  if (path === "/be-evse" && request.method === "GET") {
+    return json(request, await beEvse(env, url.searchParams.get("id") || ""));
+  }
+  if (path === "/debug/be" && request.method === "GET") {
+    // Raw Eco-Movement answer for one stall plus what we read from it: /debug/be?id=BE*IOY*E417904
+    if (!env.ECO_BE_TOKEN) throw new HttpError(500, "ECO_BE_TOKEN is not set");
+    const id = url.searchParams.get("id") || "";
+    countCall("Eco-Movement BE");
+    const res = await fetch(BE_STATUS_BASE + encodeURIComponent(id), { headers: { Authorization: `Bearer ${env.ECO_BE_TOKEN}`, Accept: "application/json" } });
+    const text = await res.text();
+    let data = null; try { data = JSON.parse(text); } catch (_) {}
+    const headers = Object.fromEntries([...res.headers].filter(([k]) => /rate|retry|link/i.test(k)));
+    return json(request, { http: res.status, headers, parsed: data ? beParseStatus(data, id) : null, raw: data ?? text.slice(0, 4000) });
   }
   if (path === "/where" && request.method === "GET") {
     const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));

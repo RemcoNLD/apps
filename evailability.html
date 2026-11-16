@@ -750,6 +750,7 @@
   .avr .rg-busy { stroke: var(--danger); }
   .avr .rg-off { stroke: var(--offline); }
   .avr .rg-empty { stroke: var(--muted); stroke-width: 2.6; stroke-dasharray: 2.6 3.1; opacity: .75; }
+  .avr .rg-unk { stroke: var(--muted); stroke-width: 2.6; opacity: .6; }
   .avr > .stat { position: relative; line-height: 1; text-align: center; }
   .row .avail .avr > .stat { font-size: 1.6rem; font-weight: 800; letter-spacing: -.04em; }
   .avr.free .stat strong { color: var(--free); }
@@ -1074,7 +1075,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.104";
+const APP_VERSION = "2026-11-16.105";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1113,6 +1114,12 @@ function loadFr() {
 }
 const FR_FAIL_PAUSE_MS = 15 * 60 * 1000;
 const FR_MAX = 250; // French chargers per lookup, nearest ahead first
+// Belgium: live status exists only per stall, and Eco-Movement allows one request per 10 s. So a tap on
+// a Belgian charger checks that site's fast stalls one by one (the ring fills as answers come in), at
+// most once a minute per site. Before a tap the ring shows the stalls as dashed segments.
+const BE_GAP_MS = 10 * 1000 + 300;
+const BE_COOLDOWN_MS = 60 * 1000;
+const tapOnly = (s) => s.country === "FR" || s.country === "BE";
 const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
 const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
@@ -1471,7 +1478,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.planBrands = data.brands || ["ionity"];
   // Only the first few come with a status; the rest are fetched once they're on screen.
   // French ones show ↻ until you tap one (France is tap-only).
-  for (const s of state.stations) s.statusAt = s.statusChecked === false || s.country === "FR" ? null : Date.now();
+  for (const s of state.stations) s.statusAt = s.statusChecked === false || tapOnly(s) ? null : Date.now();
   state.statusAt = Date.now();
   state.user = { km: 0, min: 0, offKm: 0, acc: null, at: null };
   // Where you were a moment ago, on the new route, so it doesn't say "Waiting for your location"
@@ -2700,7 +2707,7 @@ function reconcileLive() {
       // The live source's site name (e.g. "Mastpolder"), when Open Charge Map gave both sides one name.
       if (f.name) x.liveName = f.name; // kept apart: it's often the street address, not a site name
       x.status = { ...x.status, available: f.available, total: f.total, maxKw: f.maxKw, state: f.state,
-        changedAt: f.changedAt, fullSince: f.fullSince, liveId: f.id };
+        changedAt: f.changedAt, fullSince: f.fullSince, liveId: f.id, ...(f.be ? { be: true, evseIds: f.evseIds } : {}) };
       if (distKm(x, f) > 0.03) {
         const shift = distKm(x, f);
         x.lat = f.lat; x.lon = f.lon;
@@ -2730,7 +2737,7 @@ async function refreshOne(ids) {
   if (picked.some((x) => x.country === "FR")) {
     refreshFrance().then((why) => { if (why) toast(why, 3200); });
   }
-  const list = picked.filter((x) => x.country !== "FR" && !(x.loadingAt && Date.now() - x.loadingAt < 20000));
+  const list = picked.filter((x) => !tapOnly(x) && !(x.loadingAt && Date.now() - x.loadingAt < 20000));
   if (!list.length) return;
   for (const s of list) s.loadingAt = Date.now();
   render();
@@ -2830,7 +2837,8 @@ async function refreshStatus(force = true) {
   const inView = stationsInView();
   fetchDetours(detourCandidates(inView));
   fetchPlaces(); // rows on screen and the next few above them
-  const todo = inView.filter((s) => s.country !== "FR" && !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
+  matchBelgium();
+  const todo = inView.filter((s) => !tapOnly(s) && !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
   if (!todo.length) return;
   for (const s of todo) s.loadingAt = now;
   render();
@@ -2889,6 +2897,92 @@ async function refreshFrance() {
     for (const s of ahead) s.loadingAt = null;
     frBusy = false;
     saveFr();
+    save(); render();
+  }
+  return why;
+}
+
+// Belgium, step 1: match the Belgian pins ahead to the index's sites (stall ids, no live call).
+// Once per charger; the ring then shows its stalls dashed until you tap.
+let beMatchBusy = false;
+async function matchBelgium() {
+  if (beMatchBusy || !state.route) return;
+  const todo = upcoming().filter((s) => s.country === "BE" && !s.beMatchedAt).slice(0, 150);
+  if (!todo.length) return;
+  beMatchBusy = true;
+  try {
+    const r = await api("/be-status", { stations: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 20000, false);
+    for (const s of todo) s.beMatchedAt = Date.now();
+    applyStatus(r.status || {});
+    for (const s of todo) {
+      s.statusAt = null; // not checked yet: grey with ↻ until tapped
+      if (s.status) delete s.status.nearby; // used once to place the pin; later updates come per stall
+    }
+  } catch (e) {
+    reportError(`Belgium: ${e.message}`);
+  } finally {
+    beMatchBusy = false;
+    save(); render();
+  }
+}
+function beCounts(st) {
+  const r = ringParts(st);
+  const known = r.total - r.unk;
+  if (!known) return { available: null, offline: 0, state: null };
+  return { available: r.free, offline: r.off, state: r.free ? "free" : known === r.total && r.off === r.total ? "likely_offline" : "full" };
+}
+// Belgium, step 2 (a tap): the site's stalls one by one, about 10 s apart. One site at a time.
+let beBusy = null, beNextAt = 0;
+async function refreshBelgium(members) {
+  const sites = members.filter((s) => s.country === "BE" && !s.liveDup);
+  const ready = sites.filter((s) => s.status?.evseIds?.length);
+  if (!ready.length) {
+    if (sites.some((s) => !s.beMatchedAt)) { matchBelgium(); return "Belgium: finding this site’s stalls · tap again in a moment"; }
+    return "No live data for this Belgian site";
+  }
+  if (beBusy) return `Belgium: still checking ${beBusy} · one site at a time`;
+  const now = Date.now();
+  const due = ready.filter((s) => !s.beDoneAt || now - s.beDoneAt >= BE_COOLDOWN_MS);
+  if (!due.length) {
+    const last = Math.max(...ready.map((s) => s.beDoneAt));
+    return `Checked ${waitText(now - last)} ago · next update in ${waitText(last + BE_COOLDOWN_MS - now)}`;
+  }
+  const n = due.reduce((a, s) => a + s.status.evseIds.length, 0);
+  toast(`Belgium: checking ${n} stall${n === 1 ? "" : "s"} · about ${waitText(Math.max(0, n - 1) * BE_GAP_MS + 2000)}`, 3200);
+  beBusy = (() => { try { return siteName(due[0]); } catch (_) { return null; } })() || "a site";
+  let why = null;
+  try {
+    for (const s of due) {
+      const st = s.status;
+      st.stalls = {}; // a new round: the ring starts dashed again and fills in
+      Object.assign(st, beCounts(st));
+      for (const evse of st.evseIds) {
+        for (let tries = 0; ; tries++) {
+          s.loadingAt = Date.now(); render();
+          const wait = beNextAt - Date.now();
+          if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+          s.loadingAt = Date.now();
+          const r = await api(`/be-evse?id=${encodeURIComponent(evse)}`, null, 20000, false);
+          if (r.retryAfterMs) {
+            if (tries >= 3) throw new Error("Belgium is busy, try again in a minute");
+            beNextAt = Date.now() + r.retryAfterMs + 300;
+            continue;
+          }
+          beNextAt = r.cached ? beNextAt : Date.now() + BE_GAP_MS;
+          st.stalls[evse] = { kind: r.kind, raw: r.raw || null };
+          Object.assign(st, beCounts(st), { checkedAt: r.checkedAt });
+          s.statusAt = Date.now();
+          break;
+        }
+      }
+      s.beDoneAt = Date.now();
+    }
+  } catch (e) {
+    reportError(`Belgium: ${e.message}`);
+    why = "Belgium couldn’t be updated";
+  } finally {
+    for (const s of sites) s.loadingAt = null;
+    beBusy = null;
     save(); render();
   }
   return why;
@@ -3056,9 +3150,10 @@ $("list").addEventListener("click", (e) => {
   const now = Date.now();
   // French chargers follow France's own gap (usage page setting), not the 1-minute tap rule:
   // refreshFrance() either asks or says when France can be asked again.
-  if (members.some((s) => s.country === "FR")) {
-    refreshFrance().then((why) => { if (why) toast(why, 3200); });
-    const rest = members.filter((s) => s.country !== "FR" && (!s.statusAt || now - s.statusAt >= TAP_MIN_MS || retryAllowed(s, now)));
+  if (members.some(tapOnly)) {
+    if (members.some((s) => s.country === "FR")) refreshFrance().then((why) => { if (why) toast(why, 3200); });
+    if (members.some((s) => s.country === "BE")) refreshBelgium(members).then((why) => { if (why) toast(why, 3200); });
+    const rest = members.filter((s) => !tapOnly(s) && (!s.statusAt || now - s.statusAt >= TAP_MIN_MS || retryAllowed(s, now)));
     for (const s of rest) if (statusUnusable(s)) s.retryAt = now;
     if (rest.length) refreshOne(rest.map((s) => s.id));
     return;
@@ -3867,6 +3962,7 @@ function statusInfo(s) {
   const st = s.status;
   // Kept short: the station name gets the room. Colour says free (green) or full (orange).
   if (!st) return { cls: "nodata", text: `<span title="${s.country === "NL" ? "Status not found" : "No live data"}">–</span>` };
+  if (st.available == null && st.be) return { cls: "nodata", text: `<span title="${st.total} fast stalls · tap to check">↻</span>` };
   if (st.available == null) return { cls: "nodata", text: `<span title="Status unknown">?</span>` };
   if (frozenFor(st)) return { cls: "frozen", text: `<strong>${st.available}</strong>` };
   if (st.state === "free") return { cls: "free", text: `<strong>${st.available}</strong>` };
@@ -4033,17 +4129,25 @@ function sitesOf(stations) {
 const RING_R = 17, RING_C = 2 * Math.PI * RING_R, RING_GAPS_MAX = 16;
 function ringParts(st) {
   const total = st?.total || 0;
+  if (st?.be && total) { // Belgium: per stall, some maybe not checked yet
+    const c = { total, free: 0, busy: 0, off: 0, unk: 0 };
+    for (const id of st.evseIds || []) {
+      const k = st.stalls?.[id]?.kind;
+      if (k === "free" || k === "busy" || k === "off") c[k]++; else c.unk++;
+    }
+    return c;
+  }
   if (!total || st.available == null) return null;
   const free = Math.max(0, Math.min(st.available, total));
   const off = st.state === "likely_offline" ? total - free : Math.max(0, Math.min(st.offline || 0, total - free));
-  return { total, free, off, busy: total - free - off };
+  return { total, free, off, busy: total - free - off, unk: 0 };
 }
 function ringSvg(st) {
   const r = ringParts(st);
   const open = `<svg viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-90 20 20)">`;
   if (!r) return `${open}<circle class="rg-empty" cx="20" cy="20" r="${RING_R}"/></g></svg>`;
   const kinds = [];
-  for (let i = 0; i < r.total; i++) kinds.push(i < r.free ? "free" : i < r.free + r.busy ? "busy" : "off");
+  for (let i = 0; i < r.total; i++) kinds.push(i < r.free ? "free" : i < r.free + r.busy ? "busy" : i < r.free + r.busy + r.off ? "off" : "unk");
   const per = RING_C / r.total;
   const gaps = r.total > 1 && r.total <= RING_GAPS_MAX;
   const gap = gaps ? Math.min(2.2, per * 0.3) : 0;
@@ -4061,7 +4165,8 @@ function ringTitle(st) {
   if (!r) return "";
   const fz = frozenFor(st);
   if (fz) return `Probably not live: no change at the site for ${Math.round(fz / 3600000)} h. Last reported ${r.free} of ${r.total} free`;
-  return [`${r.free} of ${r.total} free`, r.busy ? `${r.busy} in use` : "", r.off ? `${r.off} out of order` : ""].filter(Boolean).join(", ");
+  if (r.unk === r.total) return `${r.total} fast stalls · tap to check`;
+  return [`${r.free} of ${r.total} free`, r.busy ? `${r.busy} in use` : "", r.off ? `${r.off} out of order` : "", r.unk ? `${r.unk} not checked` : ""].filter(Boolean).join(", ");
 }
 // info: from shownStatus (cls, text, old, st). extra: e.g. " changed".
 function availRing(info, extra = "") {
@@ -4480,7 +4585,7 @@ function helpHtml() {
     <div class="k">${demoRing(0, 4)}</div><div class="v">All in use.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Off</b>: reported out of order, or nothing has changed for hours.</div>
     <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grey with ?</b>: probably not live. The source hasn't changed anything at this site for over a day (3 days for small sites), so the number is its last report and may be wrong. The dot on the line is hollow.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (3 unless changed on the usage page). A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (3 unless changed on the usage page). Belgium is updated one site at a time when you tap it: its fast stalls are checked one by one, about 10 seconds each, and the ring fills in as they come (dashed segments are stalls not checked yet); at most once a minute per site. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>
@@ -4551,7 +4656,7 @@ $("age").addEventListener("click", () => {
   // After a failed update, or with chargers on screen that got nothing usable: one try right away.
   if (state.statusAt && now - state.statusAt < TAP_MIN_MS) {
     const failedRetry = state.statusError && !(state.topRetryAt && now - state.topRetryAt < TAP_MIN_MS);
-    const empty = stationsInView().filter((s) => s.country !== "FR" && retryAllowed(s, now));
+    const empty = stationsInView().filter((s) => !tapOnly(s) && retryAllowed(s, now));
     if (failedRetry) { state.topRetryAt = now; for (const s of empty) s.retryAt = now; refreshStatus(true); return; }
     if (empty.length) { for (const s of empty) s.retryAt = now; refreshOne(empty.map((s) => s.id)); return; }
     toast(`Updated less than a minute ago · next in ${waitText(state.statusAt + TAP_MIN_MS - now)}`);

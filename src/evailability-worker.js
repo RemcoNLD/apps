@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.104";
+const WORKER_VERSION = "2026-11-16.105";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1464,9 +1464,16 @@ async function beEvse(env, evse) {
   if (wait > 0) return { evse, retryAfterMs: wait };
   beNextAt = now + BE_GAP_MS;
   countCall("Eco-Movement BE");
-  const res = await fetch(BE_STATUS_BASE + encodeURIComponent(ask), {
-    headers: { Authorization: `Bearer ${env.ECO_BE_TOKEN}`, Accept: "application/json" },
-  });
+  // Eco-Movement sometimes doesn't answer; give up after 8 s so the app's request doesn't time out instead.
+  let res;
+  try {
+    res = await fetch(BE_STATUS_BASE + encodeURIComponent(ask), {
+      headers: { Authorization: `Bearer ${env.ECO_BE_TOKEN}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (e) {
+    return { evse, retryAfterMs: BE_GAP_MS, slow: true, note: e.name === "TimeoutError" ? "no answer within 8 s" : e.message };
+  }
   if (res.status === 429) {
     const ra = Number(res.headers.get("retry-after")) || Number(res.headers.get("x-ratelimit-reset")) || 10;
     const ms = ra > 1e9 ? ra * 1000 - Date.now() : ra * 1000; // seconds, or an epoch time

@@ -1075,7 +1075,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.108";
+const APP_VERSION = "2026-11-16.109";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2962,6 +2962,7 @@ async function refreshBelgium(members) {
     for (const s of due) {
       const st = s.status;
       st.stalls = {}; // a new round: the ring starts dashed again and fills in
+      let beFails = 0;
       Object.assign(st, beCounts(st));
       for (const evse of st.evseIds) {
         for (let tries = 0; ; tries++) {
@@ -2969,14 +2970,21 @@ async function refreshBelgium(members) {
           const wait = beNextAt - Date.now();
           if (wait > 0) await new Promise((r) => setTimeout(r, wait));
           s.loadingAt = Date.now();
-          const r = await api(`/be-evse?id=${encodeURIComponent(evse)}`, null, 20000, false);
+          let r;
+          try { r = await api(`/be-evse?id=${encodeURIComponent(evse)}`, null, 20000, true); }
+          catch (e) { r = { retryAfterMs: BE_GAP_MS, failed: e.message }; } // one stall failing doesn't end the round
           if (r.retryAfterMs) {
-            if (tries >= (r.tryOtherId ? 5 : 3)) throw new Error("Belgium is busy, try again in a minute");
+            if (tries >= (r.tryOtherId ? 5 : 3)) {
+              if (++beFails >= 3) throw new Error(r.failed || r.note || "Belgium is busy, try again in a minute");
+              st.stalls[evse] = { kind: "unknown" }; // skip this stall, carry on with the next
+              break;
+            }
             beNextAt = Date.now() + r.retryAfterMs + 300;
             continue;
           }
           beNextAt = r.cached ? beNextAt : Date.now() + BE_GAP_MS;
           st.stalls[evse] = { kind: r.kind, raw: r.raw || null };
+          beFails = 0;
           Object.assign(st, beCounts(st), { checkedAt: r.checkedAt });
           s.statusAt = Date.now();
           break;

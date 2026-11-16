@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.104"><!-- shown on the apps page; keep equal to APP_VERSION below -->
+<meta name="app-version" content="2026-11-16.113"><!-- shown on the apps page; keep equal to APP_VERSION below -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1076,7 +1076,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.112";
+const APP_VERSION = "2026-11-16.113";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1099,21 +1099,22 @@ const OLD_MS = 5 * 60 * 1000;       // after 5 minutes the numbers are only outl
 // (it costs more CPU than the free plan allows; automatic updates used up the Worker's allowance on
 // 14 Nov). So France is tap-only: a tap on a French charger updates every French charger on the
 // route at once, at most once per 3 minutes; after a failed lookup France pauses for 15 minutes.
-let FR_MIN_GAP_MS = 3 * 60 * 1000; // the server sends the current value (usage page, Settings)
+let FR_MIN_GAP_MS = 5 * 60 * 1000; // the server sends the current value: 0 on Workers Paid, else the usage page setting
 // France's timing survives a reload: the gap the server last sent, when France was last asked, any pause.
 const FR_KEY = "evailability-fr";
 function saveFr() {
-  try { localStorage.setItem(FR_KEY, JSON.stringify({ gapMs: FR_MIN_GAP_MS, triedAt: state.frTriedAt || 0, offUntil: state.frOffUntil || 0, offReason: state.frOffReason || null })); } catch (_) {}
+  try { localStorage.setItem(FR_KEY, JSON.stringify({ gapMs: FR_MIN_GAP_MS, pauseMs: FR_FAIL_PAUSE_MS, triedAt: state.frTriedAt || 0, offUntil: state.frOffUntil || 0, offReason: state.frOffReason || null })); } catch (_) {}
 }
 function loadFr() {
   try {
     const f = JSON.parse(localStorage.getItem(FR_KEY) || "null");
     if (!f) return;
-    if (f.gapMs > 0) FR_MIN_GAP_MS = f.gapMs;
+    if (f.gapMs >= 0) FR_MIN_GAP_MS = f.gapMs;
+    if (f.pauseMs > 0) FR_FAIL_PAUSE_MS = f.pauseMs;
     state.frTriedAt = f.triedAt || 0; state.frOffUntil = f.offUntil || 0; state.frOffReason = f.offReason || null;
   } catch (_) {}
 }
-const FR_FAIL_PAUSE_MS = 15 * 60 * 1000;
+let FR_FAIL_PAUSE_MS = 15 * 60 * 1000; // the server sends it: 2 min on Workers Paid, 15 on the free plan
 const FR_MAX = 250; // French chargers per lookup, nearest ahead first
 // Belgium: live status exists only per stall, and Eco-Movement allows one request per 10 s. So a tap on
 // a Belgian charger checks that site's fast stalls one by one (the ring fills as answers come in), at
@@ -2900,15 +2901,16 @@ async function refreshFrance() {
   try {
     const r = await api("/fr-status", { stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 30000, false);
     if (r.off) { state.frOffUntil = Date.now() + 10 * 60 * 1000; state.frOffReason = "off"; why = "France live is switched off on the server"; }
-    if (r.gapMin > 0) FR_MIN_GAP_MS = r.gapMin * 60 * 1000; // the usage page's setting
+    if (r.gapMin >= 0) FR_MIN_GAP_MS = r.gapMin * 60 * 1000; // 0 on Workers Paid, else the usage page's setting
+    if (r.pauseMin > 0) FR_FAIL_PAUSE_MS = r.pauseMin * 60 * 1000;
     applyStatus(r.status || {});
     state.frAt = Date.now();
     state.frError = null;
   } catch (e) {
     state.frError = e.message; // the old values stay and age: grey, then outlined
-    reportError(`France: ${e.message} France paused for 15 min.`);
+    reportError(`France: ${e.message} France paused for ${Math.round(FR_FAIL_PAUSE_MS / 60000)} min.`);
     state.frOffUntil = Date.now() + FR_FAIL_PAUSE_MS; state.frOffReason = "error";
-    why = "France couldn’t be updated; paused for 15 min";
+    why = `France couldn’t be updated; paused for ${Math.round(FR_FAIL_PAUSE_MS / 60000)} min`;
   } finally {
     for (const s of ahead) s.loadingAt = null;
     frBusy = false;
@@ -4663,7 +4665,7 @@ function helpHtml() {
     <div class="k">${demoRing(0, 4)}</div><div class="v">All in use.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Off</b>: reported out of order, or nothing has changed for hours.</div>
     <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grey with ?</b>: probably not live. The source hasn't changed anything at this site for over a day (3 days for small sites), so the number is its last report and may be wrong. The dot on the line is hollow.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (3 unless changed on the usage page). Belgium is updated one site at a time when you tap it: its fast stalls are checked one by one, about 10 seconds each, and the ring fills in as they come (dashed segments are stalls not checked yet, outlined ones were checked but gave no usable status); at most once a minute per site. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (5 unless changed on the usage page; no wait while the server runs on Cloudflare’s paid plan). Belgium is updated one site at a time when you tap it: its fast stalls are checked one by one, about 10 seconds each, and the ring fills in as they come (dashed segments are stalls not checked yet, outlined ones were checked but gave no usable status); at most once a minute per site. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>

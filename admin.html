@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.3"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="2026-11-16.4"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -167,11 +167,19 @@ try { const old = localStorage.getItem("ionity-admin-token"); if (old && !localS
 
 // Free-tier limits we know for sources that don't report them (per day).
 // OpenRouteService reports its own limits, so those come live from the Worker.
-const KNOWN_LIMITS = {
+// Workers Paid (set on this page as "Workers Paid until"): monthly allowances, shown per day as a
+// thirtieth of the month so the daily bars stay comparable.
+const FREE_LIMITS = {
   "Worker requests": { limit: 100000, note: "Cloudflare Workers free plan" },
   "KV reads": { limit: 100000, note: "Cloudflare KV free plan" },
   "KV writes": { limit: 1000, note: "Cloudflare KV free plan" },
 };
+const PAID_LIMITS = {
+  "Worker requests": { limit: Math.round(10e6 / 30), note: "Workers Paid: 10 million a month (a 30th per day)" },
+  "KV reads": { limit: Math.round(10e6 / 30), note: "Workers Paid: 10 million a month (a 30th per day)" },
+  "KV writes": { limit: Math.round(1e6 / 30), note: "Workers Paid: 1 million a month (a 30th per day)" },
+};
+let KNOWN_LIMITS = FREE_LIMITS;
 const LABELS = {
   "Routing": "OpenRouteService routes", "Matrix": "OpenRouteService detours", "Geocoder": "Place search & names",
   "Open Charge Map": "Open Charge Map", "NDW": "NDW (Netherlands live)", "E-Control": "E-Control (Austria live)",
@@ -362,6 +370,7 @@ async function load(token = $("pw").value.trim()) {
     if ($("pw").value.trim()) rememberToken(token);
     $("pw").value = "";
     showLoggedIn(true);
+    KNOWN_LIMITS = data.plan?.paid ? PAID_LIMITS : FREE_LIMITS;
     render(data);
     loadSettings(token);
   } catch (e) {
@@ -385,7 +394,7 @@ async function loadSettings(token) {
   }
 }
 const showVal = (s, v) => (s.type === "bool" ? (v ? "on" : "off") : s.type === "choice" ? `${v} h`
-  : v === "" || v == null ? "empty" : String(v));
+  : v === "" || v == null ? (s.type === "date" ? "not set (free plan)" : "empty") : String(v));
 function renderSettings(data, msg = "") {
   // Back to default without a separate link: an emptied field shows the default as grey placeholder
   // (× clears it while you type), the dropdown marks its default option, and a switch set back to
@@ -396,7 +405,7 @@ function renderSettings(data, msg = "") {
     if (s.type === "bool") control = `<label class="switch"><input type="checkbox" data-key="${esc(s.key)}" data-default="${def}" ${s.value ? "checked" : ""} aria-label="${esc(s.label)}"><span></span></label>`;
     else if (s.type === "choice") control = `<select data-key="${esc(s.key)}" data-default="${def}" aria-label="${esc(s.label)}">${s.options.map((o) =>
       `<option value="${o}" ${Number(s.value) === o ? "selected" : ""}>${o} h${o === Number(s.default) ? " (default)" : ""}</option>`).join("")}</select>`;
-    else control = `<span class="inwrap"><input type="${s.type === "number" ? "number" : "text"}" data-key="${esc(s.key)}" value="${s.changed ? esc(s.value ?? "") : ""}"
+    else control = `<span class="inwrap"><input type="${s.type === "number" ? "number" : s.type === "date" ? "date" : "text"}" data-key="${esc(s.key)}" value="${s.changed ? esc(s.value ?? "") : ""}"
       ${s.type === "number" ? `min="${s.min}" max="${s.max}" inputmode="numeric"` : ""} placeholder="${esc(showVal(s, s.default))}" aria-label="${esc(s.label)}"><button type="button" class="clr" data-clear tabindex="-1" aria-label="Back to default">×</button></span>`;
     return `<div class="set"><div class="row">
         <button type="button" class="set-name" data-info="${esc(s.key)}" aria-expanded="false">${esc(s.label)}${s.changed ? '<i class="dot" title="Changed"></i>' : ""}<span class="info" aria-hidden="true">i</span></button>${control}</div>

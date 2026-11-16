@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.106";
+const WORKER_VERSION = "2026-11-16.107";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -210,10 +210,12 @@ function checkAdmin(request, env) {
 // minute, so a change takes effect within a minute. Not set = the Worker variable of the same
 // meaning (if any), else the default. Secrets (API keys, passwords) stay in Cloudflare.
 const SETTINGS = [
+  { key: "paidUntil", type: "date", label: "Workers Paid until", def: () => "",
+    help: "The last day of a Cloudflare Workers Paid period (Billing > Subscriptions, 'Ending on'). Until then: France without a gap between updates, a short pause after an error, and the usage page shows the Paid allowances. After it everything returns to the free settings by itself. Empty: free plan." },
   { key: "frLive", type: "bool", label: "France live (tap)", def: (env) => env.FR_LIVE !== "off",
     help: "Off: French chargers show no live data and nothing is read. Each read costs more CPU than the free plan allows." },
-  { key: "frGapMin", type: "number", min: 1, max: 60, label: "France: minutes between updates", def: () => 3,
-    help: "A tap within this time gets the last read instead of a new one." },
+  { key: "frGapMin", type: "number", min: 1, max: 60, label: "France: minutes between updates (free plan)", def: () => 5,
+    help: "On the free plan: a tap within this time gets the last read instead of a new one. Not used while Workers Paid is on (see above)." },
   { key: "ndwDiscovery", type: "bool", label: "Netherlands: extra chargers from NDW", def: (env) => env.NDW_DISCOVERY !== "off",
     help: "Sites Open Charge Map doesn't have, found in NDW's live data along the route." },
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
@@ -235,6 +237,12 @@ async function loadSettings(env) {
   return { values: out, saved };
 }
 const setting = (env, key) => (SET || {})[key] ?? SETTINGS.find((d) => d.key === key)?.def(env);
+// Workers Paid: on until (and including) the date set on the usage page, then free again by itself.
+const paidUntil = (env) => String(setting(env, "paidUntil") || "");
+const isPaid = (env) => { const u = paidUntil(env); return !!u && new Date().toISOString().slice(0, 10) <= u; };
+// France timing per plan: on Paid a read costs nothing that matters, so no gap and a short pause.
+const frGapMinNow = (env) => (isPaid(env) ? 0 : Number(setting(env, "frGapMin")) || 5);
+const frPauseMinNow = (env) => (isPaid(env) ? 2 : 15);
 
 async function handleSettings(request, env) {
   checkAdmin(request, env);
@@ -251,6 +259,10 @@ async function handleSettings(request, env) {
       else if (d.type === "choice") {
         v = Number(v);
         if (!d.options.includes(v)) throw new HttpError(400, `${d.label}: ${d.options.join(", ")}`);
+      }
+      else if (d.type === "date") {
+        v = String(v).trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new HttpError(400, `${d.label}: a date like 2026-12-16`);
       }
       else if (d.type === "number") {
         v = Number(v);
@@ -281,6 +293,7 @@ async function handleUsage(request, env) {
   }
   return json(request, {
     stored: !!env.USAGE,
+    plan: { paid: isPaid(env), until: paidUntil(env) || null },
     today: today(),
     days,
     // Not saved yet (or no KV): this copy of the Worker's own tally since it started.
@@ -1317,7 +1330,8 @@ function frSitesNear(index, brand, lat, lon, km) {
 
 let frSnapState = null; // { at, promise } — one read shared by every request in this Worker copy
 async function frSnapshot(index) {
-  const ttl = Math.max(FR_SNAPSHOT_MS, (Number(setting(null, "frGapMin")) || 3) * 60 * 1000 - 30 * 1000);
+  // Free plan: at most one read per gap. Paid: a read is reused for a minute at most.
+  const ttl = isPaid(null) ? 60 * 1000 : Math.max(FR_SNAPSHOT_MS, frGapMinNow(null) * 60 * 1000 - 30 * 1000);
   if (frSnapState && Date.now() - frSnapState.at < ttl) return frSnapState.promise;
   const promise = frWhole(index.ids).then((w) => ({ rows: w.rows, at: new Date().toISOString() }));
   frSnapState = { at: Date.now(), promise };
@@ -1367,7 +1381,7 @@ async function frStatusFor(stations) {
       }),
     };
   }
-  return { status: out, checkedAt: snap.at, index: index.built, gapMin: Number(setting(null, "frGapMin")) || 3 };
+  return { status: out, checkedAt: snap.at, index: index.built, gapMin: frGapMinNow(null), pauseMin: frPauseMinNow(null), paid: isPaid(null) };
 }
 
 // Belgium live status (Eco-Movement, DATEX II). The static index (tools/build-be-index.py) gives each
@@ -2567,6 +2581,7 @@ async function route(request, env) {
       deployId: env.CF_VERSION_METADATA?.id?.slice(0, 8) || null,
       deployedAt: env.CF_VERSION_METADATA?.timestamp || null,
       secrets: { ORS_API_KEY: !!env.ORS_API_KEY, OCM_API_KEY: !!env.OCM_API_KEY, ECO_BE_TOKEN: !!env.ECO_BE_TOKEN },
+      plan: isPaid(env) ? `paid until ${paidUntil(env)}` : "free",
     });
   }
   if (path === "/geocode" && request.method === "GET") {

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.2"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-16.3"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -74,7 +74,6 @@
   .user .who[aria-expanded="true"] .caret { transform: rotate(45deg); }
   .user .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .user.off .name { color: var(--muted); text-decoration: line-through; }
-  .bug { flex: none; width: 18px; height: 18px; color: var(--warn); }
   .user .more { padding: 0 16px 14px; border-top: 1px solid var(--line); }
   .user .facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 12px 0; font-size: .92rem; }
   .user .facts > :nth-child(odd) { color: var(--muted); }
@@ -146,7 +145,6 @@ function ago(iso) {
 }
 
 let data = null, open = null, confirming = null, renaming = null, filter = "all";
-const BUG = `<svg class="bug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Debug on" role="img"><title>Debug on</title><rect x="8" y="6" width="8" height="14" rx="4"/><path d="M9 6a3 3 0 0 1 6 0M12 10v10M8 12H4M20 12h-4M8 17l-3 2M16 17l3 2M8 8 5 6M16 8l3-2"/></svg>`;
 const FILTERS = [["all", "All", () => true], ["debug", "Debug", (u) => u.debug], ["off", "Off", (u) => !u.active]];
 
 async function api(path, body) {
@@ -188,7 +186,7 @@ function render() {
     return `<div class="card user${u.active ? "" : " off"}" data-id="${u.id}">
       <div class="head">
         <button type="button" class="who" aria-expanded="${isOpen}"><span class="caret" aria-hidden="true"></span>
-          <span class="name">${esc(u.label)}</span>${u.debug ? BUG : ""}</button>
+          <span class="name">${esc(u.label)}</span></button>
         <label class="switch"><input type="checkbox" data-sw="active" ${u.active ? "checked" : ""} aria-label="${esc(u.label)}: key on"><span></span></label>
         <label class="switch dbg"><input type="checkbox" data-sw="debug" ${u.debug ? "checked" : ""} aria-label="${esc(u.label)}: debug mode allowed"><span></span></label>
       </div>

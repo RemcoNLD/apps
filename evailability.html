@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.122"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-16.123"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1311,10 +1311,20 @@ function reportError(text) {
 const errClock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 // The error tray is for testing: only with the debug line on (Help). Errors are still kept, so they
 // show once it's switched on. Without it, being offline shows as a calm note (netBar) instead.
-function debugMode() { try { return localStorage.getItem("evailability-debug") === "1"; } catch (_) { return false; } }
+// Same as debugOn() below (the switch in Help AND Debug allowed for this key), written out here because
+// this runs before that is defined. Before .123 this ignored the permission, so errors kept showing.
+function debugMode() { try { return localStorage.getItem("evailability-debug-allowed") === "1" && localStorage.getItem("evailability-debug") === "1"; } catch (_) { return false; } }
+// Errors older than an hour are dropped: after a reload or switching debug back on, only recent ones.
+const ERR_KEEP_MS = 60 * 60000;
+function pruneErrors() {
+  const n = errors.length;
+  errors = errors.filter((e) => Date.now() - (e.at || 0) < ERR_KEEP_MS);
+  if (errors.length !== n) saveErrors();
+}
 function renderErrors(pop = false) {
   const tray = $("errTray");
   if (!tray) return;
+  pruneErrors();
   if (!errors.length || !debugMode()) { tray.hidden = true; tray.innerHTML = ""; return; }
   const e = errors[0], more = errors.length - 1;
   tray.innerHTML = `<button type="button" class="err-msg" title="Tap when read">
@@ -1627,6 +1637,7 @@ async function refreshMe() {
       localStorage.setItem(DEBUG_ALLOWED_KEY, me.debug ? "1" : "0");
       me.name ? localStorage.setItem(ACCESS_NAME_KEY, me.name) : localStorage.removeItem(ACCESS_NAME_KEY);
     } catch (_) {}
+    if (was && !me.debug) { errors = []; saveErrors(); } // no debug any more: nothing waiting to pop up later
     if (was !== !!me.debug) { refreshDebugInfo(true); renderDebug(); renderErrors(); try { render(); } catch (_) {} }
     if (!$("help").hidden) renderAccount();
   } catch (_) { /* offline: keep what we knew */ }

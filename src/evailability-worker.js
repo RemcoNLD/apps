@@ -53,7 +53,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.114";
+const WORKER_VERSION = "2026-11-16.115";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -150,7 +150,26 @@ class HttpError extends Error {
 const USAGE_FLUSH_MS = 2 * 60 * 1000;
 const usage = { pending: {}, users: {}, ors: {}, orsHeaders: {}, lastFlush: Date.now(), kvWrites: 0 };
 // Requests per access key (user id), saved with the counts above, so no extra KV writes.
-function countUser(id) { const u = usage.users[id] || (usage.users[id] = { n: 0, last: 0 }); u.n++; u.last = Date.now(); }
+// Per key also its devices: a random id the app makes once per install (?d=), with the kind of device
+// read from the browser (iPhone, iPad, Mac…). Shows on the Users page whether a key is passed around.
+function countUser(id, device, kind) {
+  const u = usage.users[id] || (usage.users[id] = { n: 0, last: 0 });
+  u.n++; u.last = Date.now();
+  if (device) { u.dev = u.dev || {}; u.dev[device] = { last: u.last, kind }; }
+}
+// Adds one tally {n, last, dev} into another (saving, putting back after a failed save, the Users page).
+function mergeUser(into, u) {
+  into.n += u.n; into.last = Math.max(into.last, u.last);
+  for (const [d, v] of Object.entries(u.dev || {})) {
+    into.dev = into.dev || {};
+    if (!into.dev[d] || into.dev[d].last < v.last) into.dev[d] = v;
+  }
+}
+function deviceKind(request) {
+  const ua = request.headers.get("User-Agent") || "";
+  return /iPad/.test(ua) ? "iPad" : /iPhone/.test(ua) ? "iPhone" : /Android/.test(ua) ? "Android"
+    : /Macintosh/.test(ua) ? (/Mobile\//.test(ua) ? "iPad" : "Mac") : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "Other";
+}
 const today = () => new Date().toISOString().slice(0, 10);
 function countCall(source, n = 1) { usage.pending[source] = (usage.pending[source] || 0) + n; }
 // Every KV read counts against the free plan's 100,000 a day, so it's counted like a call.
@@ -195,10 +214,7 @@ async function flushUsage(env, force = false) {
   for (const [k, n] of Object.entries(pending)) rec.calls[k] = (rec.calls[k] || 0) + n;
   for (const [k, v] of Object.entries(ors)) if (!rec.ors[k] || rec.ors[k].at < v.at) rec.ors[k] = v;
   rec.users = rec.users || {};
-  for (const [id, u] of Object.entries(users)) {
-    const r = rec.users[id] || (rec.users[id] = { n: 0, last: 0 });
-    r.n += u.n; r.last = Math.max(r.last, u.last);
-  }
+  for (const [id, u] of Object.entries(users)) mergeUser(rec.users[id] || (rec.users[id] = { n: 0, last: 0 }), u);
   rec.orsHeaders = { ...(rec.orsHeaders || {}), ...usage.orsHeaders };
   rec.calls["KV writes"] = (rec.calls["KV writes"] || 0) + 1;
   try {
@@ -206,7 +222,7 @@ async function flushUsage(env, force = false) {
   } catch (e) {
     // Put the counts back so they're not lost.
     for (const [k, n] of Object.entries(pending)) countCall(k, n);
-    for (const [id, u] of Object.entries(users)) { const r = usage.users[id] || (usage.users[id] = { n: 0, last: 0 }); r.n += u.n; r.last = Math.max(r.last, u.last); }
+    for (const [id, u] of Object.entries(users)) mergeUser(usage.users[id] || (usage.users[id] = { n: 0, last: 0 }), u);
     console.log("Usage save failed", e.message);
   }
 }
@@ -2719,15 +2735,21 @@ async function handleUsers(request, env) {
     days.push({ day: d, users: rec?.users || {} });
   }
   for (const [id, u] of Object.entries(usage.users)) { // this copy's, not saved yet
-    const r = days[0].users[id] || (days[0].users[id] = { n: 0, last: 0 });
-    r.n += u.n; r.last = Math.max(r.last, u.last);
+    mergeUser(days[0].users[id] || (days[0].users[id] = { n: 0, last: 0 }), u);
   }
   return json(request, {
     legacyCode: !!setting(env, "legacyCode"),
     users: list.map((u) => {
       const perDay = days.map((d) => d.users[u.id]?.n || 0).reverse(); // oldest first
       const last = Math.max(0, ...days.map((d) => d.users[u.id]?.last || 0));
-      return { ...publicUser(u), perDay, lastUsed: last ? new Date(last).toISOString() : null };
+      // Devices seen in the last 7 days, newest first. Only counted since the current key was made,
+      // so after New key the old devices drop out.
+      const made = Date.parse(u.keyMade || u.created || 0) || 0;
+      const dev = {};
+      for (const d of days) for (const [k, v] of Object.entries(d.users[u.id]?.dev || {})) if (v.last >= made && (!dev[k] || dev[k].last < v.last)) dev[k] = v;
+      const devices = Object.entries(dev).map(([id, v]) => ({ id, kind: v.kind || "Other", last: new Date(v.last).toISOString() }))
+        .sort((a, b) => b.last.localeCompare(a.last));
+      return { ...publicUser(u), perDay, lastUsed: last ? new Date(last).toISOString() : null, devices };
     }),
     days: days.map((d) => d.day).reverse(),
     legacyPerDay: days.map((d) => d.users.legacy?.n || 0).reverse(),
@@ -2796,7 +2818,10 @@ async function route(request, env) {
   if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/")) {
     who = await whoIs(request, env, url);
     if (!who) throw new HttpError(401, "Access key needed");
-    if (who.id !== "admin") countUser(who.id);
+    if (who.id !== "admin") {
+      const d = (url.searchParams.get("d") || "").replace(/[^a-z0-9]/g, "").slice(0, 12);
+      countUser(who.id, d || null, d ? deviceKind(request) : null);
+    }
     WHO_OF.set(request, who);
     // Debug tools only for keys with Debug switched on (Users page) or the admin password.
     if (path.startsWith("/debug/") && !who.debug) throw new HttpError(403, "Debug isn’t switched on for this key");

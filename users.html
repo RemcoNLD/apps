@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.3"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-16.4"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -74,6 +74,15 @@
   .user .who[aria-expanded="true"] .caret { transform: rotate(45deg); }
   .user .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .user.off .name { color: var(--muted); text-decoration: line-through; }
+  .user .nm { min-width: 0; display: flex; flex-direction: column; }
+  .user .devs { font-size: .82rem; color: var(--muted); font-weight: 500; }
+  .user .devs.many { color: var(--warn); font-weight: 700; }
+  .devlist { margin: 0 0 12px; padding: 0; list-style: none; font-size: .92rem; }
+  .devlist li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); }
+  .devlist li:first-child { border-top: 0; }
+  .devlist .id { color: var(--muted); font-size: .8rem; margin-left: 6px; }
+  .devlist .when { color: var(--muted); white-space: nowrap; }
+  .sub { font-weight: 700; margin: 4px 0 2px; font-size: .92rem; }
   .user .more { padding: 0 16px 14px; border-top: 1px solid var(--line); }
   .user .facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 12px 0; font-size: .92rem; }
   .user .facts > :nth-child(odd) { color: var(--muted); }
@@ -125,7 +134,7 @@
   <div class="cols" id="cols" aria-hidden="true"><span>On</span><span>Debug</span></div>
   <div id="list"><p class="muted">Loading…</p></div>
   <div id="legacy"></div>
-  <p class="small muted">Changes reach the app within a few minutes. Debug lets that key switch on debug mode in Help (debug line, stored routes, forced updates). Tap a name for details and the last 7 days.</p>
+  <p class="small muted">Changes reach the app within a few minutes. Debug lets that key switch on debug mode in Help (debug line, stored routes, forced updates). Tap a name for details: devices and requests over the last 7 days. A key on 3 or more devices shows in orange; if it’s being passed around, tap New key.</p>
 </div>
 
 <script>
@@ -168,6 +177,11 @@ async function load() {
   } catch (e) { showError(e); }
 }
 
+// Under the name only when a key is on more than one device (more than 2: in orange, worth a look).
+const DEV_WARN = 3;
+const devs = (u) => (u.devices?.length || 0) < 2 ? ""
+  : `<span class="devs${u.devices.length >= DEV_WARN ? " many" : ""}">${u.devices.length} devices</span>`;
+const when = (iso) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 function render() {
   const all = [...data.users].sort((a, b) => (b.active - a.active) || a.label.localeCompare(b.label));
   if (filter !== "all" && !all.some(FILTERS.find((f) => f[0] === filter)[2])) filter = "all";
@@ -186,7 +200,7 @@ function render() {
     return `<div class="card user${u.active ? "" : " off"}" data-id="${u.id}">
       <div class="head">
         <button type="button" class="who" aria-expanded="${isOpen}"><span class="caret" aria-hidden="true"></span>
-          <span class="name">${esc(u.label)}</span></button>
+          <span class="nm"><span class="name">${esc(u.label)}</span>${devs(u)}</span></button>
         <label class="switch"><input type="checkbox" data-sw="active" ${u.active ? "checked" : ""} aria-label="${esc(u.label)}: key on"><span></span></label>
         <label class="switch dbg"><input type="checkbox" data-sw="debug" ${u.debug ? "checked" : ""} aria-label="${esc(u.label)}: debug mode allowed"><span></span></label>
       </div>
@@ -197,6 +211,10 @@ function render() {
           <span>Last used</span><span>${u.lastUsed ? new Date(u.lastUsed).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "never"}</span>
           <span>Requests</span><span>${u.perDay.at(-1)} today, ${week} in 7 days</span>
         </div>
+        <div class="sub">${u.devices?.length ? `Devices (${u.devices.length}, last 7 days)` : "Devices"}</div>
+        ${u.devices?.length ? `<ul class="devlist">${u.devices.map((d) => `<li><span>${esc(d.kind)}<span class="id">${esc(d.id.slice(0, 4))}</span></span><span class="when">${when(d.last)}</span></li>`).join("")}</ul>`
+          : `<p class="small muted" style="margin:0 0 12px">None seen yet (devices show after their first use with app version 125 or later).</p>`}
+        <div class="sub">Requests per day</div>
         <div class="week" aria-hidden="true">${u.perDay.map((n) => `<span style="height:${Math.max(6, (n / max) * 100)}%;${n ? "" : "opacity:.15"}"></span>`).join("")}</div>
         <div class="weekdays" aria-hidden="true">${dayNames.map((d) => `<span>${d}</span>`).join("")}</div>
         ${renaming === u.id ? `<form class="row rename" data-act="rename-save">

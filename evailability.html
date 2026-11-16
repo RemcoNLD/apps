@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.124"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-16.125"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1263,6 +1263,19 @@ if (navigator.onLine === false) setTimeout(() => setOffline(true), 0); // alread
 // A dropped connection (Safari: "Load failed") gets one more try after a short pause.
 // If the server is busy, a second try usually works.
 const ACCESS_KEY = "evailability-access";
+// A random id for this install, sent as ?d= so the Users page can count devices per key. No personal data.
+const DEVICE_ID = (() => {
+  try {
+    let d = localStorage.getItem("evailability-device");
+    if (!d) {
+      const abc = "23456789abcdefghjkmnpqrstuvwxyz";
+      d = [...crypto.getRandomValues(new Uint8Array(8))].map((x) => abc[x % abc.length]).join("");
+      localStorage.setItem("evailability-device", d);
+    }
+    return d;
+  } catch (_) { return ""; }
+})();
+const withDevice = (path) => DEVICE_ID ? `${path}${path.includes("?") ? "&" : "?"}d=${DEVICE_ID}` : path;
 const ACCESS_NAME_KEY = "evailability-access-name"; // the key's label, shown in Help
 const accessToken = () => { try { return localStorage.getItem(ACCESS_KEY) || ""; } catch (_) { return ""; } };
 async function api(path, body, timeoutMs, retry = true) {
@@ -1275,7 +1288,7 @@ async function api(path, body, timeoutMs, retry = true) {
     // With a timeout, a request that hangs (network switch, app in the background) is given up.
     const ctl = timeoutMs ? new AbortController() : null;
     const timer = ctl && setTimeout(() => ctl.abort(), timeoutMs);
-    try { res = await fetch(WORKER + path, ctl ? { ...opts, signal: ctl.signal } : opts); setOffline(false); break; }
+    try { res = await fetch(WORKER + withDevice(path), ctl ? { ...opts, signal: ctl.signal } : opts); setOffline(false); break; }
     catch (e) {
       if (attempt >= 1 || !retry) { setOffline(true); throw new Error("Couldn’t reach the server. Please try again in a moment."); }
       await new Promise((r) => setTimeout(r, 2000));

@@ -53,7 +53,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.116";
+const WORKER_VERSION = "2026-11-16.117";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1442,15 +1442,18 @@ function frSummary(site, snap, minKw = FAST_KW) {
   if (!newest || Date.parse(snap.at) - newest > FR_NOT_LIVE_MS) {
     return { ...base, available: null, total: null, changedAt, note: "live data looks frozen" };
   }
+  // Out-of-order points stay in the total and come back as offline: the ring shows them as grey
+  // outlined segments (they're there, just not working). Before .117 they were left out of the total.
   const working = live.filter((r) => r.etat !== "hors_service");
+  const offline = live.length - working.length;
   const free = working.filter((r) => r.etat === "en_service" && r.occupation === "libre");
   const known = working.filter((r) => r.occupation === "libre" || r.occupation === "occupe" || r.occupation === "reserve");
-  if (!working.length) return { ...base, available: 0, total: live.length, state: "likely_offline", changedAt };
-  if (!known.length) return { ...base, available: null, total: working.length, changedAt, note: "occupation unknown" };
+  if (!working.length) return { ...base, available: 0, total: live.length, offline, state: "likely_offline", changedAt };
+  if (!known.length) return { ...base, available: null, total: live.length, offline, changedAt, note: "occupation unknown" };
   const state = free.length ? "free" : "full";
   const taken = working.filter((r) => r.occupation !== "libre").map(time).filter(Boolean);
   return {
-    ...base, available: free.length, total: working.length, state, changedAt,
+    ...base, available: free.length, total: live.length, offline, state, changedAt,
     fullSince: state === "full" && taken.length ? new Date(Math.max(...taken)).toISOString() : null,
   };
 }
@@ -1469,7 +1472,7 @@ async function frStatusFor(stations, minKw = FAST_KW) {
       nearby: near.slice(0, 4).map(({ s }) => {
         const c = frSummary(s, snap, minKw);
         return { id: s.key, lat: s.lat, lon: s.lon, name: s.name || null, available: c.available, total: c.total,
-          maxKw: c.maxKw, state: c.state, changedAt: c.changedAt, fullSince: c.fullSince };
+          offline: c.offline, maxKw: c.maxKw, state: c.state, changedAt: c.changedAt, fullSince: c.fullSince };
       }),
     };
   }

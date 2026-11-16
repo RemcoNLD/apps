@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.126"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-16.127"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -761,16 +761,16 @@
   }
 
   /* ---------- availability ring (.64): free count in the middle, one segment per charger around it:
-     green free, red in use, grey out of order. Faded when > 3 min old, grey ring + outlined number > 5 min. */
+     green free, red in use, grey outline out of order. Faded when > 3 min old, grey ring + outlined number > 5 min. */
   .avr { position: relative; display: inline-grid; place-items: center; width: 56px; height: 56px; flex-shrink: 0; border-radius: 50%; vertical-align: middle; }
   .avr svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   .avr circle { fill: none; stroke-width: 4.6; transition: stroke .4s; }
   .avr .rg-free { stroke: var(--free); }
   .avr .rg-busy { stroke: var(--danger); }
-  .avr .rg-off { stroke: var(--offline); }
+  .avr .rg-off { stroke: var(--offline); stroke-width: 1.3; }
   .avr .rg-empty { stroke: var(--muted); stroke-width: 2.6; stroke-dasharray: 2.6 3.1; opacity: .75; }
   .avr .rg-unk { stroke: var(--muted); stroke-width: 2.6; opacity: .6; }
-  .avr .rg-nores { stroke: var(--muted); stroke-width: 1.1; }
+  .avr .rg-nores { stroke: var(--muted); stroke-width: 1.1; opacity: .7; }
   .avr > .stat { position: relative; line-height: 1; text-align: center; }
   .row .avail .avr > .stat { font-size: 1.6rem; font-weight: 800; letter-spacing: -.04em; }
   .avr.free .stat strong { color: var(--free); }
@@ -4368,10 +4368,10 @@ function ringSvg(st) {
   const f = (n) => Math.round(n * 100) / 100;
   return open + arcs.map((a) => {
     const len = Math.max(0.6, a.len - gap);
-    if (a.k === "nores") { // checked, no usable answer: an outlined segment
+    if (a.k === "off" || a.k === "nores") { // out of order: grey outline (there, not working); no usable answer: dotted outline
       return [RING_R - 1.8, RING_R + 1.8].map((rr) => {
         const k = rr / RING_R;
-        return `<circle class="rg-nores" cx="20" cy="20" r="${rr}" stroke-dasharray="${f(len * k)} ${f((RING_C - len) * k)}" stroke-dashoffset="${f(-(a.from + gap / 2) * k)}"/>`;
+        return `<circle class="rg-${a.k}" cx="20" cy="20" r="${rr}" stroke-dasharray="${f(len * k)} ${f((RING_C - len) * k)}" stroke-dashoffset="${f(-(a.from + gap / 2) * k)}"/>`;
       }).join("");
     }
     return `<circle class="rg-${a.k}" cx="20" cy="20" r="${RING_R}" stroke-dasharray="${f(len)} ${f(RING_C - len)}" stroke-dashoffset="${f(-(a.from + gap / 2))}"/>`;
@@ -4798,11 +4798,11 @@ function helpHtml() {
 
   <h3>Free or not</h3>
   <div class="legend">
-    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 free.</b> The ring shows all chargers there, one segment each: <b style="color:var(--free)">green</b> free, <b style="color:var(--danger)">red</b> in use, grey out of order (here 3 free, 4 in use, 1 broken out of 8). Press and hold for the numbers.</div>
+    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 free.</b> The ring shows all chargers there, one segment each: <b style="color:var(--free)">green</b> free, <b style="color:var(--danger)">red</b> in use, a grey outline out of order: it’s there, just not working (here 3 free, 4 in use, 1 broken out of 8). Press and hold for the numbers.</div>
     <div class="k">${demoRing(0, 4)}</div><div class="v">All in use.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Off</b>: reported out of order, or nothing has changed for hours.</div>
     <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grey with ?</b>: probably not live. The source hasn't changed anything at this site for over a day (3 days for small sites), so the number is its last report and may be wrong. The dot on the line is hollow.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (5, or 2 while the server runs on Cloudflare’s paid plan, when France also updates by itself). Belgium is updated one site at a time when you tap it: its fast stalls are checked one by one, about 10 seconds each, and the ring fills in as they come (dashed segments are stalls not checked yet, outlined ones were checked but gave no usable status); at most once a minute per site. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (5, or 2 while the server runs on Cloudflare’s paid plan, when France also updates by itself). Belgium is updated one site at a time when you tap it: its fast stalls are checked one by one, about 10 seconds each, and the ring fills in as they come (dashed segments are stalls not checked yet, faint outlined ones were checked but gave no usable status); at most once a minute per site. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>

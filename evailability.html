@@ -1076,7 +1076,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.110";
+const APP_VERSION = "2026-11-16.111";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -3285,7 +3285,7 @@ function openNavSheet(ids) {
   $("navHist").hidden = !$("navHist").innerHTML;
   navTarget.ids = ids;
   // How the name was chosen: only with the debug line on (Help), it's for tuning, not for driving.
-  $("navSrc").innerHTML = debugOn() ? nameSourceHtml(members, label) : "";
+  $("navSrc").innerHTML = debugOn() ? nameSourceHtml(members, label) + statusDebugHtml(members) : "";
   fetchPlaces(members); // this charger first, if it still needs a name
   const appBtn = (a) => `<button type="button" class="navbtn" data-nav="${a.key}"><span class="ico" style="background:${a.color}">${a.ico}</span>${esc(a.name)}${a.note ? `<small>${esc(a.note)}</small>` : ""}</button>`;
   $("navList").innerHTML = navOrder().map(appBtn).join("") +
@@ -3772,7 +3772,7 @@ function nameCandidates(s) {
   if (pl?.area && !BRAND_WORDS.test(pl.area)) add(pl.src === "station name" ? "fuel/charging station nearby (OpenStreetMap)" : "service area (OpenStreetMap)", pl.area);
   // NDW's name, if it reads like a place and not a street address ("Mastpolder A58" yes, "Drebbelstraat 42" no).
   const live = placeLike(s.liveName);
-  if (live) add("live-status name (NDW)", live);
+  if (live) add("live-status name", live);
   const town = parts.length > 1 ? parts[parts.length - 1] : null;
   if (town) add("town in the charger’s address", town);
   if (pl?.town) add("town (geocoder)", pl.town);
@@ -3793,7 +3793,7 @@ function updateNavSrc() {
   const label = siteLabel(members);
   $("navTitle").textContent = label; navTarget.name = label;
   // How the name was chosen: only with the debug line on (Help), it's for tuning, not for driving.
-  $("navSrc").innerHTML = debugOn() ? nameSourceHtml(members, label) : "";
+  $("navSrc").innerHTML = debugOn() ? nameSourceHtml(members, label) + statusDebugHtml(members) : "";
 }
 
 // Press-and-hold sheet: where the row's name came from, and what the place lookup returned, so a
@@ -3834,6 +3834,42 @@ function nameSourceHtml(members, label) {
   return `<div class="namesrc">${lines.map((l) => `<div>${l}</div>`).join("")}</div>`;
 }
 
+// Debug mode: the last status answer per charger, so a "?" or "–" can be explained.
+const LIVE_SOURCE = { NL: "NDW", DE: "MobiData BW (OCPDB)", AT: "E-Control", FR: "transport.data.gouv.fr", BE: "Eco-Movement" };
+function statusDebugHtml(members) {
+  const t = (v) => { const d = Date.parse(v || ""); return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : null; };
+  const ago = (ms) => (ms ? `${waitText(Date.now() - ms)} ago` : "never");
+  const lines = [];
+  for (const m of members) {
+    const st = m.status;
+    const brand = esc((BRAND[brandKey(m)] || {}).name || brandKey(m));
+    const bits = [`source ${esc(st?.source || LIVE_SOURCE[m.country] || m.country || "?")}`, `updated ${ago(m.statusAt)}`];
+    if (!st) {
+      bits.push(m.country === "FR" || m.country === "BE" ? "no answer yet (tap to check)" : "no live status returned (no matching live site)");
+    } else {
+      bits.push(st.available == null ? "free: unknown" : `free ${st.available} of ${st.total ?? "?"}`);
+      if (st.state) bits.push(`state ${esc(st.state)}`);
+      if (st.note) bits.push(`<b>${esc(st.note)}</b>`);
+      if (t(st.checkedAt)) bits.push(`read ${t(st.checkedAt)}`);
+      if (t(st.changedAt)) bits.push(`last change ${t(st.changedAt)}`);
+      if (t(st.fullSince)) bits.push(`full since ${t(st.fullSince)}`);
+      if (st.liveId) bits.push(`live site ${esc(String(st.liveId))}`);
+      if (st.liveLat != null) bits.push(`${Math.round(distKm(m, { lat: st.liveLat, lon: st.liveLon }) * 1000)} m from the pin`);
+      if (st.otherOperator) bits.push("matched another operator on the same spot");
+      if (m.liveDup) bits.push("hidden: duplicate pin");
+    }
+    let stalls = "";
+    if (st?.be && st.evseIds) {
+      stalls = st.evseIds.map((id) => {
+        const r = st.stalls?.[id];
+        return `<div class="cand">${esc(id.split("|")[0])}: ${r ? esc(r.kind) + (r.raw && r.raw !== r.kind ? ` (${esc(r.raw)})` : "") : "not checked"}</div>`;
+      }).join("");
+    }
+    lines.push(`<div class="cands"><b>Status · ${brand}</b><div class="cand">${bits.join(" · ")}</div>${stalls}</div>`);
+  }
+  return `<div class="namesrc">${lines.join("")}</div>`;
+}
+
 // The name of a row with several chargers: the first member with a real name, so the row doesn't
 // switch between "Nieuwegein" and "Shell Recharge" when its members change order.
 // One name for a row with several brands. Each member's name has a quality (where it came from);
@@ -3846,7 +3882,7 @@ const NAME_RANK = {
   "service area in the charger’s address": 1,
   "service area (OpenStreetMap)": 2,
   "fuel/charging station nearby (OpenStreetMap)": 3,
-  "live-status name (NDW)": 4,
+  "live-status name": 4,
   "town in the charger’s address": 5,
   "town (geocoder)": 6,
   "brand (no place found)": 7,

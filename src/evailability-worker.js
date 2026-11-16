@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.107";
+const WORKER_VERSION = "2026-11-16.108";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -291,9 +291,26 @@ async function handleUsage(request, env) {
     const rec = await readUsageDay(env, d);
     if (rec) days.push(rec);
   }
+  // Workers Paid: Cloudflare's allowances are per billing period (a month ending on the "paid until"
+  // date), so add up the days of the current period for Cloudflare's own counters.
+  let period = null;
+  if (isPaid(env)) {
+    const to = paidUntil(env);
+    const end = new Date(`${to}T00:00:00Z`);
+    const from = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 1, end.getUTCDate())).toISOString().slice(0, 10);
+    const sums = { "Worker requests": 0, "KV reads": 0, "KV writes": 0 };
+    const todayKey = today();
+    for (let t = Date.parse(`${from}T00:00:00Z`); t <= Math.min(Date.now(), end.getTime()); t += 86400000) {
+      const d = new Date(t).toISOString().slice(0, 10);
+      const rec = days.find((x) => x.day === d) || (await readUsageDay(env, d));
+      for (const k of Object.keys(sums)) sums[k] += rec?.calls?.[k] || 0;
+      if (d === todayKey) for (const k of Object.keys(sums)) sums[k] += usage.pending[k] || 0; // not saved yet
+    }
+    period = { from, to, calls: sums };
+  }
   return json(request, {
     stored: !!env.USAGE,
-    plan: { paid: isPaid(env), until: paidUntil(env) || null },
+    plan: { paid: isPaid(env), until: paidUntil(env) || null, period },
     today: today(),
     days,
     // Not saved yet (or no KV): this copy of the Worker's own tally since it started.

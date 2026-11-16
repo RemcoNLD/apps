@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.114"><!-- shown on the apps page; keep equal to APP_VERSION below -->
+<meta name="app-version" content="2026-11-16.115"><!-- shown on the apps page; keep equal to APP_VERSION below -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1076,7 +1076,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.114";
+const APP_VERSION = "2026-11-16.115";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1127,7 +1127,8 @@ const viaStatus = (s) => !tapOnly(s);
 // Workers Paid (the server says so with each answer, and switches back by itself after the paid-until
 // date): France updates by itself like NL/DE, and more chargers ahead are kept up to date.
 const PAID_AHEAD = 15;        // chargers ahead (beyond those on screen) updated each round
-const PAID_STATUS_BATCH = 12; // stations per /status call
+const PAID_STATUS_BATCH = 8;  // stations per /status call
+const PAID_FR_GAP_MS = 2 * 60 * 1000; // France by itself: every 2 minutes (each read is the whole country, 9.5 MB)
 const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
 const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
@@ -2668,6 +2669,7 @@ function applyStatus(status) {
   const before = new Map(state.stations.map((s) => [s.id, sig(s.status)]));
   for (const s of state.stations) {
     if (!(s.id in status)) continue;
+    if (status[s.id]?.failed) continue; // the lookup failed: keep what we have (it greys with age)
     s.status = status[s.id];
     const read = Date.parse(s.status?.checkedAt || "");
     s.statusAt = read && read <= now && now - read < 10 * 60 * 1000 ? read : now;
@@ -2853,7 +2855,7 @@ async function refreshStatus(force = true) {
   fetchPlaces(); // rows on screen and the next few above them
   matchBelgium();
   // Paid: France by itself, at most once a minute, when French chargers are on screen or just ahead.
-  if (state.paid && !frBusy && now - (state.frTriedAt || 0) > 55 * 1000 &&
+  if (state.paid && !frBusy && now - (state.frTriedAt || 0) > PAID_FR_GAP_MS &&
       [...inView, ...upcomingShown().slice(0, 10)].some((s) => s.country === "FR")) refreshFrance();
   // Paid: also the next chargers ahead, not only those on screen.
   const pool = state.paid ? [...new Set([...inView, ...upcomingShown().slice(0, PAID_AHEAD)])] : inView;

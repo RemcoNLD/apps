@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.109";
+const WORKER_VERSION = "2026-11-16.110";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1032,10 +1032,25 @@ function classify(counts) {
   return { state, ageMin };
 }
 
+// NDW refuses bursts (about 10 calls a second), so each Worker copy sends at most 3 at a time,
+// spaced out a little. More chargers per round (Workers Paid) then take a moment longer, not fail.
+let ndwActive = 0, ndwLastStart = 0;
+const ndwWaiting = [];
+async function ndwSlot() {
+  while (ndwActive >= 3) await new Promise((r) => ndwWaiting.push(r));
+  ndwActive++;
+  const wait = ndwLastStart + 120 - Date.now();
+  ndwLastStart = Math.max(Date.now(), ndwLastStart + 120);
+  if (wait > 0) await sleep(wait);
+}
+function ndwDone() { ndwActive--; ndwWaiting.shift()?.(); }
 async function ndwFeaturesNear(lat, lon, dLat = 0.004, dLon = 0.006) {
   const bbox = [lon - dLon, lat - dLat, lon + dLon, lat + dLat].map((v) => v.toFixed(6)).join(",");
-  const data = await fetchJson(`${NDW_BBOX}?bbox=${bbox}`, { headers: { Accept: "application/json" } }, "NDW");
-  return data.features || [];
+  await ndwSlot();
+  try {
+    const data = await fetchJson(`${NDW_BBOX}?bbox=${bbox}`, { headers: { Accept: "application/json" } }, "NDW");
+    return data.features || [];
+  } finally { ndwDone(); }
 }
 
 // ---------------------------------------------------------------- live status (AT)
@@ -1256,7 +1271,10 @@ const frKey5 = (t, p) => ((((t.charCodeAt(p + 2) * 128 + t.charCodeAt(p + 3)) * 
 let frPrefixCache = null; // { ids, set }
 async function frWhole(ids, url = FR_DYNAMIC_URL) {
   countCall("PAN FR");
-  const res = await fetch(url);
+  // Given up after 22 s (the app waits 30): a slow download then gets a proper message.
+  const res = await fetch(url, { signal: AbortSignal.timeout(22000) }).catch((e) => {
+    throw new HttpError(504, e.name === "TimeoutError" ? "The French live file is downloading slowly; try again later" : `French live file: ${e.message}`);
+  });
   if (!res.ok || !res.body) throw new HttpError(502, `French live file: HTTP ${res.status}`);
   if (frPrefixCache?.ids !== ids) frPrefixCache = { ids, set: new Set([...ids].filter((id) => id.length > 5).map((id) => frKey5(id, 0))) };
   const prefixes = frPrefixCache.set;
@@ -1348,7 +1366,7 @@ function frSitesNear(index, brand, lat, lon, km) {
 let frSnapState = null; // { at, promise } — one read shared by every request in this Worker copy
 async function frSnapshot(index) {
   // Free plan: at most one read per gap. Paid: a read is reused for a minute at most.
-  const ttl = isPaid(null) ? 60 * 1000 : Math.max(FR_SNAPSHOT_MS, frGapMinNow(null) * 60 * 1000 - 30 * 1000);
+  const ttl = isPaid(null) ? 110 * 1000 : Math.max(FR_SNAPSHOT_MS, frGapMinNow(null) * 60 * 1000 - 30 * 1000);
   if (frSnapState && Date.now() - frSnapState.at < ttl) return frSnapState.promise;
   const promise = frWhole(index.ids).then((w) => ({ rows: w.rows, at: new Date().toISOString() }));
   frSnapState = { at: Date.now(), promise };
@@ -1549,11 +1567,11 @@ async function liveStatus(station, env) {
   const key = `status:${station.id}`;
   const cached = memoGet(key);
   if (cached !== undefined) return cached;
-  let status = null;
+  let status = null, failed = null;
   if (station.country === "DE") {
-    try { status = await deStatus(station, brand); } catch (e) { console.log("MobiData BW failed", station.id, e.message); }
+    try { status = await deStatus(station, brand); } catch (e) { failed = e.message; console.log("MobiData BW failed", station.id, e.message); }
   } else if (station.country === "AT") {
-    try { status = await atStatus(station, env, brand); } catch (e) { console.log("E-Control failed", station.id, e.message); }
+    try { status = await atStatus(station, env, brand); } catch (e) { failed = e.message; console.log("E-Control failed", station.id, e.message); }
   } else {
     try {
       const features = (await ndwFeaturesNear(station.lat, station.lon)).filter((f) => featureIsBrand(f, brand));
@@ -1586,8 +1604,16 @@ async function liveStatus(station, env) {
           .filter(Boolean);
       }
     } catch (e) {
+      failed = e.message;
       console.log("NDW failed", station.id, e.message);
     }
+  }
+  // A failed lookup isn't "no live data": the app keeps the value it has (it greys with age) and
+  // the next round tries again (the failure is remembered for 15 s only).
+  if (failed && !status) {
+    const f = { failed: true, note: `lookup failed: ${String(failed).slice(0, 80)}` };
+    memoSet(key, f, 15 * 1000);
+    return f;
   }
   if (status && status.state) {
     try { status = { ...status, ...(await observe(env, station.id, status.state)) }; } catch (_) {}
@@ -1761,6 +1787,7 @@ async function handlePlan(request, env) {
   // Only the first few (the ones on screen right after planning); the app fetches the rest itself.
   const first = stations.slice(0, isPaid(env) ? 20 : 8);
   const status = await statusForMany(first, env);
+  for (const k of Object.keys(status)) if (status[k]?.failed) status[k] = null; // not checked: the app asks again
   const checked = new Set(first.filter((s) => status[s.id] != null || !LIVE_COUNTRIES.has(s.country)).map((s) => s.id));
   stations = stations.map((s) => {
     const out = { ...s, status: status[s.id] ?? null, statusChecked: checked.has(s.id) };

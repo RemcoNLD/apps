@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.100";
+const WORKER_VERSION = "2026-11-16.101";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -768,14 +768,66 @@ function isFastPoi(p) {
 // (charger locations hardly change), pause briefly between calls, and retry once when blocked.
 let ocmLastCall = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Open Charge Map answers at most OCM_MAX sites per call. A brand with thousands of slow chargers
+// (TotalEnergies runs Amsterdam's and Antwerp's street chargers) filled that cap with Dutch sites, so
+// a long route lost everything further on (seen 16 Nov: only the Dutch part of a route to France).
+// So: other brands are asked for fast (level 3) chargers only, Ionity on its own, and a box that still
+// hits the cap is split into four, up to twice.
+const OCM_MAX = 2000;
+async function ocmBox(env, ids, box, fastOnly, idToBrand, countries, depth = 0) {
+  const [minLon, minLat, maxLon, maxLat] = box;
+  const url = `${OCM_BASE}/poi/?output=json&compact=true&verbose=false&maxresults=${OCM_MAX}` +
+    `&operatorid=${ids.join(",")}${fastOnly ? "&levelid=3" : ""}` +
+    `&boundingbox=(${maxLat},${minLon}),(${minLat},${maxLon})&key=${env.OCM_API_KEY}`;
+  let data;
+  for (let attempt = 0; ; attempt++) {
+    const wait = 250 - (Date.now() - ocmLastCall);
+    if (wait > 0) await sleep(wait);
+    ocmLastCall = Date.now();
+    try { data = await fetchJson(url, {}, "Open Charge Map"); break; }
+    catch (e) {
+      if (attempt < 2 && /returned 429/.test(e.message)) { await sleep(1500 * (attempt + 1)); continue; }
+      if (/returned 429/.test(e.message)) throw new HttpError(503, "Open Charge Map is busy (too many requests). Please try again in a minute.");
+      throw e;
+    }
+  }
+  if (!Array.isArray(data)) data = [];
+  if (data.length >= OCM_MAX && depth < 2) {
+    countCall("OCM split box");
+    const midLon = (minLon + maxLon) / 2, midLat = (minLat + maxLat) / 2;
+    const parts = [[minLon, minLat, midLon, midLat], [midLon, minLat, maxLon, midLat], [minLon, midLat, midLon, maxLat], [midLon, midLat, maxLon, maxLat]];
+    const out = [];
+    for (const b of parts) out.push(...await ocmBox(env, ids, b, fastOnly, idToBrand, countries, depth + 1));
+    return out;
+  }
+  // Keep only what the app uses, in the same shape as before.
+  const list = [];
+  for (const p of data) {
+    const brand = idToBrand[p.OperatorID];
+    if (!brand || (brand !== "ionity" && !isFastPoi(p))) continue;
+    const a = p.AddressInfo || {};
+    list.push({
+      ID: p.ID, OperatorID: p.OperatorID, NumberOfPoints: p.NumberOfPoints || null, _brand: brand,
+      AddressInfo: {
+        Title: a.Title, AddressLine1: a.AddressLine1, Town: a.Town, Latitude: a.Latitude, Longitude: a.Longitude,
+        Country: { ISOCode: a.Country?.ISOCode || countries[a.CountryID] || null },
+      },
+      Connections: (p.Connections || []).map((c) => ({ PowerKW: c.PowerKW ?? null })),
+    });
+  }
+  return list;
+}
 async function sitesInBox(env, box, brands = ["ionity"]) {
   const { byBrand, idToBrand, countries } = await brandOperators(env);
-  const ids = [...new Set(brands.flatMap((k) => (byBrand[k] || []).map((o) => o.id)))].sort((a, b) => a - b);
-  if (!ids.length) return [];
+  const idsOf = (keys) => [...new Set(keys.flatMap((k) => (byBrand[k] || []).map((o) => o.id)))].sort((a, b) => a - b);
+  const ionityIds = brands.includes("ionity") ? idsOf(["ionity"]) : [];
+  const otherIds = idsOf(brands.filter((k) => k !== "ionity")).filter((id) => !ionityIds.includes(id));
+  if (!ionityIds.length && !otherIds.length) return [];
   // Round outward to 0.05° so nearby lookups (route options, rerouting) reuse the same answer.
   const r = (v, up) => (up ? Math.ceil(v * 20) : Math.floor(v * 20)) / 20;
-  const [minLon, minLat, maxLon, maxLat] = [r(box[0]), r(box[1]), r(box[2], true), r(box[3], true)];
-  const key = `ocm2:${ids.join(",")}:${minLon},${minLat},${maxLon},${maxLat}`;
+  const rb = [r(box[0]), r(box[1]), r(box[2], true), r(box[3], true)];
+  // ocm3: a new key, so the cut-short answers kept under the old key aren't used again.
+  const key = `ocm3:${ionityIds.join(",")}|${otherIds.join(",")}:${rb.join(",")}`;
   const cached = memoGet(key);
   if (cached !== undefined) return cached;
   // Also kept a day in KV, already trimmed: a fresh copy of the Worker then doesn't download
@@ -786,44 +838,15 @@ async function sitesInBox(env, box, brands = ["ionity"]) {
       if (kv) { memoSet(key, kv, 60 * 60 * 1000); return kv; }
     } catch (_) {}
   }
-  // compact=true leaves out the repeated reference data (operator, country objects…): far less to parse.
-  const url = `${OCM_BASE}/poi/?output=json&compact=true&verbose=false&maxresults=2000` +
-    `&operatorid=${ids.join(",")}` +
-    `&boundingbox=(${maxLat},${minLon}),(${minLat},${maxLon})&key=${env.OCM_API_KEY}`;
-  for (let attempt = 0; ; attempt++) {
-    const wait = 250 - (Date.now() - ocmLastCall);
-    if (wait > 0) await sleep(wait);
-    ocmLastCall = Date.now();
-    try {
-      const data = await fetchJson(url, {}, "Open Charge Map");
-      // Keep only what the app uses, in the same shape as before.
-      const list = [];
-      for (const p of Array.isArray(data) ? data : []) {
-        const brand = idToBrand[p.OperatorID];
-        if (!brand || (brand !== "ionity" && !isFastPoi(p))) continue;
-        const a = p.AddressInfo || {};
-        list.push({
-          ID: p.ID, OperatorID: p.OperatorID, NumberOfPoints: p.NumberOfPoints || null, _brand: brand,
-          AddressInfo: {
-            Title: a.Title, AddressLine1: a.AddressLine1, Town: a.Town, Latitude: a.Latitude, Longitude: a.Longitude,
-            Country: { ISOCode: a.Country?.ISOCode || countries[a.CountryID] || null },
-          },
-          Connections: (p.Connections || []).map((c) => ({ PowerKW: c.PowerKW ?? null })),
-        });
-      }
-      memoSet(key, list, 60 * 60 * 1000);
-      if (env.USAGE) {
-        try { await env.USAGE.put(key, JSON.stringify(list), { expirationTtl: 24 * 3600 }); countCall("KV writes"); } catch (_) {}
-      }
-      return list;
-    } catch (e) {
-      if (attempt < 2 && /returned 429/.test(e.message)) { await sleep(1500 * (attempt + 1)); continue; }
-      if (/returned 429/.test(e.message)) {
-        throw new HttpError(503, "Open Charge Map is busy (too many requests). Please try again in a minute.");
-      }
-      throw e;
-    }
+  const seen = new Map();
+  if (ionityIds.length) for (const p of await ocmBox(env, ionityIds, rb, false, idToBrand, countries)) seen.set(p.ID, p);
+  if (otherIds.length) for (const p of await ocmBox(env, otherIds, rb, true, idToBrand, countries)) seen.set(p.ID, p);
+  const list = [...seen.values()];
+  memoSet(key, list, 60 * 60 * 1000);
+  if (env.USAGE) {
+    try { await env.USAGE.put(key, JSON.stringify(list), { expirationTtl: 24 * 3600 }); countCall("KV writes"); } catch (_) {}
   }
+  return list;
 }
 const ionityInBox = (env, box) => sitesInBox(env, box, ["ionity"]);
 

@@ -72,7 +72,7 @@ def main():
                     continue
                 if not (BBOX[0] <= lon <= BBOX[2] and BBOX[1] <= lat <= BBOX[3]):
                     continue
-                ids, kw = [], 0
+                ids, kws, kw = [], {}, 0
                 for st in s.get("energyInfrastructureStation", []):
                     for rp in st.get("refillPoint", []):
                         p = rp.get("aegiElectricChargingPoint") or {}
@@ -84,7 +84,9 @@ def main():
                         # BE*CKE*EXB00563205*2). Kept as "evse|feedId" so the Worker can fall back to the feed id.
                         evse = next((x.get("identifier") for k in p.get("connector", []) for x in k.get("externalIdentifier", [])
                                      if (x.get("typeOfIdentifier") or {}).get("extendedValueG") == "evseId" and x.get("identifier")), None)
-                        ids.append(p["idG"] if not evse or evse == p["idG"] else f"{evse}|{p['idG']}")
+                        eid = p["idG"] if not evse or evse == p["idG"] else f"{evse}|{p['idG']}"
+                        ids.append(eid)
+                        kws[eid] = max(kws.get(eid, 0), round(pkw))  # each stall's power (evseKw)
                         kw = max(kw, pkw)
                 if not ids:
                     continue
@@ -99,14 +101,15 @@ def main():
                 except (KeyError, IndexError, TypeError):
                     street, city = "", ""
                 name = ", ".join(x for x in (street, city) if x) or text(s.get("brand"))
-                sites.append((b, round(lat, 5), round(lon, 5), round(kw), name, sorted(set(ids))))
+                uniq = sorted(set(ids))
+                sites.append((b, round(lat, 5), round(lon, 5), round(kw), name, uniq, [kws[i] for i in uniq]))
 
     sites.sort(key=lambda s: (s[0], s[1], s[2]))
     out = {
         "built": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
         "source": "nap-be.eco-movement.com /datex2/v1/locations",
         "pages": pages,
-        "fields": ["brand", "lat", "lon", "maxKw", "name", "evseIds"],
+        "fields": ["brand", "lat", "lon", "maxKw", "name", "evseIds", "evseKw"],
         "sites": [list(s) for s in sites],
     }
     os.makedirs("data", exist_ok=True)

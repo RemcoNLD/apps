@@ -2,6 +2,7 @@
 """Build data/fr-fast-sites.json from France's national charger file (IRVE).
 
 Usage:  python3 tools/build-fr-index.py <static.csv> [dynamic.csv]
+        (runs weekly in .github/workflows/fr-index.yml, which downloads the static file itself)
 
 <static.csv>   "Base nationale consolidée IRVE - données statiques"
                https://transport.data.gouv.fr/resources/84013/download
@@ -92,6 +93,7 @@ def main():
         s = stations.setdefault((p["b"], p["st"]), dict(b=p["b"], pts=[], ids=[], kw=0, name=p["name"]))
         s["pts"].append((p["lon"], p["lat"]))
         s["ids"].append(pid)
+        s.setdefault("kws", []).append(round(p["kw"]))
         s["kw"] = max(s["kw"], p["kw"])
     sites, grid = [], {}
     for s in sorted(stations.values(), key=lambda s: -len(s["ids"])):
@@ -106,9 +108,10 @@ def main():
                         hit = site
         if hit:
             hit["ids"] += s["ids"]
+            hit["kws"] += s["kws"]
             hit["kw"] = max(hit["kw"], s["kw"])
             continue
-        site = dict(b=s["b"], lon=lon, lat=lat, kw=s["kw"], name=s["name"], ids=list(s["ids"]))
+        site = dict(b=s["b"], lon=lon, lat=lat, kw=s["kw"], name=s["name"], ids=list(s["ids"]), kws=list(s["kws"]))
         sites.append(site)
         grid.setdefault(cell, []).append(site)
 
@@ -117,8 +120,11 @@ def main():
         "built": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
         "source": os.path.basename(static_path),
         "licence": "Licence Ouverte 2.0, transport.data.gouv.fr",
-        "fields": ["brand", "lat", "lon", "maxKw", "name", "pdcIds"],
-        "sites": [[s["b"], round(s["lat"], 5), round(s["lon"], 5), round(s["kw"]), s["name"], sorted(s["ids"])] for s in sites],
+        "fields": ["brand", "lat", "lon", "maxKw", "name", "pdcIds", "pdcKw"],
+        # pdcIds sorted, pdcKw in the same order (each point's own power, for counting at the app's minimum).
+        "sites": [[s["b"], round(s["lat"], 5), round(s["lon"], 5), round(s["kw"]), s["name"],
+                   [i for i, _ in sorted(zip(s["ids"], s["kws"]))], [k for _, k in sorted(zip(s["ids"], s["kws"]))]]
+                  for s in sites],
     }
     os.makedirs("data", exist_ok=True)
     with open("data/fr-fast-sites.json", "w", encoding="utf-8") as f:

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.125"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-16.126"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2774,7 +2774,7 @@ async function fetchStatus(stations) {
   for (let i = 0; i < list.length; i += per) batches.push(list.slice(i, i + per));
   const status = {};
   for (let i = 0; i < batches.length; i += 3) { // 3 batches at a time
-    const res = await Promise.all(batches.slice(i, i + 3).map((b) => api("/status", { stations: b }, 20000)));
+    const res = await Promise.all(batches.slice(i, i + 3).map((b) => api("/status", { stations: b, minKw: minKw() }, 20000)));
     for (const r of res) { Object.assign(status, r.status); setPaid(r.paid); }
   }
   applyStatus(status);
@@ -3035,7 +3035,7 @@ async function refreshFrance(tap = null) { // tap: the tapped row (null when the
   render();
   let why = null;
   try {
-    const r = await api("/fr-status", { stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 30000, false);
+    const r = await api("/fr-status", { minKw: minKw(), stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 30000, false);
     if (r.off) { state.frOffUntil = Date.now() + 10 * 60 * 1000; state.frOffReason = "off"; why = "France live is switched off on the server"; }
     if (r.gapMin >= 0) FR_MIN_GAP_MS = r.gapMin * 60 * 1000; // per plan: 2 on Paid, 5 on free, unless set on the usage page
     if (r.pauseMin > 0) FR_FAIL_PAUSE_MS = r.pauseMin * 60 * 1000;
@@ -3067,7 +3067,7 @@ async function matchBelgium() {
   if (!todo.length) return;
   beMatchBusy = true;
   try {
-    const r = await api("/be-status", { stations: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 20000, false);
+    const r = await api("/be-status", { minKw: minKw(), stations: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 20000, false);
     for (const s of todo) { s.beMatchedAt = Date.now(); s.beMatchV = BE_MATCH_V; s.beDoneAt = 0; }
     applyStatus(r.status || {});
     for (const s of todo) {

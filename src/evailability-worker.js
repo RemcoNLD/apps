@@ -53,7 +53,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.115";
+const WORKER_VERSION = "2026-11-16.116";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -98,6 +98,17 @@ const BRAND = Object.fromEntries(BRANDS.map((b) => [b.key, b]));
 const brandOf = (key) => BRAND[key] || BRAND.ionity;
 // Only fast chargers: everything below this is left out for the other brands.
 const FAST_KW = 50;
+// The app's minimum charging power (50, 150 or 300 on the start screen), sent as minKw with every status
+// call. Free counts then mean "free at your power": a 350 kW site's 50 kW chargers don't count when
+// you asked for 150. Only when no stall of a site reaches minKw are its fast ones (>= 50 kW) counted.
+const minKwOf = (v) => { const n = Math.round(Number(v)); return n >= FAST_KW && n <= 400 ? n : FAST_KW; };
+function byPower(points, kwOf, minKw = FAST_KW) {
+  const fast = points.filter((p) => (kwOf(p) || 0) >= FAST_KW);
+  const base = fast.length ? fast : points;
+  if (minKw <= FAST_KW) return base;
+  const strong = base.filter((p) => (kwOf(p) || 0) >= minKw);
+  return strong.length ? strong : base;
+}
 
 const STATUS_TTL_MS = 60 * 1000;
 const LIVE_COUNTRIES = new Set(["NL", "AT", "DE"]);
@@ -1040,7 +1051,7 @@ function featureIsBrand(feature, brand) {
 const looksLikeIonity = (feature) => featureIsBrand(feature, BRAND.ionity);
 
 // Sums the DC entries (Ionity is DC-only, but this keeps AC out if it ever appears).
-function extractCounts(feature) {
+function extractCounts(feature, minKw = FAST_KW) {
   const list = feature.properties?.availabilities || [];
   const valid = list.filter((e) => typeof e.total === "number" && typeof e.available === "number");
   if (!valid.length) return null;
@@ -1048,7 +1059,7 @@ function extractCounts(feature) {
   // A post often has a CCS and a CHAdeMO cable for one charging spot. Adding both counted one spot
   // twice (Fastned Hoezaar: 9 instead of 8). Count the CCS entries when there are any.
   const ccs = dc.filter((e) => /COMBO|CCS/i.test(String(e.connector_type || "")));
-  const use = ccs.length ? ccs : dc.length ? dc : valid;
+  const use = byPower(ccs.length ? ccs : dc.length ? dc : valid, (e) => (e.power_max || 0) / 1000, minKw);
   return {
     available: use.reduce((n, e) => n + e.available, 0),
     total: use.reduce((n, e) => n + e.total, 0),
@@ -1126,8 +1137,7 @@ async function atStatus(station, env, brand = BRAND.ionity) {
   const nearby = mine.filter((e) => e === nearest ||
     (e.d <= nearest.d + 0.3 && !oppositeSides(`${nearest.x.label} ${nearest.x.name || ""}`, `${e.x.label} ${e.x.name || ""}`)));
   let points = nearby.flatMap((e) => e.x.points || []).filter((p) => !["REMOVED", "PLANNED"].includes(p.status));
-  const fastAt = points.filter((p) => (p.capacityKw || 0) >= FAST_KW);
-  if (fastAt.length) points = fastAt; // count the fast chargers only, if the site has any
+  points = byPower(points, (p) => p.capacityKw, station.minKw); // fast ones only, at your power if any
   if (!points.length) return null;
   const count = (...st) => points.filter((p) => st.includes(p.status)).length;
   const available = count("AVAILABLE");
@@ -1195,8 +1205,7 @@ function summariseDe(locations, station, brand = BRAND.ionity) {
   }
   let points = [...byId.values()];
   if (!points.length) return null;
-  const fast = points.filter((p) => p.kw >= FAST_KW);
-  if (fast.length) points = fast; // count the fast chargers only, if the site has any
+  points = byPower(points, (p) => p.kw, station.minKw); // fast ones only, at your power if any
   const withLive = points.filter((p) => p.live);
   if (withLive.length) points = withLive; // register-only duplicates would inflate the total
   const count = (...st) => points.filter((p) => p.live && st.includes(p.status)).length;
@@ -1381,9 +1390,10 @@ async function frIndex() {
     if (!res.ok) throw new HttpError(502, `France index: HTTP ${res.status}`);
     const data = await res.json();
     const ids = new Set(), grid = new Map();
-    const sites = data.sites.map(([brand, lat, lon, maxKw, name, pdcIds], i) => {
+    const sites = data.sites.map(([brand, lat, lon, maxKw, name, pdcIds, pdcKw], i) => {
       for (const id of pdcIds) ids.add(id);
-      const site = { key: `fr${i}`, brand, lat, lon, maxKw, name, ids: pdcIds };
+      // pdcKw: each point's power, same order as pdcIds (index from 17 Nov; older ones lack it).
+      const site = { key: `fr${i}`, brand, lat, lon, maxKw, name, ids: pdcIds, kw: Array.isArray(pdcKw) ? pdcKw : null };
       const k = `${brand}|${Math.floor(lat / FR_CELL)}|${Math.floor(lon / FR_CELL)}`;
       if (!grid.has(k)) grid.set(k, []);
       grid.get(k).push(site);
@@ -1421,8 +1431,9 @@ async function frSnapshot(index) {
 }
 
 // One index site → counts. Only points present in the live file count (old ids stay in the static file).
-function frSummary(site, snap) {
-  const live = site.ids.map((id) => snap.rows[id]).filter(Boolean);
+function frSummary(site, snap, minKw = FAST_KW) {
+  const ids = site.kw ? byPower(site.ids.map((id, i) => ({ id, kw: site.kw[i] })), (p) => p.kw, minKw).map((p) => p.id) : site.ids;
+  const live = ids.map((id) => snap.rows[id]).filter(Boolean);
   const base = { maxKw: site.maxKw, source: "transport.data.gouv.fr", checkedAt: snap.at };
   if (!live.length) return { ...base, available: null, total: null, note: "no live data for this site" };
   const time = (r) => Date.parse(String(r.horodatage).replace(" ", "T")) || 0;
@@ -1444,7 +1455,7 @@ function frSummary(site, snap) {
   };
 }
 
-async function frStatusFor(stations) {
+async function frStatusFor(stations, minKw = FAST_KW) {
   const index = await frIndex();
   const snap = await frSnapshot(index);
   const out = {};
@@ -1454,9 +1465,9 @@ async function frStatusFor(stations) {
     if (!near.length || near[0].d > FR_MATCH_KM) { out[st.id] = null; continue; }
     const main = near[0].s;
     out[st.id] = {
-      ...frSummary(main, snap), liveId: main.key, liveLat: main.lat, liveLon: main.lon,
+      ...frSummary(main, snap, minKw), liveId: main.key, liveLat: main.lat, liveLon: main.lon,
       nearby: near.slice(0, 4).map(({ s }) => {
-        const c = frSummary(s, snap);
+        const c = frSummary(s, snap, minKw);
         return { id: s.key, lat: s.lat, lon: s.lon, name: s.name || null, available: c.available, total: c.total,
           maxKw: c.maxKw, state: c.state, changedAt: c.changedAt, fullSince: c.fullSince };
       }),
@@ -1485,8 +1496,9 @@ async function beIndex() {
     if (!res.ok) throw new HttpError(502, `Belgium index: HTTP ${res.status}`);
     const data = await res.json();
     const grid = new Map();
-    data.sites.forEach(([brand, lat, lon, maxKw, name, evseIds], i) => {
-      const site = { key: `be${i}`, brand, lat, lon, maxKw, name, evseIds };
+    data.sites.forEach(([brand, lat, lon, maxKw, name, evseIds, evseKw], i) => {
+      // evseKw: each stall's power, same order as evseIds (once the index is rebuilt with it).
+      const site = { key: `be${i}`, brand, lat, lon, maxKw, name, evseIds, kw: Array.isArray(evseKw) ? evseKw : null };
       for (const b of [brand, "*"]) { // "*": every operator, for the same-spot fallback
         const k = `${b}|${Math.floor(lat / BE_CELL)}|${Math.floor(lon / BE_CELL)}`;
         if (!grid.has(k)) grid.set(k, []);
@@ -1510,11 +1522,13 @@ function beSitesNear(index, brand, lat, lon, km) {
   }
   return out.sort((a, b) => a.d - b.d);
 }
-async function beStatusFor(stations) {
+async function beStatusFor(stations, minKw = FAST_KW) {
   const index = await beIndex();
   const out = {};
-  const site = (s) => ({ be: true, available: null, total: s.evseIds.length, evseIds: s.evseIds, maxKw: s.maxKw,
-    source: "Eco-Movement (BE)" });
+  // Only the stalls at your power, if the index knows each stall's power: fewer calls, a truer count.
+  const stalls = (s) => s.kw ? byPower(s.evseIds.map((id, i) => ({ id, kw: s.kw[i] })), (p) => p.kw, minKw).map((p) => p.id) : s.evseIds;
+  const site = (s) => { const ids = stalls(s); return { be: true, available: null, total: ids.length, evseIds: ids, maxKw: s.maxKw,
+    source: "Eco-Movement (BE)" }; };
   for (const st of stations.slice(0, BE_MAX_STATIONS)) {
     const near = beSitesNear(index, brandOf(st.brand).key, Number(st.lat), Number(st.lon), BE_NEARBY_KM);
     if (!near.length || near[0].d > BE_MATCH_KM) {
@@ -1610,7 +1624,7 @@ async function beEvse(env, evse) {
 async function liveStatus(station, env) {
   if (!LIVE_COUNTRIES.has(station.country)) return null;
   const brand = brandOf(station.brand);
-  const key = `status:${station.id}`;
+  const key = `status:${station.id}:${station.minKw || FAST_KW}`;
   const cached = memoGet(key);
   if (cached !== undefined) return cached;
   let status = null, failed = null;
@@ -1625,7 +1639,7 @@ async function liveStatus(station, env) {
         features.sort((a, b) =>
           haversineKm(a.geometry.coordinates, [station.lon, station.lat]) -
           haversineKm(b.geometry.coordinates, [station.lon, station.lat]));
-        const counts = extractCounts(features[0]);
+        const counts = extractCounts(features[0], station.minKw);
         status = counts
           ? { ...counts, ...classify(counts), ...ndwTimes(counts), source: "NDW", checkedAt: new Date().toISOString() }
           : { available: null, total: null, source: "NDW", note: "found, but counts not recognised", checkedAt: new Date().toISOString() };
@@ -1639,7 +1653,7 @@ async function liveStatus(station, env) {
           .filter((f) => haversineKm(f.geometry.coordinates, here) <= 1.2)
           .slice(0, 4)
           .map((f) => {
-            const c = extractCounts(f);
+            const c = extractCounts(f, station.minKw);
             const pr = f.properties || {};
             return c ? {
               id: String(f.id ?? ""), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1],
@@ -2571,7 +2585,8 @@ async function handleLogo(request, env, key) {
 
 async function handleStatus(request, env) {
   const body = await request.json().catch(() => ({}));
-  const stations = Array.isArray(body.stations) ? body.stations : [];
+  const minKw = minKwOf(body.minKw);
+  const stations = (Array.isArray(body.stations) ? body.stations : []).map((st) => ({ ...st, minKw }));
   return json(request, { status: await statusForMany(stations, env), checkedAt: new Date().toISOString(), paid: isPaid(env) });
 }
 
@@ -2865,12 +2880,12 @@ async function route(request, env) {
     if (!setting(env, "frLive")) return json(request, { status: {}, off: true });
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
-    return json(request, await frStatusFor(body.stations));
+    return json(request, await frStatusFor(body.stations, minKwOf(body.minKw)));
   }
   if (path === "/be-status" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
-    return json(request, await beStatusFor(body.stations));
+    return json(request, await beStatusFor(body.stations, minKwOf(body.minKw)));
   }
   if (path === "/be-evse" && request.method === "GET") {
     return json(request, await beEvse(env, url.searchParams.get("id") || ""));

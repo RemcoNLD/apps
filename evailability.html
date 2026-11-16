@@ -1075,7 +1075,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.107";
+const APP_VERSION = "2026-11-16.108";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2909,14 +2909,15 @@ async function refreshFrance() {
 // Belgium, step 1: match the Belgian pins ahead to the index's sites (stall ids, no live call).
 // Once per charger; the ring then shows its stalls dashed until you tap.
 let beMatchBusy = false;
+const BE_MATCH_V = 2; // raise when the index's stall ids change: chargers already matched are matched again
 async function matchBelgium() {
   if (beMatchBusy || !state.route) return;
-  const todo = upcoming().filter((s) => s.country === "BE" && !s.beMatchedAt).slice(0, 150);
+  const todo = upcoming().filter((s) => s.country === "BE" && (!s.beMatchedAt || s.beMatchV !== BE_MATCH_V)).slice(0, 150);
   if (!todo.length) return;
   beMatchBusy = true;
   try {
     const r = await api("/be-status", { stations: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 20000, false);
-    for (const s of todo) s.beMatchedAt = Date.now();
+    for (const s of todo) { s.beMatchedAt = Date.now(); s.beMatchV = BE_MATCH_V; s.beDoneAt = 0; }
     applyStatus(r.status || {});
     for (const s of todo) {
       s.statusAt = null; // not checked yet: grey with ↻ until tapped
@@ -2970,7 +2971,7 @@ async function refreshBelgium(members) {
           s.loadingAt = Date.now();
           const r = await api(`/be-evse?id=${encodeURIComponent(evse)}`, null, 20000, false);
           if (r.retryAfterMs) {
-            if (tries >= 3) throw new Error("Belgium is busy, try again in a minute");
+            if (tries >= (r.tryOtherId ? 5 : 3)) throw new Error("Belgium is busy, try again in a minute");
             beNextAt = Date.now() + r.retryAfterMs + 300;
             continue;
           }
@@ -2982,6 +2983,9 @@ async function refreshBelgium(members) {
         }
       }
       s.beDoneAt = Date.now();
+      const r = ringParts(st);
+      if (r.unk === r.total) why = "Eco-Movement gave no live status for this site";
+      else if (r.unk) why = `${r.unk} of ${r.total} stalls without live status`;
     }
   } catch (e) {
     reportError(`Belgium: ${e.message}`);

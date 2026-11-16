@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.103";
+const WORKER_VERSION = "2026-11-16.104";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1358,7 +1358,7 @@ async function frStatusFor(stations) {
 // request every 10 s per IP is allowed across all endpoints (2 per minute per stall, per token). So
 // Belgium is tap-only and stall by stall: /be-status matches the app's pins to index sites (no call to
 // Eco-Movement), /be-evse asks one stall; the app paces them and fills the ring as answers come in.
-const BE_INDEX_URL = "https://remconld.github.io/apps/data/be-fast-sites.json?v=2"; // bump v after a rebuild (Cloudflare caches it an hour)
+const BE_INDEX_URL = "https://remconld.github.io/apps/data/be-fast-sites.json?v=3"; // bump v after a rebuild (Cloudflare caches it an hour)
 const BE_STATUS_BASE = "https://nap-be.eco-movement.com/datex2/v1/status/";
 const BE_GAP_MS = 10 * 1000;       // Eco-Movement: 1 request per 10 s per IP
 const BE_EVSE_TTL_MS = 60 * 1000;  // a stall's answer is reused for a minute
@@ -1452,15 +1452,19 @@ let beNextAt = 0;        // this Worker copy's next allowed call (the IP limit i
 let beBlockedUntil = 0;  // after a 429: Eco-Movement's own wait
 async function beEvse(env, evse) {
   if (!env.ECO_BE_TOKEN) throw new HttpError(500, "ECO_BE_TOKEN is not set");
-  if (!/^[A-Z0-9*\-_.]{4,64}$/i.test(evse)) throw new HttpError(400, "Bad EVSE id");
+  if (!/^[A-Za-z0-9*\-_.|]{4,160}$/.test(evse)) throw new HttpError(400, "Bad EVSE id");
   const hit = memoGet(`be:${evse}`);
   if (hit) return { ...hit, cached: true };
+  // "evseId|feedId": ask by the official EVSE id; if Eco-Movement doesn't know it, by the feed's id next time.
+  const ids = evse.split("|");
+  const tried = memoGet(`be-miss:${evse}`) || 0;
+  const ask = ids[Math.min(tried, ids.length - 1)];
   const now = Date.now();
   const wait = Math.max(beNextAt, beBlockedUntil) - now;
   if (wait > 0) return { evse, retryAfterMs: wait };
   beNextAt = now + BE_GAP_MS;
   countCall("Eco-Movement BE");
-  const res = await fetch(BE_STATUS_BASE + encodeURIComponent(evse), {
+  const res = await fetch(BE_STATUS_BASE + encodeURIComponent(ask), {
     headers: { Authorization: `Bearer ${env.ECO_BE_TOKEN}`, Accept: "application/json" },
   });
   if (res.status === 429) {
@@ -1469,10 +1473,16 @@ async function beEvse(env, evse) {
     beBlockedUntil = Date.now() + Math.min(Math.max(ms, 5000), 120000);
     return { evse, retryAfterMs: beBlockedUntil - Date.now(), limited: true };
   }
-  if (res.status === 404) { const r = { evse, kind: "unknown", note: "not found", checkedAt: new Date().toISOString() }; memoSet(`be:${evse}`, r, BE_EVSE_TTL_MS); return r; }
+  if (res.status === 404) {
+    if (tried + 1 < ids.length) { memoSet(`be-miss:${evse}`, tried + 1, 24 * 3600 * 1000); return { evse, retryAfterMs: BE_GAP_MS, tryOtherId: true }; }
+    const r = { evse, kind: "unknown", note: "not found", asked: ask, checkedAt: new Date().toISOString() };
+    memoSet(`be:${evse}`, r, BE_EVSE_TTL_MS);
+    return r;
+  }
   if (!res.ok) throw new HttpError(502, `Eco-Movement BE: HTTP ${res.status}`);
-  const parsed = beParseStatus(await res.json().catch(() => null), evse);
-  const r = { evse, kind: parsed?.kind || "unknown", raw: parsed?.raw || null, lastUpdated: parsed?.lastUpdated || null,
+  const data = await res.json().catch(() => null);
+  const parsed = beParseStatus(data, ask) || (ids.length > 1 ? beParseStatus(data, ids.find((x) => x !== ask)) : null);
+  const r = { evse, asked: ask, kind: parsed?.kind || "unknown", raw: parsed?.raw || null, lastUpdated: parsed?.lastUpdated || null,
     checkedAt: new Date().toISOString() };
   memoSet(`be:${evse}`, r, BE_EVSE_TTL_MS);
   return r;

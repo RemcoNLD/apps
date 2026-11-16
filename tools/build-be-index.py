@@ -79,7 +79,12 @@ def main():
                         pkw = max([0] + [x / 1000 for x in p.get("availableChargingPower", []) if isinstance(x, (int, float))])
                         if pkw < FAST_KW or (p.get("currentType") or {}).get("value") != "dc" or not p.get("idG"):
                             continue
-                        ids.append(p["idG"])
+                        # The official EVSE id (on the connector) is what /status/{evse_id} expects; for most
+                        # operators it differs from the feed's own id (Circle K: 75431*236544 vs
+                        # BE*CKE*EXB00563205*2). Kept as "evse|feedId" so the Worker can fall back to the feed id.
+                        evse = next((x.get("identifier") for k in p.get("connector", []) for x in k.get("externalIdentifier", [])
+                                     if (x.get("typeOfIdentifier") or {}).get("extendedValueG") == "evseId" and x.get("identifier")), None)
+                        ids.append(p["idG"] if not evse or evse == p["idG"] else f"{evse}|{p['idG']}")
                         kw = max(kw, pkw)
                 if not ids:
                     continue

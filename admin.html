@@ -65,12 +65,16 @@
   .wk-r { text-align: right; flex: none; min-width: 5.5em; }
   .wk-r .num { font-size: 1.9rem; line-height: 1.1; }
   .spark { position: relative; display: flex; align-items: flex-end; gap: 4px; height: 34px; margin-top: 8px; max-width: 230px; }
-  .spark span { flex: 1; background: var(--muted); opacity: .45; border-radius: 3px 3px 1px 1px; }
+  .spark .col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+  .spark span { width: 100%; background: var(--muted); opacity: .45; border-radius: 3px 3px 1px 1px; }
   .spark span.today { background: var(--ok); opacity: 1; }
   .spark span.near { background: var(--warn); opacity: 1; }
   .spark span.over { background: var(--bad); opacity: 1; }
   .spark span.zero { opacity: .2; }
   .spark span.none { height: 3%; background: transparent; border-bottom: 2px dotted var(--muted); opacity: .5; border-radius: 0; }
+  .spark { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: pointer; }
+  .spark span.sel { outline: 2px solid var(--text); outline-offset: 1px; }
+  .wk-tip { margin-top: 5px; }
   .spark .lim { position: absolute; left: -3px; right: -3px; bottom: 100%; height: 0; border-top: 2px solid var(--bad);
     transition: bottom 1.6s ease-out; pointer-events: none; }
   .table-wrap { overflow-x: auto; background: var(--card); border-radius: 12px; }
@@ -80,12 +84,17 @@
   thead th { color: var(--muted); font-weight: 600; font-size: .9rem; }
   tr:last-child td { border-bottom: 0; }
   /* Settings */
-  .set { padding: 10px 0; }
+  .set { padding: 7px 0; }
+  .set-name { flex: 1; min-width: 0; text-align: left; font: inherit; font-weight: 700; color: inherit; background: none; border: 0; padding: 4px 0; cursor: pointer; line-height: 1.25; }
+  .set-name .info { display: inline-flex; align-items: center; justify-content: center; width: 1.15em; height: 1.15em; margin-left: 7px;
+    border: 1.5px solid var(--muted); border-radius: 50%; color: var(--muted); font-size: .75em; font-style: italic; font-family: Georgia, serif; vertical-align: 1px; }
+  .set-name[aria-expanded="true"] .info { background: var(--muted); color: var(--card); }
+  .set-name .dot { display: inline-block; width: 8px; height: 8px; margin-left: 7px; border-radius: 50%; background: var(--warn); vertical-align: 2px; }
   .set + .set { border-top: 1px solid rgba(127,127,127,.18); }
   .set .row { align-items: center; }
-  .set select { flex: none; width: 9em; padding: 8px 10px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 8px; }
-  .set input[type=number], .set input[type=text] { flex: none; width: 9em; padding: 8px 10px; }
-  .set .meta { margin-top: 3px; }
+  .set select { flex: none; width: 6.5em; padding: 8px 10px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 8px; }
+  .set input[type=number], .set input[type=text] { flex: none; width: 6.5em; padding: 7px 10px; }
+  .set .meta { margin-top: 4px; }
   .set .changed { color: var(--warn); font-weight: 600; }
   .switch { position: relative; width: 52px; height: 30px; flex: none; }
   .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
@@ -273,23 +282,35 @@ function render(d) {
       const top = Math.max(1, lim || 0, ...vals.map((v) => v || 0));
       const today = vals[6] || 0;
       const bars = vals.map((v, i) => {
-        if (v == null) return `<span class="none" title="${esc(dayName(days[i]))}: no count"></span>`;
+        // Each day is a full-height column, so even a tiny bar is easy to tap.
+        if (v == null) return `<b class="col" data-tip="${esc(dayName(days[i]))}: no count yet"><span class="none"></span></b>`;
         const cls = lim && v > lim ? "over" : lim && v >= 0.8 * lim ? "near" : i === 6 ? "today" : "";
-        return `<span class="${cls}${v ? "" : " zero"}" style="height:${v ? Math.max(6, (v / top) * 100).toFixed(1) : 3}%" title="${esc(dayName(days[i]))}: ${fmt(v)}${lim ? ` of ${fmt(lim)}` : ""}"></span>`;
+        return `<b class="col" data-tip="${esc(dayName(days[i]))}: ${fmt(v)}${lim ? ` of ${fmt(lim)}` : ""}"><span class="${cls}${v ? "" : " zero"}" style="height:${v ? Math.max(6, (v / top) * 100).toFixed(1) : 3}%"></span></b>`;
       }).join("");
       const line = lim ? `<i class="lim" data-pos="${((lim / top) * 100).toFixed(1)}" title="Limit ${fmt(lim)} a day"></i>` : "";
       return `<div class="wk">
-        <div class="wk-l"><div class="name">${esc(LABELS[k] || k)}</div><div class="spark">${bars}${line}</div></div>
+        <div class="wk-l"><div class="name">${esc(LABELS[k] || k)}</div><div class="spark">${bars}${line}</div><div class="wk-tip small muted" hidden></div></div>
         <div class="wk-r"><div class="num${lim && today > lim ? " error" : ""}">${today ? fmt(today) : "–"}</div>
           <div class="small muted">${fmt(total(k))}/w</div></div>
       </div>`;
     }).join("")}</div>
     <p class="small muted">Bars: one per day, ${esc(dayName(days[0]))} to today (green), each source on its own scale. A red line is the daily limit:
-      a bar turns orange from 80% of it and red over it; then the scale grows and the line moves down. Tap and hold a bar for its number.</p>`;
+      a bar turns orange from 80% of it and red over it; then the scale grows and the line moves down. Tap a bar for its number.</p>`;
   }
   html += `<p class="small muted" style="margin-top:18px">Days run in UTC. Cloudflare can run several copies of the Worker;
     each saves its own count, so Worker and source counts are close, not exact. OpenRouteService figures come from ORS itself.</p>`;
   $("out").innerHTML = html;
+  // Tapping a bar shows that day's number under the row's bars; tapping it again hides it.
+  $("out").onclick = (e) => {
+    const col = e.target.closest(".spark .col[data-tip]");
+    if (!col) return;
+    const bar = col.querySelector("span");
+    const row = col.closest(".wk"), tip = row.querySelector(".wk-tip"), was = bar.classList.contains("sel");
+    row.querySelectorAll(".spark span.sel").forEach((x) => x.classList.remove("sel"));
+    if (was) { tip.hidden = true; return; }
+    bar.classList.add("sel");
+    tip.textContent = col.dataset.tip; tip.hidden = false;
+  };
   // Limit lines slide down from the top to where they belong (lower = further over the limit).
   requestAnimationFrame(() => requestAnimationFrame(() =>
     document.querySelectorAll(".spark .lim").forEach((l) => { l.style.bottom = `${l.dataset.pos}%`; })));
@@ -357,9 +378,12 @@ function renderSettings(data, msg = "") {
       `<option value="${o}" ${Number(s.value) === o ? "selected" : ""}>${o} h</option>`).join("")}</select>`;
     else control = `<input type="${s.type === "number" ? "number" : "text"}" data-key="${esc(s.key)}" value="${esc(s.value ?? "")}"
       ${s.type === "number" ? `min="${s.min}" max="${s.max}" inputmode="numeric"` : ""} placeholder="${esc(showVal(s, s.default))}" aria-label="${esc(s.label)}">`;
-    return `<div class="set"><div class="row"><span class="name">${esc(s.label)}</span>${control}</div>
-      <div class="small muted meta">${esc(s.help || "")} Default: ${esc(showVal(s, s.default))}.
-      ${s.changed ? `<span class="changed">Changed.</span> <button type="button" class="link" data-reset="${esc(s.key)}">Back to default</button>` : ""}</div></div>`;
+    // Compact: name and control on one line; the explanation opens with the ⓘ button (or a tap on
+    // the name). A changed setting shows an orange dot, and its reset link stays in view.
+    return `<div class="set"><div class="row">
+        <button type="button" class="set-name" data-info="${esc(s.key)}" aria-expanded="false">${esc(s.label)}${s.changed ? '<i class="dot" title="Changed"></i>' : ""}<span class="info" aria-hidden="true">i</span></button>${control}</div>
+      ${s.changed ? `<div class="small"><span class="changed">Changed</span> · <button type="button" class="link" data-reset="${esc(s.key)}">Back to default (${esc(showVal(s, s.default))})</button></div>` : ""}
+      <div class="small muted meta" id="info-${esc(s.key)}" hidden>${esc(s.help || "")} Default: ${esc(showVal(s, s.default))}.</div></div>`;
   }).join("");
   $("settings").innerHTML = `<h2>Settings</h2><div class="card group">${rows}
     <div class="small muted" id="setMsg">${esc(msg || data.note || "")}</div></div>
@@ -404,6 +428,12 @@ $("settings").addEventListener("change", (e) => {
   saveSetting(el.dataset.key, el.type === "checkbox" ? el.checked : el.value.trim());
 });
 $("settings").addEventListener("click", (e) => {
+  const info = e.target.closest("[data-info]");
+  if (info) {
+    const box = $(`info-${info.dataset.info}`);
+    if (box) { box.hidden = !box.hidden; info.setAttribute("aria-expanded", String(!box.hidden)); }
+    return;
+  }
   const b = e.target.closest("[data-reset]");
   if (b) saveSetting(b.dataset.reset, null);
 });

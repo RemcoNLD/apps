@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.118"><!-- shown on the apps page; keep equal to APP_VERSION below -->
+<meta name="app-version" content="2026-11-16.121"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1084,7 +1084,10 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.120";
+// One place for the version: the meta tag at the top (also what the apps page shows), so the two can't drift apart.
+// Copies from before .121 look for the text below to see an update; it makes them reload once into
+// this code. Leave it as is: APP_VERSION = "2026-11-16.121"
+const APP_VERSION = document.querySelector('meta[name="app-version"]')?.content || "?";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1555,7 +1558,7 @@ async function refreshDebugInfo(force = false) {
   if (!debugOn() || (!force && Date.now() - debugCheckedAt < 5 * 60000)) return;
   debugCheckedAt = Date.now();
   try { workerInfo = await (await fetch(WORKER + "/", { cache: "no-store" })).json(); } catch (_) { workerInfo = { error: true }; }
-  try { latestApp = (await (await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" })).text()).match(/APP_VERSION = "([^"]+)"/)?.[1] || null; } catch (_) { latestApp = null; }
+  try { latestApp = (await (await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" })).text()).match(/name="app-version" content="([^"]+)"/)?.[1] || null; } catch (_) { latestApp = null; }
   renderDebug();
 }
 function renderDebug() {
@@ -4567,7 +4570,7 @@ function restore() {
 async function checkForUpdate(manual) {
   try {
     const res = await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" });
-    const latest = (await res.text()).match(/APP_VERSION = "([^"]+)"/)?.[1];
+    const latest = (await res.text()).match(/name="app-version" content="([^"]+)"/)?.[1];
     if (latest && latest !== APP_VERSION) {
       if (sessionStorage.getItem("evailability-reloaded-for") === latest) return; // don't loop on a stale cache
       sessionStorage.setItem("evailability-reloaded-for", latest);

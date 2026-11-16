@@ -26,6 +26,9 @@
 //   GET  /closures/schedule     hours between road-closure updates (read by the GitHub job .github/workflows/closures.yml)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /admin/settings        switches and values set on the usage page (same header)
+//   GET  /admin/users           access keys: label, status, dates, use per day (same header)
+//   POST /admin/users           {action:"create", label} | {action:"regenerate"|"disable"|"enable"|"delete", id}
+//                               create/regenerate answer the new key once; only its hash is kept
 //   POST /admin/settings        {settings:{key: value}} saves them (one KV write); empty value = default
 //   GET  /debug/ndw?lat=&lon=   raw Dutch (NDW) data around a point, to tune the parser
 //   GET  /debug/ocm-operator    shows which Open Charge Map operator ID is used for Ionity
@@ -48,7 +51,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.111";
+const WORKER_VERSION = "2026-11-16.112";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -143,7 +146,9 @@ class HttpError extends Error {
 // Counts calls per data source and keeps the quota OpenRouteService reports with each answer.
 // Saved to KV (binding USAGE) at most every 2 minutes, to stay well within KV's free write limit.
 const USAGE_FLUSH_MS = 2 * 60 * 1000;
-const usage = { pending: {}, ors: {}, orsHeaders: {}, lastFlush: Date.now(), kvWrites: 0 };
+const usage = { pending: {}, users: {}, ors: {}, orsHeaders: {}, lastFlush: Date.now(), kvWrites: 0 };
+// Requests per access key (user id), saved with the counts above, so no extra KV writes.
+function countUser(id) { const u = usage.users[id] || (usage.users[id] = { n: 0, last: 0 }); u.n++; u.last = Date.now(); }
 const today = () => new Date().toISOString().slice(0, 10);
 function countCall(source, n = 1) { usage.pending[source] = (usage.pending[source] || 0) + n; }
 // Every KV read counts against the free plan's 100,000 a day, so it's counted like a call.
@@ -180,13 +185,18 @@ async function readUsageDay(env, day) {
 async function flushUsage(env, force = false) {
   if (!env.USAGE) return;
   if (!force && Date.now() - usage.lastFlush < USAGE_FLUSH_MS) return;
-  const pending = usage.pending, ors = usage.ors;
-  if (!Object.keys(pending).length && !Object.keys(ors).length) return;
-  usage.pending = {}; usage.lastFlush = Date.now();
+  const pending = usage.pending, ors = usage.ors, users = usage.users;
+  if (!Object.keys(pending).length && !Object.keys(ors).length && !Object.keys(users).length) return;
+  usage.pending = {}; usage.users = {}; usage.lastFlush = Date.now();
   const day = today();
   const rec = (await readUsageDay(env, day)) || { day, calls: {}, ors: {} };
   for (const [k, n] of Object.entries(pending)) rec.calls[k] = (rec.calls[k] || 0) + n;
   for (const [k, v] of Object.entries(ors)) if (!rec.ors[k] || rec.ors[k].at < v.at) rec.ors[k] = v;
+  rec.users = rec.users || {};
+  for (const [id, u] of Object.entries(users)) {
+    const r = rec.users[id] || (rec.users[id] = { n: 0, last: 0 });
+    r.n += u.n; r.last = Math.max(r.last, u.last);
+  }
   rec.orsHeaders = { ...(rec.orsHeaders || {}), ...usage.orsHeaders };
   rec.calls["KV writes"] = (rec.calls["KV writes"] || 0) + 1;
   try {
@@ -194,6 +204,7 @@ async function flushUsage(env, force = false) {
   } catch (e) {
     // Put the counts back so they're not lost.
     for (const [k, n] of Object.entries(pending)) countCall(k, n);
+    for (const [id, u] of Object.entries(users)) { const r = usage.users[id] || (usage.users[id] = { n: 0, last: 0 }); r.n += u.n; r.last = Math.max(r.last, u.last); }
     console.log("Usage save failed", e.message);
   }
 }
@@ -212,6 +223,8 @@ function checkAdmin(request, env) {
 const SETTINGS = [
   { key: "paidUntil", type: "date", label: "Workers Paid until", def: () => "",
     help: "The last day of a Cloudflare Workers Paid period (Billing > Subscriptions, 'Ending on'). Until then: France updates by itself (every 2 minutes unless set below), a short pause after an error, more chargers ahead kept fresh, and the usage page shows the Paid allowances. After it everything returns to the free settings by itself. Empty: free plan." },
+  { key: "legacyCode", type: "bool", label: "Old access code (11-proef)", def: () => true,
+    help: "On: the old shared 9-digit code still opens the app, and devices that used it keep working. Switch off once everyone has a personal key (Users page); those devices then ask for a key." },
   { key: "frLive", type: "bool", label: "France live (tap)", def: (env) => env.FR_LIVE !== "off",
     help: "Off: French chargers show no live data and nothing is read. Each read costs more CPU than the free plan allows." },
   { key: "frGapMin", type: "number", min: 1, max: 60, label: "France: minutes between updates", def: () => "",
@@ -2576,7 +2589,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/brands", "/admin/usage", "/admin/settings", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -2602,11 +2615,141 @@ function sameText(a, b) { // compare without stopping at the first difference
   for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return x === 0;
 }
-async function hasAccess(request, env, url) {
+// ---------------------------------------------------------------- users (personal access keys)
+// Each person gets their own key, e.g. 7K3F-M9QX-2HTB: 11 random characters from an alphabet without
+// look-alikes (no 0/O, 1/I/L), plus a check character at the end so typos are caught before asking.
+// Only an HMAC of the key is kept (with the same server-side secret as the tokens), so a key can't be
+// read back: it's shown once when made. A right key gets a token "u1.<id>.<gen>.<signature>" that the
+// app keeps; regenerating raises gen, which ends the old key's tokens. The list lives in KV under
+// "users" (one record; written only from the Users page) and each Worker copy reads it at most once a
+// minute, so switching a key off takes effect within a minute or two.
+const KEY_ABC = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // 31 characters (no 0, 1, I, L, O)
+function keyCheckChar(body) {
+  let sum = 0;
+  for (let i = 0; i < body.length; i++) sum += (i + 1) * KEY_ABC.indexOf(body[i]);
+  return KEY_ABC[sum % KEY_ABC.length];
+}
+function newKey() {
+  const b = crypto.getRandomValues(new Uint8Array(32));
+  let body = "";
+  for (const x of b) { if (x < 248) body += KEY_ABC[x % 31]; if (body.length === 11) break; } // 248 = 8×31: no bias
+  const k = body + keyCheckChar(body);
+  return `${k.slice(0, 4)}-${k.slice(4, 8)}-${k.slice(8)}`;
+}
+function validKey(k) { return /^[2-9A-HJKMNP-Z]{12}$/.test(k) && keyCheckChar(k.slice(0, 11)) === k[11]; }
+async function hmac(env, text) {
+  const secret = env.ACCESS_SECRET || env.OCM_API_KEY || "";
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(text));
+  return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+const keyHash = (env, k) => hmac(env, `key:${k}`);
+const userSig = (env, id, gen) => hmac(env, `user:${id}:${gen}`);
+async function loadUsers(env, fresh = false) {
+  let list = fresh ? undefined : memoGet("users");
+  if (list === undefined) {
+    list = [];
+    try { if (env.USAGE) list = JSON.parse((await kvGet(env, "users")) || "[]"); } catch (_) {}
+    memoSet("users", list, 60 * 1000);
+  }
+  return list;
+}
+async function saveUsers(env, list) {
+  if (!env.USAGE) throw new HttpError(503, "No KV store bound");
+  await env.USAGE.put("users", JSON.stringify(list));
+  countCall("KV writes");
+  memoSet("users", list, 60 * 1000);
+}
+const userId = () => [...crypto.getRandomValues(new Uint8Array(5))].map((x) => "23456789abcdefghjkmnpqrstuvwxyz"[x % 31]).join("");
+
+async function handleUsers(request, env) {
+  checkAdmin(request, env);
+  if (request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    const list = [...(await loadUsers(env, true))];
+    const now = new Date().toISOString();
+    const find = () => {
+      const u = list.find((x) => x.id === body.id);
+      if (!u) throw new HttpError(404, "No such user");
+      return u;
+    };
+    let key = null, user = null;
+    if (body.action === "create") {
+      const label = String(body.label || "").trim().slice(0, 60);
+      if (!label) throw new HttpError(400, "Give a name (label)");
+      if (list.length >= 200) throw new HttpError(400, "That's 200 users already");
+      key = newKey();
+      user = { id: userId(), label, hash: await keyHash(env, key.replace(/-/g, "")), gen: 1, active: true, created: now, keyMade: now };
+      list.push(user);
+    } else if (body.action === "regenerate") {
+      user = find();
+      key = newKey();
+      user.hash = await keyHash(env, key.replace(/-/g, ""));
+      user.gen = (user.gen || 1) + 1; // devices with the old key are signed out
+      user.keyMade = now;
+    } else if (body.action === "disable" || body.action === "enable") {
+      user = find();
+      user.active = body.action === "enable";
+      user.changed = now;
+    } else if (body.action === "rename") {
+      user = find();
+      const label = String(body.label || "").trim().slice(0, 60);
+      if (!label) throw new HttpError(400, "Give a name (label)");
+      user.label = label;
+    } else if (body.action === "delete") {
+      user = find();
+      list.splice(list.indexOf(user), 1);
+    } else throw new HttpError(400, "action = create, regenerate, disable, enable, rename or delete");
+    await saveUsers(env, list);
+    return json(request, { ok: true, key, user: user && publicUser(user) });
+  }
+  // GET: the list plus each user's requests per day (last 7 days) and last use.
+  await flushUsage(env, true);
+  const list = await loadUsers(env, true);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    const rec = await readUsageDay(env, d);
+    days.push({ day: d, users: rec?.users || {} });
+  }
+  for (const [id, u] of Object.entries(usage.users)) { // this copy's, not saved yet
+    const r = days[0].users[id] || (days[0].users[id] = { n: 0, last: 0 });
+    r.n += u.n; r.last = Math.max(r.last, u.last);
+  }
+  return json(request, {
+    legacyCode: !!setting(env, "legacyCode"),
+    users: list.map((u) => {
+      const perDay = days.map((d) => d.users[u.id]?.n || 0).reverse(); // oldest first
+      const last = Math.max(0, ...days.map((d) => d.users[u.id]?.last || 0));
+      return { ...publicUser(u), perDay, lastUsed: last ? new Date(last).toISOString() : null };
+    }),
+    days: days.map((d) => d.day).reverse(),
+    legacyPerDay: days.map((d) => d.users.legacy?.n || 0).reverse(),
+  });
+}
+const publicUser = (u) => ({ id: u.id, label: u.label, active: u.active !== false, created: u.created, keyMade: u.keyMade || u.created, gen: u.gen || 1 });
+
+// Who is asking: { id } for a personal key, { id: "legacy" } for the old shared code, { id: "admin" }
+// for the admin password, or null.
+async function whoIs(request, env, url) {
   const given = request.headers.get("X-Access") || url.searchParams.get("access") || "";
-  if (sameText(given, await accessToken(env))) return true;
+  if (!given) return null;
+  if (given.startsWith("u1.")) {
+    const [, id, gen, sig] = given.split(".");
+    if (!id || !sig || !sameText(sig, await userSig(env, id, gen))) return null;
+    const u = (await loadUsers(env)).find((x) => x.id === id);
+    if (!u) throw new HttpError(401, "This access key no longer exists. Ask for a new one.");
+    if (String(u.gen || 1) !== gen) throw new HttpError(401, "This access key was replaced. Enter the new one.");
+    if (u.active === false) throw new HttpError(401, "This access key has been switched off.");
+    return { id };
+  }
+  if (sameText(given, await accessToken(env))) {
+    if (!setting(env, "legacyCode")) throw new HttpError(401, "The old access code no longer works. Enter your personal key.");
+    return { id: "legacy" };
+  }
   // The admin password works too (handy for opening /debug/… pages in a browser: ?access=<password>).
-  return !!env.ADMIN_TOKEN && sameText(given, env.ADMIN_TOKEN);
+  if (env.ADMIN_TOKEN && sameText(given, env.ADMIN_TOKEN)) return { id: "admin" };
+  return null;
 }
 async function handleUnlock(request, env) {
   // Max 5 tries per 10 minutes per address, so guessing takes a while.
@@ -2616,11 +2759,20 @@ async function handleUnlock(request, env) {
   if (tries >= 5) throw new HttpError(429, "Too many tries. Wait 10 minutes.");
   memoSet(key, tries + 1, 10 * 60 * 1000);
   const body = await request.json().catch(() => ({}));
-  if (!elfProef(body.code)) {
-    await sleep(800);
-    throw new HttpError(403, "That code isn’t right.");
+  const given = String(body.code || "").toUpperCase().replace(/[\s\-.]/g, "");
+  if (validKey(given)) {
+    const hash = await keyHash(env, given);
+    const u = (await loadUsers(env, true)).find((x) => sameText(x.hash, hash));
+    if (u && u.active === false) throw new HttpError(403, "This access key has been switched off.");
+    if (u) {
+      memo.delete(key); // a right key resets the tries
+      return json(request, { token: `u1.${u.id}.${u.gen || 1}.${await userSig(env, u.id, u.gen || 1)}`, name: u.label });
+    }
+  } else if (setting(env, "legacyCode") && elfProef(given)) {
+    return json(request, { token: await accessToken(env) });
   }
-  return json(request, { token: await accessToken(env) });
+  await sleep(800);
+  throw new HttpError(403, "That key isn’t right.");
 }
 
 async function route(request, env) {
@@ -2628,11 +2780,13 @@ async function route(request, env) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
 
   if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders(request) });
+  await loadSettings(env); // switches from the usage page (cached a minute); the old-code switch is one
   if (path === "/unlock" && request.method === "POST") return handleUnlock(request, env);
-  if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/") && !(await hasAccess(request, env, url))) {
-    throw new HttpError(401, "Access code needed");
+  if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/")) {
+    const who = await whoIs(request, env, url);
+    if (!who) throw new HttpError(401, "Access key needed");
+    if (who.id !== "admin") countUser(who.id);
   }
-  await loadSettings(env); // switches from the usage page (cached a minute)
 
   if (path === "/" && request.method === "GET") {
     return json(request, {
@@ -2658,6 +2812,7 @@ async function route(request, env) {
   }
   if (path === "/admin/usage" && request.method === "GET") return handleUsage(request, env);
   if (path === "/admin/settings" && (request.method === "GET" || request.method === "POST")) return handleSettings(request, env);
+  if (path === "/admin/users" && (request.method === "GET" || request.method === "POST")) return handleUsers(request, env);
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/fr-status" && request.method === "POST") {

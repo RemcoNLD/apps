@@ -1038,8 +1038,8 @@
 <div class="intro lock" id="lock" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
   <div class="lock-box">
     <h2 id="lockTitle">EVailability</h2>
-    <p>Enter your access code. You only need to do this once on this device.</p>
-    <input id="lockCode" class="input" type="text" inputmode="numeric" autocomplete="off" placeholder="Access code" aria-label="Access code">
+    <p>Enter your access key. You only need to do this once on this device.</p>
+    <input id="lockCode" class="input" type="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX" aria-label="Access key">
     <button type="button" class="primary" id="lockBtn">Open</button>
     <p class="error" id="lockError" hidden></p>
   </div>
@@ -1076,7 +1076,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.118";
+const APP_VERSION = "2026-11-16.119";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -1248,9 +1248,9 @@ async function api(path, body, timeoutMs, retry = true) {
     finally { if (timer) clearTimeout(timer); }
   }
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401) { // code no longer valid: ask again
+  if (res.status === 401) { // key no longer valid (switched off, replaced, deleted): ask again, saying why
     try { localStorage.removeItem(ACCESS_KEY); } catch (_) {}
-    showLock();
+    showLock(data.error);
   }
   if (!res.ok) throw new Error(data.error || `The server answered ${res.status}`);
   return data;
@@ -1305,9 +1305,28 @@ window.addEventListener("unhandledrejection", (ev) => reportError(`App error: ${
 renderErrors();
 
 // ---- access code: asked once, checked by the server; the token it returns is kept on this device
-function showLock() { $("lock").hidden = false; setTimeout(() => $("lockCode").focus(), 50); }
+function showLock(why) {
+  $("lock").hidden = false;
+  if (why) { $("lockError").textContent = why; $("lockError").hidden = false; }
+  setTimeout(() => $("lockCode").focus(), 50);
+}
+// Personal keys look like 7K3F-M9QX-2HTB (the last character is a check, see the Worker); the old
+// 9-digit code works too while it's switched on. Spaces, dashes and case don't matter.
+const KEY_ABC = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+function keyLooksRight(k) {
+  if (/^\d{9}$/.test(k)) return true; // old code: checked by the server
+  if (!/^[2-9A-HJKMNP-Z]{12}$/.test(k)) return false;
+  let sum = 0;
+  for (let i = 0; i < 11; i++) sum += (i + 1) * KEY_ABC.indexOf(k[i]);
+  return KEY_ABC[sum % 31] === k[11];
+}
 async function unlock() {
-  const code = $("lockCode").value.replace(/\D/g, "");
+  const code = $("lockCode").value.toUpperCase().replace(/[\s\-.]/g, "");
+  if (!keyLooksRight(code)) {
+    $("lockError").textContent = /[01ILO]/.test(code) ? "Keys have no 0, 1, I, L or O. Check the letters." : "That key isn’t complete or has a typo.";
+    $("lockError").hidden = false;
+    return;
+  }
   $("lockError").hidden = true;
   $("lockBtn").disabled = true;
   try {

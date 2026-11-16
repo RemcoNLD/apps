@@ -1075,7 +1075,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.105";
+const APP_VERSION = "2026-11-16.106";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2769,6 +2769,10 @@ function detourHorizon(inView = []) {
   if ($("list").scrollTop < 40) {
     const asked = (state.stations || []).reduce((m, s) => (s.detourTriedAt || "detourMin" in s ? Math.max(m, s.alongKm) : m), 0);
     horizon = Math.max(horizon, asked + FILTER_BEYOND_VIEW_KM);
+    // A stretch without chargers longer than that stopped it for good (16 Nov: a route to France showed
+    // only its Dutch part until another brand filled the gap). So jump to the next one not asked yet.
+    const next = upcomingShown().find((x) => detourPending(x) && !x.detourTriedAt && x.alongKm > horizon);
+    if (next) horizon = next.alongKm + FILTER_BEYOND_VIEW_KM;
   }
   return horizon;
 }

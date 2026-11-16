@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.2"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="2026-11-16.3"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -48,6 +48,7 @@
     border: 1.5px solid currentColor; border-radius: 50%; font-size: .8em; font-style: italic; font-family: Georgia, serif; text-transform: none; vertical-align: 1px; }
   .gtitle[aria-expanded="true"] .info { background: var(--muted); color: var(--card); border-color: var(--muted); }
   .gnote { margin: -2px 0 6px; }
+  .cl-row { display: flex; gap: 22px; font-size: 1.25rem; margin-bottom: 4px; }
   .group h3 { margin: 0 0 4px; font-size: .95rem; letter-spacing: .02em; text-transform: uppercase; color: var(--muted, #93a0a8); }
   .group .line { padding: 6px 0; }
   .group .line + .line { border-top: 1px solid rgba(127,127,127,.18); }
@@ -99,7 +100,11 @@
   .set + .set { border-top: 1px solid rgba(127,127,127,.18); }
   .set .row { align-items: center; }
   .set select { flex: none; width: 6.5em; padding: 8px 10px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 8px; }
-  .set input[type=number], .set input[type=text] { flex: none; width: 6.5em; padding: 7px 10px; }
+  .set input[type=number], .set input[type=text] { flex: none; width: 6.5em; padding: 7px 30px 7px 10px; }
+  .inwrap { position: relative; flex: none; display: inline-flex; }
+  .inwrap .clr { display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; padding: 0;
+    border: 0; border-radius: 50%; background: var(--muted); color: var(--card); font: 700 16px/24px system-ui, sans-serif; cursor: pointer; }
+  .inwrap:focus-within input:not(:placeholder-shown) + .clr { display: block; }
   .set .meta { margin-top: 4px; }
   .set .changed { color: var(--warn); font-weight: 600; }
   .switch { position: relative; width: 52px; height: 30px; flex: none; }
@@ -382,18 +387,19 @@ async function loadSettings(token) {
 const showVal = (s, v) => (s.type === "bool" ? (v ? "on" : "off") : s.type === "choice" ? `${v} h`
   : v === "" || v == null ? "empty" : String(v));
 function renderSettings(data, msg = "") {
+  // Back to default without a separate link: an emptied field shows the default as grey placeholder
+  // (× clears it while you type), the dropdown marks its default option, and a switch set back to
+  // its default counts as default. A changed setting has an orange dot after its name.
   const rows = data.settings.map((s) => {
     let control;
-    if (s.type === "bool") control = `<label class="switch"><input type="checkbox" data-key="${esc(s.key)}" ${s.value ? "checked" : ""} aria-label="${esc(s.label)}"><span></span></label>`;
-    else if (s.type === "choice") control = `<select data-key="${esc(s.key)}" aria-label="${esc(s.label)}">${s.options.map((o) =>
-      `<option value="${o}" ${Number(s.value) === o ? "selected" : ""}>${o} h</option>`).join("")}</select>`;
-    else control = `<input type="${s.type === "number" ? "number" : "text"}" data-key="${esc(s.key)}" value="${esc(s.value ?? "")}"
-      ${s.type === "number" ? `min="${s.min}" max="${s.max}" inputmode="numeric"` : ""} placeholder="${esc(showVal(s, s.default))}" aria-label="${esc(s.label)}">`;
-    // Compact: name and control on one line; the explanation opens with the ⓘ button (or a tap on
-    // the name). A changed setting shows an orange dot, and its reset link stays in view.
+    const def = esc(String(s.default ?? ""));
+    if (s.type === "bool") control = `<label class="switch"><input type="checkbox" data-key="${esc(s.key)}" data-default="${def}" ${s.value ? "checked" : ""} aria-label="${esc(s.label)}"><span></span></label>`;
+    else if (s.type === "choice") control = `<select data-key="${esc(s.key)}" data-default="${def}" aria-label="${esc(s.label)}">${s.options.map((o) =>
+      `<option value="${o}" ${Number(s.value) === o ? "selected" : ""}>${o} h${o === Number(s.default) ? " (default)" : ""}</option>`).join("")}</select>`;
+    else control = `<span class="inwrap"><input type="${s.type === "number" ? "number" : "text"}" data-key="${esc(s.key)}" value="${s.changed ? esc(s.value ?? "") : ""}"
+      ${s.type === "number" ? `min="${s.min}" max="${s.max}" inputmode="numeric"` : ""} placeholder="${esc(showVal(s, s.default))}" aria-label="${esc(s.label)}"><button type="button" class="clr" data-clear tabindex="-1" aria-label="Back to default">×</button></span>`;
     return `<div class="set"><div class="row">
         <button type="button" class="set-name" data-info="${esc(s.key)}" aria-expanded="false">${esc(s.label)}${s.changed ? '<i class="dot" title="Changed"></i>' : ""}<span class="info" aria-hidden="true">i</span></button>${control}</div>
-      ${s.changed ? `<div class="small"><span class="changed">Changed</span> · <button type="button" class="link" data-reset="${esc(s.key)}">Back to default (${esc(showVal(s, s.default))})</button></div>` : ""}
       <div class="small muted meta" id="info-${esc(s.key)}" hidden>${esc(s.help || "")} Default: ${esc(showVal(s, s.default))}.</div></div>`;
   }).join("");
   $("settings").innerHTML = `<h2>Settings</h2><div class="card group">${rows}
@@ -403,17 +409,19 @@ function renderSettings(data, msg = "") {
 }
 // Last run of the GitHub job that fetches planned road closures (data/closures.json on this site).
 async function loadClosuresInfo(hours) {
-  const run = `<a href="https://github.com/RemcoNLD/apps/actions/workflows/closures.yml" target="_blank" rel="noopener">Run workflow on GitHub</a>`;
+  const run = `<a href="https://github.com/RemcoNLD/apps/actions/workflows/closures.yml" target="_blank" rel="noopener">update now</a>`;
   try {
     const res = await fetch(`data/closures.json?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error(res.status === 404 ? "No update has run yet." : `Error ${res.status}`);
     const d = await res.json();
     const when = new Date(d.generatedAt);
     const ago = Math.round((Date.now() - when) / 36e5);
+    const FLAG = { nl: "🇳🇱", de: "🇩🇪", be: "🇧🇪", fr: "🇫🇷", at: "🇦🇹" };
     const src = Object.entries(d.sources || {}).map(([k, v]) =>
-      `${esc(k.toUpperCase())}: ${v.ok ? `${v.count} closures` : `<span class="error">failed (${esc(v.error || "?")})</span>`}`).join(" · ");
+      `<span class="cl-src">${FLAG[k] || esc(k.toUpperCase())} ${v.ok ? `<b>${fmt(v.count)}</b>` : `<span class="error">failed (${esc(v.error || "?")})</span>`}</span>`).join("");
     const state = ago > (hours || d.hours || 12) + 8 ? `<b class="error">Late</b>: older than the interval allows. ` : "";
-    $("closInfo").innerHTML = `${state}Last update ${esc(when.toLocaleString())} (${ago} h ago). ${src}<br>${run} to update now.`;
+    const at = when.toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+    $("closInfo").innerHTML = `<div class="cl-row">${src}</div><div class="muted">${state}Updated ${esc(at)}, ${ago} h ago · ${run}</div>`;
   } catch (e) {
     $("closInfo").innerHTML = `${esc(e.message)} ${run}`;
   }
@@ -436,7 +444,10 @@ async function saveSetting(key, value) {
 $("settings").addEventListener("change", (e) => {
   const el = e.target.closest("[data-key]");
   if (!el) return;
-  saveSetting(el.dataset.key, el.type === "checkbox" ? el.checked : el.value.trim());
+  // Empty, or the default picked again: saved as "back to default" (null), so it doesn't count as changed.
+  let v = el.type === "checkbox" ? el.checked : el.value.trim();
+  if (v === "" || (el.dataset.default != null && String(v) === el.dataset.default)) v = null;
+  saveSetting(el.dataset.key, v);
 });
 $("settings").addEventListener("click", (e) => {
   const info = e.target.closest("[data-info]");
@@ -445,9 +456,16 @@ $("settings").addEventListener("click", (e) => {
     if (box) { box.hidden = !box.hidden; info.setAttribute("aria-expanded", String(!box.hidden)); }
     return;
   }
-  const b = e.target.closest("[data-reset]");
-  if (b) saveSetting(b.dataset.reset, null);
+  const clr = e.target.closest("[data-clear]");
+  if (clr) {
+    const input = clr.parentElement.querySelector("input");
+    input.value = "";
+    input.focus();
+    saveSetting(input.dataset.key, null);
+  }
 });
+// Keep the field focused when tapping ×.
+$("settings").addEventListener("mousedown", (e) => { if (e.target.closest("[data-clear]")) e.preventDefault(); });
 
 // ---- Debug routes on screen: summary, the routing service's steps, road numbers, chargers and the raw JSON.
 const TURN_NAME = { 0: "left", 1: "right", 2: "sharp left", 3: "sharp right", 4: "slight left", 5: "slight right", 6: "straight", 7: "roundabout", 8: "leave roundabout", 9: "U-turn", 10: "arrive", 11: "depart", 12: "keep left", 13: "keep right" };

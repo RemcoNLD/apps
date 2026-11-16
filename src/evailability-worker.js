@@ -48,7 +48,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.101";
+const WORKER_VERSION = "2026-11-16.102";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1362,7 +1362,7 @@ const BE_INDEX_URL = "https://remconld.github.io/apps/data/be-fast-sites.json";
 const BE_STATUS_BASE = "https://nap-be.eco-movement.com/datex2/v1/status/";
 const BE_GAP_MS = 10 * 1000;       // Eco-Movement: 1 request per 10 s per IP
 const BE_EVSE_TTL_MS = 60 * 1000;  // a stall's answer is reused for a minute
-const BE_MATCH_KM = 0.6, BE_NEARBY_KM = 1.2, BE_MAX_STATIONS = 150, BE_CELL = 0.02;
+const BE_MATCH_KM = 0.6, BE_ANY_KM = 0.3, BE_NEARBY_KM = 1.2, BE_MAX_STATIONS = 150, BE_CELL = 0.02;
 
 let beIndexState = null;
 async function beIndex() {
@@ -1375,9 +1375,11 @@ async function beIndex() {
     const grid = new Map();
     data.sites.forEach(([brand, lat, lon, maxKw, name, evseIds], i) => {
       const site = { key: `be${i}`, brand, lat, lon, maxKw, name, evseIds };
-      const k = `${brand}|${Math.floor(lat / BE_CELL)}|${Math.floor(lon / BE_CELL)}`;
-      if (!grid.has(k)) grid.set(k, []);
-      grid.get(k).push(site);
+      for (const b of [brand, "*"]) { // "*": every operator, for the same-spot fallback
+        const k = `${b}|${Math.floor(lat / BE_CELL)}|${Math.floor(lon / BE_CELL)}`;
+        if (!grid.has(k)) grid.set(k, []);
+        grid.get(k).push(site);
+      }
     });
     return { built: data.built, grid, count: data.sites.length };
   })();
@@ -1403,7 +1405,14 @@ async function beStatusFor(stations) {
     source: "Eco-Movement (BE)" });
   for (const st of stations.slice(0, BE_MAX_STATIONS)) {
     const near = beSitesNear(index, brandOf(st.brand).key, Number(st.lat), Number(st.lon), BE_NEARBY_KM);
-    if (!near.length || near[0].d > BE_MATCH_KM) { out[st.id] = null; continue; }
+    if (!near.length || near[0].d > BE_MATCH_KM) {
+      // No site of this brand: Open Charge Map's brand may be outdated (Nazareth E17: TotalEnergies there,
+      // Circle K/Spirii in the Belgian feed). Then any fast site on the same spot, and only that one.
+      const any = beSitesNear(index, "*", Number(st.lat), Number(st.lon), BE_ANY_KM)[0];
+      out[st.id] = any ? { ...site(any.s), liveId: any.s.key, liveLat: any.s.lat, liveLon: any.s.lon, otherOperator: true,
+        nearby: [{ id: any.s.key, lat: any.s.lat, lon: any.s.lon, name: any.s.name || null, ...site(any.s) }] } : null;
+      continue;
+    }
     const main = near[0].s;
     out[st.id] = {
       ...site(main), liveId: main.key, liveLat: main.lat, liveLon: main.lon,

@@ -6,7 +6,7 @@ Usage:  python3 tools/build-be-index.py <page.json> [page.json ...]
 Each page is one answer of GET https://nap-be.eco-movement.com/datex2/v1/locations?offset=N
 (1,000 sites per page, header Authorization: Bearer <token>). Pass all pages.
 
-Keeps fast DC charge points (>= 50 kW) of the app's brands. One site in the feed = one index site.
+Keeps fast DC charge points (>= 50 kW): the app's brands, and other operators as "other". One site in the feed = one index site.
 The EVSE ids are what the Worker asks /datex2/v1/status/{evse_id} for, one stall at a time.
 Standard library only.
 """
@@ -83,9 +83,10 @@ def main():
                         kw = max(kw, pkw)
                 if not ids:
                     continue
-                b = brand_of(operator, ids)
-                if not b:
-                    continue
+                # Other operators are kept too, as "other": an Open Charge Map pin can carry an old brand
+                # (Nazareth E17 is TotalEnergies there, Circle K/Spirii here), so the Worker falls back to
+                # any fast site on the same spot.
+                b = brand_of(operator, ids) or "other"
                 try:
                     a = s["entrance"][0]["locAreaLocation"]["locLocationExtensionG"]["FacilityLocation"]["address"]
                     street = text(a["addressLine"][0]["text"])

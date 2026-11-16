@@ -1075,7 +1075,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.106";
+const APP_VERSION = "2026-11-16.107";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2941,7 +2941,9 @@ async function refreshBelgium(members) {
   const sites = members.filter((s) => s.country === "BE" && !s.liveDup);
   const ready = sites.filter((s) => s.status?.evseIds?.length);
   if (!ready.length) {
-    if (sites.some((s) => !s.beMatchedAt)) { matchBelgium(); return "Belgium: finding this site’s stalls · tap again in a moment"; }
+    // Not matched yet, or matched over a minute ago without a result (the index may have changed): look again.
+    const stale = sites.filter((s) => !s.beMatchedAt || Date.now() - s.beMatchedAt > 60 * 1000);
+    if (stale.length) { for (const s of stale) s.beMatchedAt = 0; matchBelgium(); return "Belgium: finding this site’s stalls · tap again in a moment"; }
     return "No live data for this Belgian site";
   }
   if (beBusy) return `Belgium: still checking ${beBusy} · one site at a time`;

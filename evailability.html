@@ -751,6 +751,7 @@
   .avr .rg-off { stroke: var(--offline); }
   .avr .rg-empty { stroke: var(--muted); stroke-width: 2.6; stroke-dasharray: 2.6 3.1; opacity: .75; }
   .avr .rg-unk { stroke: var(--muted); stroke-width: 2.6; opacity: .6; }
+  .avr .rg-nores { stroke: var(--muted); stroke-width: 1.1; }
   .avr > .stat { position: relative; line-height: 1; text-align: center; }
   .row .avail .avr > .stat { font-size: 1.6rem; font-weight: 800; letter-spacing: -.04em; }
   .avr.free .stat strong { color: var(--free); }
@@ -1075,7 +1076,7 @@
 </section>
 
 <script>
-const APP_VERSION = "2026-11-16.109";
+const APP_VERSION = "2026-11-16.110";
 const WORKER = "https://ionity.remco-dv.workers.dev"; // the Worker keeps its old name until its secrets are moved
 
 // The app used to be called "Ionity route" and stored its settings under "ionity-route-…".
@@ -2932,9 +2933,9 @@ async function matchBelgium() {
 }
 function beCounts(st) {
   const r = ringParts(st);
-  const known = r.total - r.unk;
+  const known = r.total - r.unk - r.nores;
   if (!known) return { available: null, offline: 0, state: null };
-  return { available: r.free, offline: r.off, state: r.free ? "free" : known === r.total && r.off === r.total ? "likely_offline" : "full" };
+  return { available: r.free, offline: r.off, state: r.free ? "free" : known && r.off === known && !r.unk ? "likely_offline" : "full" };
 }
 // Belgium, step 2 (a tap): the site's stalls one by one, about 10 s apart. One site at a time.
 let beBusy = null, beNextAt = 0;
@@ -2992,8 +2993,8 @@ async function refreshBelgium(members) {
       }
       s.beDoneAt = Date.now();
       const r = ringParts(st);
-      if (r.unk === r.total) why = "Eco-Movement gave no live status for this site";
-      else if (r.unk) why = `${r.unk} of ${r.total} stalls without live status`;
+      if (r.nores === r.total) why = "Eco-Movement gave no live status for this site";
+      else if (r.nores) why = `${r.nores} of ${r.total} stalls without live status`;
     }
   } catch (e) {
     reportError(`Belgium: ${e.message}`);
@@ -3980,7 +3981,10 @@ function statusInfo(s) {
   const st = s.status;
   // Kept short: the station name gets the room. Colour says free (green) or full (orange).
   if (!st) return { cls: "nodata", text: `<span title="${s.country === "NL" ? "Status not found" : "No live data"}">–</span>` };
-  if (st.available == null && st.be) return { cls: "nodata", text: `<span title="${st.total} fast stalls · tap to check">↻</span>` };
+  if (st.available == null && st.be) {
+    const checked = Object.keys(st.stalls || {}).length;
+    return { cls: "nodata", text: checked ? `<span title="Checked, no live status">?</span>` : `<span title="${st.total} fast stalls · tap to check">↻</span>` };
+  }
   if (st.available == null) return { cls: "nodata", text: `<span title="Status unknown">?</span>` };
   if (frozenFor(st)) return { cls: "frozen", text: `<strong>${st.available}</strong>` };
   if (st.state === "free") return { cls: "free", text: `<strong>${st.available}</strong>` };
@@ -4148,24 +4152,27 @@ const RING_R = 17, RING_C = 2 * Math.PI * RING_R, RING_GAPS_MAX = 16;
 function ringParts(st) {
   const total = st?.total || 0;
   if (st?.be && total) { // Belgium: per stall, some maybe not checked yet
-    const c = { total, free: 0, busy: 0, off: 0, unk: 0 };
+    // nores: checked, but the answer was neither free, in use nor out of order (drawn as a grey outline);
+    // unk: not checked yet (dashed).
+    const c = { total, free: 0, busy: 0, off: 0, nores: 0, unk: 0 };
     for (const id of st.evseIds || []) {
       const k = st.stalls?.[id]?.kind;
-      if (k === "free" || k === "busy" || k === "off") c[k]++; else c.unk++;
+      if (k === "free" || k === "busy" || k === "off") c[k]++; else if (k) c.nores++; else c.unk++;
     }
     return c;
   }
   if (!total || st.available == null) return null;
   const free = Math.max(0, Math.min(st.available, total));
   const off = st.state === "likely_offline" ? total - free : Math.max(0, Math.min(st.offline || 0, total - free));
-  return { total, free, off, busy: total - free - off, unk: 0 };
+  return { total, free, off, busy: total - free - off, nores: 0, unk: 0 };
 }
 function ringSvg(st) {
   const r = ringParts(st);
   const open = `<svg viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-90 20 20)">`;
   if (!r) return `${open}<circle class="rg-empty" cx="20" cy="20" r="${RING_R}"/></g></svg>`;
   const kinds = [];
-  for (let i = 0; i < r.total; i++) kinds.push(i < r.free ? "free" : i < r.free + r.busy ? "busy" : i < r.free + r.busy + r.off ? "off" : "unk");
+  const ends = [["free", r.free], ["busy", r.busy], ["off", r.off], ["nores", r.nores || 0], ["unk", r.unk || 0]];
+  for (const [k, n] of ends) for (let i = 0; i < n; i++) kinds.push(k);
   const per = RING_C / r.total;
   const gaps = r.total > 1 && r.total <= RING_GAPS_MAX;
   const gap = gaps ? Math.min(2.2, per * 0.3) : 0;
@@ -4175,6 +4182,12 @@ function ringSvg(st) {
   const f = (n) => Math.round(n * 100) / 100;
   return open + arcs.map((a) => {
     const len = Math.max(0.6, a.len - gap);
+    if (a.k === "nores") { // checked, no usable answer: an outlined segment
+      return [RING_R - 1.8, RING_R + 1.8].map((rr) => {
+        const k = rr / RING_R;
+        return `<circle class="rg-nores" cx="20" cy="20" r="${rr}" stroke-dasharray="${f(len * k)} ${f((RING_C - len) * k)}" stroke-dashoffset="${f(-(a.from + gap / 2) * k)}"/>`;
+      }).join("");
+    }
     return `<circle class="rg-${a.k}" cx="20" cy="20" r="${RING_R}" stroke-dasharray="${f(len)} ${f(RING_C - len)}" stroke-dashoffset="${f(-(a.from + gap / 2))}"/>`;
   }).join("") + `</g></svg>`;
 }
@@ -4184,7 +4197,7 @@ function ringTitle(st) {
   const fz = frozenFor(st);
   if (fz) return `Probably not live: no change at the site for ${Math.round(fz / 3600000)} h. Last reported ${r.free} of ${r.total} free`;
   if (r.unk === r.total) return `${r.total} fast stalls · tap to check`;
-  return [`${r.free} of ${r.total} free`, r.busy ? `${r.busy} in use` : "", r.off ? `${r.off} out of order` : "", r.unk ? `${r.unk} not checked` : ""].filter(Boolean).join(", ");
+  return [`${r.free} of ${r.total} free`, r.busy ? `${r.busy} in use` : "", r.off ? `${r.off} out of order` : "", r.nores ? `${r.nores} without live status` : "", r.unk ? `${r.unk} not checked` : ""].filter(Boolean).join(", ");
 }
 // info: from shownStatus (cls, text, old, st). extra: e.g. " changed".
 function availRing(info, extra = "") {
@@ -4603,7 +4616,7 @@ function helpHtml() {
     <div class="k">${demoRing(0, 4)}</div><div class="v">All in use.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Off</b>: reported out of order, or nothing has changed for hours.</div>
     <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grey with ?</b>: probably not live. The source hasn't changed anything at this site for over a day (3 days for small sites), so the number is its last report and may be wrong. The dot on the line is hollow.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (3 unless changed on the usage page). Belgium is updated one site at a time when you tap it: its fast stalls are checked one by one, about 10 seconds each, and the ring fills in as they come (dashed segments are stalls not checked yet); at most once a minute per site. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (3 unless changed on the usage page). Belgium is updated one site at a time when you tap it: its fast stalls are checked one by one, about 10 seconds each, and the ring fills in as they come (dashed segments are stalls not checked yet, outlined ones were checked but gave no usable status); at most once a minute per site. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
   </div>
   <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>

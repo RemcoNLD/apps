@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.121"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-16.122"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -680,10 +680,24 @@
   .legend .dot { width: 22px; height: 22px; border-radius: 50%; }
   .legend .dot.ring { border: 4px solid var(--muted); }
   .legend .kv { font-weight: 800; font-size: 1.15rem; }
-  .account { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 14px;
-    padding: 10px 12px; border: 1px solid var(--line, rgba(127,127,127,.3)); border-radius: 10px; }
-  .account #accountWho { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account { margin: 4px 0 18px; padding: 4px 14px; border-radius: 12px; background: var(--asphalt-raised); }
+  .account .acc-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; }
+  .account #accountWho { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .account #logoutBtn { flex: none; }
   .account #logoutBtn.sure { color: var(--danger); font-weight: 800; }
+  .acc-debug { border-top: 1px solid rgba(127,127,127,.25); }
+  .acc-debug label.acc-row { cursor: pointer; }
+  .acc-sub { display: block; color: var(--muted); font-size: .85rem; font-weight: 400; margin: 2px 0 0; line-height: 1.35; }
+  #help .account p.acc-sub { margin: -2px 0 12px; font-size: .85rem; line-height: 1.35; color: var(--muted); }
+  .account p.acc-sub .link { font-size: inherit; }
+  .switch { position: relative; width: 52px; height: 30px; flex: none; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+  .switch span { position: absolute; inset: 0; border-radius: 15px; background: rgba(127,127,127,.35); transition: background .15s; }
+  .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch input:checked + span { background: var(--free); }
+  .switch input:checked + span::after { transform: translateX(22px); }
+  .switch input:focus-visible + span { outline: 2px solid var(--sign-blue); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .switch span, .switch span::after { transition: none; } }
   .help-actions { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
   .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
   /* Splash screen on a fresh start (not when the app comes back from the background).
@@ -1013,13 +1027,20 @@
     <button type="button" class="link" id="helpClose">Close</button>
   </div>
   <div class="account" id="account">
-    <span id="accountWho"></span>
-    <button type="button" class="link" id="logoutBtn">Log out</button>
+    <div class="acc-row">
+      <span id="accountWho"></span>
+      <button type="button" class="link" id="logoutBtn">Log out</button>
+    </div>
+    <div class="acc-debug" id="accDebug" hidden>
+      <label class="acc-row" for="debugToggle">
+        <span><b>Debug mode</b><span class="acc-sub">Versions, data sources, route id and coordinates while driving</span></span>
+        <span class="switch"><input id="debugToggle" type="checkbox" role="switch"><span></span></span>
+      </label>
+      <p class="acc-sub"><button type="button" id="copyRouteData" class="link">Copy route data</button> road numbers and the routing service’s step names, to paste in a chat</p>
+    </div>
   </div>
   <div id="helpBody"></div>
   <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
-  <label class="check"><input id="debugToggle" type="checkbox"> Debug mode while driving (versions, data sources, route id, coordinates)</label>
-  <p class="hint"><button type="button" id="copyRouteData" class="link">Copy route data</button> (road numbers and the routing service's step names, to paste in a chat for checking)</p>
 </div>
 
 <div class="intro" id="intro" hidden role="dialog" aria-modal="true" aria-label="Introduction">
@@ -1348,7 +1369,10 @@ async function unlock() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.token) throw new Error(data.error || "That code isn’t right.");
     localStorage.setItem(ACCESS_KEY, data.token);
-    try { data.name ? localStorage.setItem(ACCESS_NAME_KEY, data.name) : localStorage.removeItem(ACCESS_NAME_KEY); } catch (_) {}
+    try {
+      data.name ? localStorage.setItem(ACCESS_NAME_KEY, data.name) : localStorage.removeItem(ACCESS_NAME_KEY);
+      localStorage.setItem(DEBUG_ALLOWED_KEY, data.debug ? "1" : "0");
+    } catch (_) {}
     $("lock").hidden = true;
     $("lockCode").value = "";
     if (!booted) boot();
@@ -1552,7 +1576,10 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
 // ---- Debug line (temporary): which app and Worker versions are running and where the road numbers
 // came from, so a screenshot shows whether a deploy had finished. Help > "Debug line while driving".
 const DEBUG_KEY = "evailability-debug";
-const debugOn = () => { try { return localStorage.getItem(DEBUG_KEY) === "1"; } catch (_) { return false; } };
+// Debug mode is only there for keys with Debug switched on (Users page); the Worker checks that too.
+const DEBUG_ALLOWED_KEY = "evailability-debug-allowed";
+const debugAllowed = () => { try { return localStorage.getItem(DEBUG_ALLOWED_KEY) === "1"; } catch (_) { return false; } };
+const debugOn = () => { try { return debugAllowed() && localStorage.getItem(DEBUG_KEY) === "1"; } catch (_) { return false; } };
 let workerInfo = null, latestApp = null, debugCheckedAt = 0;
 async function refreshDebugInfo(force = false) {
   if (!debugOn() || (!force && Date.now() - debugCheckedAt < 5 * 60000)) return;
@@ -1590,6 +1617,21 @@ function renderDebug() {
   el.innerHTML = `${app} ${w} ${roads}${planned}${rid}`;
 }
 $("debugToggle").checked = debugOn();
+// Who this key is and whether it may debug: at start, when Help opens and every 10 minutes.
+async function refreshMe() {
+  if (!accessToken()) return;
+  try {
+    const me = await api("/me", null, 15000, false);
+    const was = debugAllowed();
+    try {
+      localStorage.setItem(DEBUG_ALLOWED_KEY, me.debug ? "1" : "0");
+      me.name ? localStorage.setItem(ACCESS_NAME_KEY, me.name) : localStorage.removeItem(ACCESS_NAME_KEY);
+    } catch (_) {}
+    if (was !== !!me.debug) { refreshDebugInfo(true); renderDebug(); renderErrors(); try { render(); } catch (_) {} }
+    if (!$("help").hidden) renderAccount();
+  } catch (_) { /* offline: keep what we knew */ }
+}
+setInterval(refreshMe, 10 * 60000);
 $("debugToggle").addEventListener("change", (e) => {
   try { localStorage.setItem(DEBUG_KEY, e.target.checked ? "1" : "0"); } catch (_) {}
   refreshDebugInfo(true); renderDebug(); renderErrors();
@@ -4771,6 +4813,8 @@ function renderAccount() {
   $("accountWho").textContent = !tok ? "Not signed in" : tok.startsWith("u1.") ? `Signed in${name ? ` as ${name}` : " with a personal key"}` : "Signed in with the old shared code";
   $("logoutBtn").hidden = !tok;
   $("logoutBtn").textContent = "Log out"; $("logoutBtn").classList.remove("sure");
+  $("accDebug").hidden = !tok || !debugAllowed();
+  $("debugToggle").checked = debugOn();
 }
 let logoutTimer = null;
 $("logoutBtn").addEventListener("click", () => {
@@ -4781,12 +4825,13 @@ $("logoutBtn").addEventListener("click", () => {
     return;
   }
   clearTimeout(logoutTimer);
-  try { localStorage.removeItem(ACCESS_KEY); localStorage.removeItem(ACCESS_NAME_KEY); } catch (_) {}
-  $("help").hidden = true;
+  try { localStorage.removeItem(ACCESS_KEY); localStorage.removeItem(ACCESS_NAME_KEY); localStorage.removeItem(DEBUG_ALLOWED_KEY); } catch (_) {}
+  $("help").hidden = true; renderDebug(); renderErrors();
   showLock();
 });
 function openHelp() {
   renderAccount();
+  refreshMe();
   $("helpBody").innerHTML = helpHtml();
   $("help").hidden = false;
   $("help").scrollTop = 0;
@@ -4950,6 +4995,7 @@ let booted = false;
 function boot() {
   booted = true;
   restore();
+  refreshMe();
   if (!localStorage.getItem(INTRO_KEY)) showIntro();
 }
 $("lockBtn").addEventListener("click", unlock);

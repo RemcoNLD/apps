@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.1"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-16.2"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -56,27 +56,41 @@
   .newkey .acts button { flex: 1; }
   .copied { background: var(--ok) !important; }
 
-  /* User list */
+  /* Filter */
+  .filters { display: flex; gap: 8px; margin: 0 0 10px; flex-wrap: wrap; }
+  .filters button { min-height: 36px; padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: .92rem;
+    background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .filters button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .filters .n { opacity: .65; margin-left: 4px; font-weight: 500; }
+
+  /* User list: name (tap for details) with the two switches beside it */
+  .cols { display: flex; justify-content: flex-end; gap: 14px; padding: 0 16px 4px; font-size: .78rem; color: var(--muted); }
+  .cols span { width: 52px; text-align: center; }
   .user { padding: 0; overflow: hidden; }
-  .user > button.head { all: unset; box-sizing: border-box; display: flex; width: 100%; gap: 12px; align-items: center; padding: 14px 16px; cursor: pointer; }
-  .user > button.head:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; border-radius: 12px; }
-  .user .main { flex: 1; min-width: 0; }
+  .user .head { display: flex; align-items: center; gap: 14px; padding: 10px 16px; min-height: 60px; }
+  .user .who { all: unset; box-sizing: border-box; flex: 1; min-width: 0; cursor: pointer; padding: 6px 0; display: flex; align-items: center; gap: 8px; }
+  .user .who:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+  .user .caret { flex: none; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); margin-right: 2px; transition: transform .15s; }
+  .user .who[aria-expanded="true"] .caret { transform: rotate(45deg); }
   .user .name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .user.off .name { color: var(--muted); text-decoration: line-through; }
-  .user .meta { font-size: .88rem; color: var(--muted); }
-  .chip { flex: none; font-size: .78rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--line); color: var(--muted); }
-  .chip.on { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
-  .spark { flex: none; display: flex; align-items: flex-end; gap: 2px; height: 26px; width: 56px; }
-  .spark span { flex: 1; background: var(--muted); opacity: .5; border-radius: 2px 2px 0 0; min-height: 2px; }
-  .spark span:last-child { background: var(--ok); opacity: 1; }
+  .bug { flex: none; width: 18px; height: 18px; color: var(--warn); }
   .user .more { padding: 0 16px 14px; border-top: 1px solid var(--line); }
   .user .facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 12px 0; font-size: .92rem; }
   .user .facts > :nth-child(odd) { color: var(--muted); }
-  .user .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .week { display: flex; align-items: flex-end; gap: 4px; height: 44px; margin: 0 0 4px; }
+  .week span { flex: 1; background: var(--muted); opacity: .45; border-radius: 3px 3px 1px 1px; min-height: 3px; }
+  .week span:last-child { background: var(--ok); opacity: 1; }
+  .weekdays { display: flex; gap: 4px; font-size: .72rem; color: var(--muted); margin-bottom: 12px; }
+  .weekdays span { flex: 1; text-align: center; }
+  .user .btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .user .btns button { padding: 10px 8px; }
   .user .confirm { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--bad) 12%, transparent); }
   .user .confirm .row { margin-top: 8px; }
   .user .confirm button { flex: 1; }
   .rename { margin-top: 8px; }
+  .switch.dbg input:checked + span { background: var(--warn); }
+  .empty { text-align: center; }
 
   .switch { position: relative; width: 52px; height: 30px; flex: none; }
   .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
@@ -108,9 +122,11 @@
   </form>
   <div id="newKey"></div>
   <h2 id="listTitle">Keys</h2>
+  <div class="filters" id="filters" role="group" aria-label="Show"></div>
+  <div class="cols" id="cols" aria-hidden="true"><span>On</span><span>Debug</span></div>
   <div id="list"><p class="muted">Loading…</p></div>
   <div id="legacy"></div>
-  <p class="small muted">Switching a key off or replacing it takes effect within about two minutes. The bars show requests per day over the last 7 days.</p>
+  <p class="small muted">Changes reach the app within a few minutes. Debug lets that key switch on debug mode in Help (debug line, stored routes, forced updates). Tap a name for details and the last 7 days.</p>
 </div>
 
 <script>
@@ -129,7 +145,9 @@ function ago(iso) {
   return day(iso);
 }
 
-let data = null, open = null, confirming = null, renaming = null;
+let data = null, open = null, confirming = null, renaming = null, filter = "all";
+const BUG = `<svg class="bug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Debug on" role="img"><title>Debug on</title><rect x="8" y="6" width="8" height="14" rx="4"/><path d="M9 6a3 3 0 0 1 6 0M12 10v10M8 12H4M20 12h-4M8 17l-3 2M16 17l3 2M8 8 5 6M16 8l3-2"/></svg>`;
+const FILTERS = [["all", "All", () => true], ["debug", "Debug", (u) => u.debug], ["off", "Off", (u) => !u.active]];
 
 async function api(path, body) {
   const res = await fetch(WORKER + path, body
@@ -152,25 +170,28 @@ async function load() {
   } catch (e) { showError(e); }
 }
 
-function spark(perDay) {
-  const max = Math.max(1, ...perDay);
-  return `<div class="spark" aria-hidden="true">${perDay.map((n) => `<span style="height:${Math.max(8, (n / max) * 100)}%;${n ? "" : "opacity:.15"}"></span>`).join("")}</div>`;
-}
 function render() {
-  const users = [...data.users].sort((a, b) => (b.active - a.active) || a.label.localeCompare(b.label));
-  $("listTitle").textContent = users.length ? `Keys (${users.length})` : "Keys";
+  const all = [...data.users].sort((a, b) => (b.active - a.active) || a.label.localeCompare(b.label));
+  if (filter !== "all" && !all.some(FILTERS.find((f) => f[0] === filter)[2])) filter = "all";
+  const users = all.filter(FILTERS.find((f) => f[0] === filter)[2]);
+  $("listTitle").textContent = all.length ? `Keys (${all.length})` : "Keys";
+  $("filters").hidden = all.length < 2;
+  $("filters").innerHTML = FILTERS.map(([k, label, fn]) => {
+    const n = all.filter(fn).length;
+    return k !== "all" && !n ? "" : `<button type="button" data-f="${k}" aria-pressed="${filter === k}">${label}<span class="n">${n}</span></button>`;
+  }).join("");
+  $("cols").hidden = !users.length;
+  const dayNames = data.days.map((d) => new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "narrow" }));
   $("list").innerHTML = users.length ? users.map((u) => {
     const isOpen = open === u.id;
-    const week = u.perDay.reduce((a, b) => a + b, 0);
+    const week = u.perDay.reduce((a, b) => a + b, 0), max = Math.max(1, ...u.perDay);
     return `<div class="card user${u.active ? "" : " off"}" data-id="${u.id}">
-      <button type="button" class="head" aria-expanded="${isOpen}">
-        <div class="main">
-          <div class="name">${esc(u.label)}</div>
-          <div class="meta">Key from ${day(u.keyMade)} · used ${ago(u.lastUsed)}</div>
-        </div>
-        ${spark(u.perDay)}
-        <span class="chip${u.active ? " on" : ""}">${u.active ? "On" : "Off"}</span>
-      </button>
+      <div class="head">
+        <button type="button" class="who" aria-expanded="${isOpen}"><span class="caret" aria-hidden="true"></span>
+          <span class="name">${esc(u.label)}</span>${u.debug ? BUG : ""}</button>
+        <label class="switch"><input type="checkbox" data-sw="active" ${u.active ? "checked" : ""} aria-label="${esc(u.label)}: key on"><span></span></label>
+        <label class="switch dbg"><input type="checkbox" data-sw="debug" ${u.debug ? "checked" : ""} aria-label="${esc(u.label)}: debug mode allowed"><span></span></label>
+      </div>
       ${isOpen ? `<div class="more">
         <div class="facts">
           <span>Added</span><span>${day(u.created)}</span>
@@ -178,6 +199,8 @@ function render() {
           <span>Last used</span><span>${u.lastUsed ? new Date(u.lastUsed).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "never"}</span>
           <span>Requests</span><span>${u.perDay.at(-1)} today, ${week} in 7 days</span>
         </div>
+        <div class="week" aria-hidden="true">${u.perDay.map((n) => `<span style="height:${Math.max(6, (n / max) * 100)}%;${n ? "" : "opacity:.15"}"></span>`).join("")}</div>
+        <div class="weekdays" aria-hidden="true">${dayNames.map((d) => `<span>${d}</span>`).join("")}</div>
         ${renaming === u.id ? `<form class="row rename" data-act="rename-save">
             <input type="text" id="renameInput" value="${esc(u.label)}" maxlength="60" aria-label="New name">
             <button type="submit">Save</button></form>`
@@ -188,14 +211,13 @@ function render() {
             <button type="button" class="${confirming.act === "delete" ? "danger" : ""}" data-act="${confirming.act}-yes">${confirming.act === "delete" ? "Delete" : "Make new key"}</button></div>
           </div>`
         : `<div class="btns">
-            <button type="button" class="plain" data-act="${u.active ? "disable" : "enable"}">${u.active ? "Switch off" : "Switch on"}</button>
             <button type="button" class="plain" data-act="regenerate">New key</button>
             <button type="button" class="plain" data-act="rename">Rename</button>
             <button type="button" class="danger" data-act="delete">Delete</button>
           </div>`}
       </div>` : ""}
     </div>`;
-  }).join("") : `<div class="card muted">No keys yet. Type a name above and tap Make key.</div>`;
+  }).join("") : `<div class="card muted empty">No keys yet. Type a name above and tap Make key.</div>`;
 
   const legacyUse = data.legacyPerDay.reduce((a, b) => a + b, 0);
   $("legacy").innerHTML = `<h2>Old shared code</h2>
@@ -262,7 +284,8 @@ $("list").addEventListener("click", async (e) => {
   if (!card) return;
   const id = card.dataset.id;
   const u = data.users.find((x) => x.id === id);
-  if (e.target.closest("button.head")) {
+  if (e.target.closest(".switch")) return; // handled on change
+  if (e.target.closest("button.who")) {
     open = open === id ? null : id; confirming = null; renaming = null;
     return render();
   }
@@ -288,6 +311,25 @@ $("list").addEventListener("submit", async (e) => {
   if (!label) return;
   try { await api("/admin/users", { action: "rename", id, label }); renaming = null; await load(); }
   catch (err) { showError(err); }
+});
+$("filters").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-f]");
+  if (!b) return;
+  filter = b.dataset.f; open = null; confirming = null; renaming = null;
+  render();
+});
+// The switches in a row: On (the key works) and Debug (may use debug mode). Saved straight away.
+$("list").addEventListener("change", async (e) => {
+  const sw = e.target.closest("[data-sw]");
+  if (!sw) return;
+  const id = e.target.closest(".user").dataset.id;
+  const u = data.users.find((x) => x.id === id);
+  sw.disabled = true;
+  try {
+    const out = await api("/admin/users", { action: "set", id, [sw.dataset.sw]: sw.checked });
+    Object.assign(u, { active: out.user.active, debug: out.user.debug });
+    render();
+  } catch (err) { showError(err); sw.checked = !sw.checked; sw.disabled = false; }
 });
 $("legacy").addEventListener("change", async (e) => {
   if (e.target.id !== "legacySw") return;

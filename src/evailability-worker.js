@@ -28,6 +28,8 @@
 //   GET  /admin/settings        switches and values set on the usage page (same header)
 //   GET  /admin/users           access keys: label, status, dates, use per day (same header)
 //   POST /admin/users           {action:"create", label} | {action:"regenerate"|"disable"|"enable"|"delete", id}
+//                               | {action:"set", id, active?, debug?} (the switches in the list)
+//   GET  /me                    who this key is: {name, debug} (debug: may use debug mode)
 //                               create/regenerate answer the new key once; only its hash is kept
 //   POST /admin/settings        {settings:{key: value}} saves them (one KV write); empty value = default
 //   GET  /debug/ndw?lat=&lon=   raw Dutch (NDW) data around a point, to tune the parser
@@ -51,7 +53,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.112";
+const WORKER_VERSION = "2026-11-16.113";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1862,7 +1864,7 @@ async function handlePlan(request, env) {
   // Debug mode in the app: keep the whole routing result (request, the routing service's raw answer
   // and what the app got) for 30 days under a short id, shown in the app's debug line.
   // One KV write per plan, only for devices in debug mode.
-  if (body.debug === true && env.USAGE) {
+  if (body.debug === true && WHO_OF.get(request)?.debug && env.USAGE) { // stored routes only for debug keys
     const id = debugRouteId();
     const raw = rawRoute.get(route) || null;
     try {
@@ -2691,6 +2693,10 @@ async function handleUsers(request, env) {
       user = find();
       user.active = body.action === "enable";
       user.changed = now;
+    } else if (body.action === "set") {
+      user = find();
+      if (typeof body.active === "boolean") { user.active = body.active; user.changed = now; }
+      if (typeof body.debug === "boolean") user.debug = body.debug;
     } else if (body.action === "rename") {
       user = find();
       const label = String(body.label || "").trim().slice(0, 60);
@@ -2699,7 +2705,7 @@ async function handleUsers(request, env) {
     } else if (body.action === "delete") {
       user = find();
       list.splice(list.indexOf(user), 1);
-    } else throw new HttpError(400, "action = create, regenerate, disable, enable, rename or delete");
+    } else throw new HttpError(400, "action = create, regenerate, set, disable, enable, rename or delete");
     await saveUsers(env, list);
     return json(request, { ok: true, key, user: user && publicUser(user) });
   }
@@ -2727,7 +2733,7 @@ async function handleUsers(request, env) {
     legacyPerDay: days.map((d) => d.users.legacy?.n || 0).reverse(),
   });
 }
-const publicUser = (u) => ({ id: u.id, label: u.label, active: u.active !== false, created: u.created, keyMade: u.keyMade || u.created, gen: u.gen || 1 });
+const publicUser = (u) => ({ id: u.id, label: u.label, active: u.active !== false, debug: !!u.debug, created: u.created, keyMade: u.keyMade || u.created, gen: u.gen || 1 });
 
 // Who is asking: { id } for a personal key, { id: "legacy" } for the old shared code, { id: "admin" }
 // for the admin password, or null.
@@ -2741,14 +2747,14 @@ async function whoIs(request, env, url) {
     if (!u) throw new HttpError(401, "This access key no longer exists. Ask for a new one.");
     if (String(u.gen || 1) !== gen) throw new HttpError(401, "This access key was replaced. Enter the new one.");
     if (u.active === false) throw new HttpError(401, "This access key has been switched off.");
-    return { id };
+    return { id, name: u.label, debug: !!u.debug };
   }
   if (sameText(given, await accessToken(env))) {
     if (!setting(env, "legacyCode")) throw new HttpError(401, "The old access code no longer works. Enter your personal key.");
-    return { id: "legacy" };
+    return { id: "legacy", debug: false };
   }
   // The admin password works too (handy for opening /debug/… pages in a browser: ?access=<password>).
-  if (env.ADMIN_TOKEN && sameText(given, env.ADMIN_TOKEN)) return { id: "admin" };
+  if (env.ADMIN_TOKEN && sameText(given, env.ADMIN_TOKEN)) return { id: "admin", debug: true };
   return null;
 }
 async function handleUnlock(request, env) {
@@ -2766,7 +2772,7 @@ async function handleUnlock(request, env) {
     if (u && u.active === false) throw new HttpError(403, "This access key has been switched off.");
     if (u) {
       memo.delete(key); // a right key resets the tries
-      return json(request, { token: `u1.${u.id}.${u.gen || 1}.${await userSig(env, u.id, u.gen || 1)}`, name: u.label });
+      return json(request, { token: `u1.${u.id}.${u.gen || 1}.${await userSig(env, u.id, u.gen || 1)}`, name: u.label, debug: !!u.debug });
     }
   } else if (setting(env, "legacyCode") && elfProef(given)) {
     return json(request, { token: await accessToken(env) });
@@ -2775,6 +2781,9 @@ async function handleUnlock(request, env) {
   throw new HttpError(403, "That key isn’t right.");
 }
 
+// Each request's key {id, name, debug}, looked up by its request (a module variable could be
+// overwritten by another request while this one waits on a fetch).
+const WHO_OF = new WeakMap();
 async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -2782,10 +2791,17 @@ async function route(request, env) {
   if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders(request) });
   await loadSettings(env); // switches from the usage page (cached a minute); the old-code switch is one
   if (path === "/unlock" && request.method === "POST") return handleUnlock(request, env);
+  let who = null;
   if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/")) {
-    const who = await whoIs(request, env, url);
+    who = await whoIs(request, env, url);
     if (!who) throw new HttpError(401, "Access key needed");
     if (who.id !== "admin") countUser(who.id);
+    WHO_OF.set(request, who);
+    // Debug tools only for keys with Debug switched on (Users page) or the admin password.
+    if (path.startsWith("/debug/") && !who.debug) throw new HttpError(403, "Debug isn’t switched on for this key");
+  }
+  if (path === "/me" && request.method === "GET") {
+    return json(request, { name: who?.name || null, debug: !!who?.debug, legacy: who?.id === "legacy" });
   }
 
   if (path === "/" && request.method === "GET") {

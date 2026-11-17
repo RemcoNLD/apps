@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.28.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.28.2"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -6539,9 +6539,9 @@ const CHANGELOG = [
       nl: ["Geplande afsluitingen in Nederland en Duitsland op je route, met <b>Vermijden</b> en <b>Alles vermijden</b>."],
       pt: ["Cortes planeados nos Países Baixos e na Alemanha no seu percurso, com <b>Evitar</b> e <b>Evitar todos</b>."] } },
   { v: "0.17", date: "2026-11-15", title: { en: "Turn by turn", nl: "Afslag voor afslag", pt: "Indicações passo a passo" },
-    items: { en: ["The next turn shown big, with a countdown, roundabout exits and the next motorway exit.", "A ☰ menu for Change route and Help."],
-      nl: ["De volgende afslag groot in beeld, met aftellen, rotondeafslagen en de volgende afrit.", "Een ☰ menu voor Route wijzigen en Help."],
-      pt: ["A próxima manobra em grande, com contagem, saídas de rotundas e a próxima saída da autoestrada.", "Um menu ☰ para Alterar percurso e Ajuda."] } },
+    items: { en: ["The next turn shown big, with a countdown, roundabout exits and the next motorway exit.", "In the last 500 m your row pulses: a band sweeps across it in the direction you turn, faster close to the turn, calm when you stand still.", "A ☰ menu for Change route and Help."],
+      nl: ["De volgende afslag groot in beeld, met aftellen, rotondeafslagen en de volgende afrit.", "In de laatste 500 m pulseert je rij: een band veegt erover in de richting van je afslag, sneller vlak voor de afslag, rustig als je stilstaat.", "Een ☰ menu voor Route wijzigen en Help."],
+      pt: ["A próxima manobra em grande, com contagem, saídas de rotundas e a próxima saída da autoestrada.", "Nos últimos 500 m a sua linha pulsa: uma faixa passa por ela no sentido da manobra, mais depressa perto da manobra, calma quando está parado.", "Um menu ☰ para Alterar percurso e Ajuda."] } },
   { v: "0.16", date: "2026-11-15", title: { en: "Roads and where you are", nl: "Wegen en waar je bent", pt: "Estradas e onde está" },
     items: { en: ["Every main road to your destination on the line, the road you’re on and the next two at the top.", "The bottom line shows a compass, the road and the nearest exit or town."],
       nl: ["Elke hoofdweg tot je bestemming op de lijn, bovenaan de weg waarop je rijdt en de volgende twee.", "De onderste regel toont een kompas, de weg en de eerstvolgende afrit of plaats."],
@@ -6575,9 +6575,9 @@ const CHANGELOG = [
       nl: ["De app vraagt één keer per apparaat om een toegangscode."],
       pt: ["A app pede um código de acesso uma vez por dispositivo."] } },
   { v: "0.8", date: "2026-11-14", title: { en: "Tap and press and hold", nl: "Tikken en ingedrukt houden", pt: "Tocar e manter premido" },
-    items: { en: ["Tap a charger to update it now.", "Press and hold a charger to open it in Apple Maps, Google Maps, Waze or Flitsmeister."],
-      nl: ["Tik op een lader om hem nu bij te werken.", "Houd een lader ingedrukt om hem te openen in Apple Kaarten, Google Maps, Waze of Flitsmeister."],
-      pt: ["Toque num carregador para o atualizar já.", "Mantenha premido um carregador para o abrir nos Mapas da Apple, Google Maps, Waze ou Flitsmeister."] } },
+    items: { en: ["Tap a charger to update it now.", "Press and hold a charger for its <b>details card</b>: address, distance, detour, power and since when it’s been full.", "From the card, open it in Apple Maps, Google Maps, Waze or Flitsmeister, copy its coordinates or <b>share</b> it."],
+      nl: ["Tik op een lader om hem nu bij te werken.", "Houd een lader ingedrukt voor zijn <b>detailkaart</b>: adres, afstand, omrijden, vermogen en sinds wanneer hij vol is.", "Open hem vanaf de kaart in Apple Kaarten, Google Maps, Waze of Flitsmeister, kopieer de coördinaten of <b>deel</b> hem."],
+      pt: ["Toque num carregador para o atualizar já.", "Mantenha premido um carregador para ver o <b>cartão de detalhes</b>: morada, distância, desvio, potência e desde quando está cheio.", "A partir do cartão, abra-o nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, copie as coordenadas ou <b>partilhe-o</b>."] } },
   { v: "0.7", date: "2026-11-14", title: { en: "Introduction, Help and a compact start screen", nl: "Introductie, Help en een compact startscherm", pt: "Introdução, Ajuda e um ecrã inicial compacto" },
     items: { en: ["A short introduction on first use and Help behind the <b>?</b>.", "A start screen that fits on one phone screen, with up to two via points."],
       nl: ["Een korte introductie bij het eerste gebruik en Help achter de <b>?</b>.", "Een startscherm dat op één telefoonscherm past, met maximaal twee viapunten."],
@@ -6603,9 +6603,9 @@ const CHANGELOG = [
       nl: ["Scroll door alle laders op de route; een knop brengt je terug naar de volgende.", "Desgewenst alleen laders aan jouw kant van de weg."],
       pt: ["Percorra todos os carregadores do percurso; um botão leva-o de volta aos próximos.", "Se quiser, só os carregadores do seu lado da estrada."] } },
   { v: "0.1", date: "2026-11-14", title: { en: "First version", nl: "Eerste versie", pt: "Primeira versão" },
-    items: { en: ["Ionity chargers along your route: destination at the top, you at the bottom, with how many are <b>free right now</b> and the <b>detour</b> in minutes.", "Updates itself when opened from the home screen."],
-      nl: ["Ionity-laders langs je route: bestemming bovenaan, jij onderaan, met hoeveel er <b>nu vrij</b> zijn en het <b>omrijden</b> in minuten.", "Werkt zichzelf bij als je hem opent vanaf het beginscherm."],
-      pt: ["Carregadores Ionity no seu percurso: destino em cima, você em baixo, com quantos estão <b>livres agora</b> e o <b>desvio</b> em minutos.", "Atualiza-se sozinha quando aberta a partir do ecrã principal."] } },
+    items: { en: ["Ionity chargers along your route: destination at the top, you at the bottom, with how many are <b>free right now</b> and the <b>detour</b> in minutes.", "The screen stays on while you drive, and the app updates itself when opened from the home screen."],
+      nl: ["Ionity-laders langs je route: bestemming bovenaan, jij onderaan, met hoeveel er <b>nu vrij</b> zijn en het <b>omrijden</b> in minuten.", "Het scherm blijft aan tijdens het rijden, en de app werkt zichzelf bij als je hem opent vanaf het beginscherm."],
+      pt: ["Carregadores Ionity no seu percurso: destino em cima, você em baixo, com quantos estão <b>livres agora</b> e o <b>desvio</b> em minutos.", "O ecrã mantém-se ligado enquanto conduz, e a app atualiza-se sozinha quando aberta a partir do ecrã principal."] } },
 ];
 function changelogHtml() {
   const lang = CHANGELOG[0].items[LANG] ? LANG : "en";

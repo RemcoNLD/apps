@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.154"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.155"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -620,6 +620,13 @@
     border: 2px solid var(--muted); color: var(--muted); font-weight: 700; font-size: .95rem;
   }
   .start-clear:active { color: var(--line); border-color: var(--line); }
+  /* ‹ Route: back to the route you were driving, unchanged (Change route keeps it until a new one is planned) */
+  .start-back {
+    height: 36px; flex-shrink: 0; padding: 0 12px 0 8px; border-radius: 18px; background: none;
+    border: 2px solid var(--sign-blue); color: var(--sign-blue); font-weight: 800; font-size: .95rem;
+  }
+  .start-back:active { background: var(--sign-blue); color: #fff; }
+  #start.editing .apps-back { display: none; } /* one ‹ at a time: back to the route wins */
   /* Compact address rows: a short tag on the left, the field, and (for To) a + for via points */
   .fld { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .fld .tag { width: 40px; flex-shrink: 0; color: var(--muted); font-weight: 700; font-size: .95rem; }
@@ -1169,6 +1176,7 @@
 <section id="start">
   <div class="start-top">
     <a class="apps-back" id="appsBack" href="./" aria-label="Back to apps" hidden>‹</a>
+    <button type="button" class="start-back" id="backToRoute" aria-label="Back to the route" hidden>‹ Route</button>
     <h1>EVailability</h1>
     <button type="button" class="start-clear" id="clearStart" hidden>Clear</button>
     <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
@@ -1406,7 +1414,7 @@
     <div class="menu-wrap">
       <button type="button" class="menu-btn" id="menuBtn" aria-label="Menu" aria-expanded="false" aria-controls="menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
       <div class="menu" id="menu" hidden role="menu">
-        <button id="newRoute" type="button" role="menuitem">New route</button>
+        <button id="changeRoute" type="button" role="menuitem">Change route</button>
         <button id="helpDrive" type="button" role="menuitem">Help</button>
       </div>
     </div>
@@ -1591,6 +1599,8 @@ const I18N_TEXT = {
 "You’ve left the route. Rerouting…": "Je bent van de route af. Nieuwe route berekenen…",
 "Try again": "Opnieuw proberen",
 "New route": "Nieuwe route",
+"Change route": "Route wijzigen",
+"Back to the route": "Terug naar de route",
 "Easy to reach": "Makkelijk bereikbaar",
 "Choose which brands to show": "Kies welke merken je ziet",
 "Status of the chargers, tap to update": "Status van de laders, tik om bij te werken",
@@ -1854,6 +1864,9 @@ const I18N_TEXT = {
 "You’ve left the route. Rerouting…": "Saiu do percurso. A recalcular…",
 "Try again": "Tentar novamente",
 "New route": "Novo percurso",
+"Change route": "Alterar percurso",
+"‹ Route": "‹ Percurso",
+"Back to the route": "Voltar ao percurso",
 "Help": "Ajuda",
 "Easy to reach": "Fácil acesso",
 "Choose which brands to show": "Escolha que marcas mostrar",
@@ -1982,7 +1995,7 @@ const HELP_I18N = {
   <h3>Het scherm tijdens het rijden</h3>
   <p>Je bestemming staat bovenaan, jij onderaan, en de laders daartussen in routevolgorde. Elke rij toont de afstand en rijtijd van waar je bent tot de lader zelf (bij een lader na een afrit of aan de overkant inclusief het stuk erheen en het keren), en het maximale vermogen van de lader (<span class="kw">${BOLT}</span>).</p>
   <p>Elke hoofdweg tot je bestemming staat op de lijn, in de stijl van de borden in dat land, ook stukken zonder lader: elk toont hoe ver vooruit hij begint en hoe lang hij is (↕). De weg waarop je rijdt staat direct boven je. Wil je deze rijen niet? Zet in de merkenknop (linksboven) <b>Hoofdwegen op de lijn</b> op <b>Alleen wisselingen</b>, of tik gewoon op een wegrij (tik op een wegnummer op de lijn om ze terug te halen): dan staat er alleen een wegnummer op de lijn waar de weg tussen laders verandert. Bovenaan staan de weg waarop je rijdt en de volgende twee; een weg verdwijnt als je zijn einde passeert.</p>
-  <p>Het <b>☰ menu</b> linksboven bevat Nieuwe route en Help. Rechtsboven staat de <b>statustijd</b> van de laders (nu, of hoeveel minuten oud; tik erop om bij te werken, hoogstens één keer per minuut, maar na een mislukte update één keer meteen).</p>
+  <p>Het <b>☰ menu</b> linksboven bevat Route wijzigen en Help. Rechtsboven staat de <b>statustijd</b> van de laders (nu, of hoeveel minuten oud; tik erop om bij te werken, hoogstens één keer per minuut, maar na een mislukte update één keer meteen).</p>
   <p>Jouw eigen rij toont de <b>volgende afslag</b>: een grote pijl op de plek van je positiepijl, de aftellende afstand en de weg die je op gaat. Een rotonde wordt getekend met de afslag waar de weg echt vertrekt en het afslagnummer in het midden ("2e afslag", of "rechtdoor"). In de laatste 500 m pulseert de hele rij: een witte band veegt erover in de richting van je afslag (van links naar rechts voor rechts, van rechts naar links voor links), en bij rechtdoor faadt de hele rij tussen zwart en wit. Hij veegt ongeveer één keer per seconde terwijl je rijdt en twee keer zo snel in de laatste 50 m; als je stilstaat (een verkeerslicht) veegt hij nog drie keer en blijft dan wit staan tot je wegrijdt. Een "links/rechts aanhouden" waarbij je gewoon op dezelfde snelweg blijft, wordt niet getoond. Op een snelweg telt rechts de <b>volgende afrit</b> aan jouw kant af, met nummer en naam; ga je bij die afrit eraf, dan komt het nummer bij de afslag te staan. De onderste regel van het scherm toont een kompas (in je rijrichting), de tijd van de laatste locatie-update en het wegnummer met de eerstvolgende afrit of plaats (A17 Zevenbergen), of op kleinere wegen de plaats en straat. Met de debugregel aan zie je in plaats daarvan je coördinaten, richting en GPS-nauwkeurigheid, en elke geplande route wordt 30 dagen bewaard onder het id na # op de debugregel. Op een hoofdweg wordt hij bij elke GPS-meting bijgewerkt; op kleinere wegen na een afslag (60° of meer binnen een minuut), elke 2 km en als je op je rij tikt.</p>
 
   <h3>Wegafsluitingen</h3>
@@ -2028,7 +2041,7 @@ const HELP_I18N = {
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
     <li>Het scherm blijft aan tijdens het rijden. ${esc(T(awakeText()))} Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
     <li>Als je aankomt, is er een klein feestje, en daarna mag het scherm weer uit.</li>
-    <li><b>Nieuwe route</b> brengt je terug naar het startscherm met je bestemming en viapunten nog ingevuld, zodat je er een kunt verbeteren en opnieuw plannen. <b>Wissen</b> rechtsboven maakt alle velden leeg om opnieuw te beginnen.</li>
+    <li><b>Route wijzigen</b> brengt je naar het startscherm met je bestemming en viapunten nog ingevuld, zodat je er een kunt verbeteren en opnieuw plannen. <b>‹ Route</b> linksboven brengt je ongewijzigd terug naar je route. <b>Wissen</b> rechtsboven maakt alle velden leeg om opnieuw te beginnen.</li>
   </ul>
 
   <div class="help-actions">
@@ -2060,7 +2073,7 @@ const HELP_I18N = {
   <h3>O ecrã durante a condução</h3>
   <p>O seu destino está em cima, você em baixo, e os carregadores pelo meio, pela ordem do percurso. Cada linha mostra a distância e o tempo de condução desde onde está até ao próprio carregador (para um carregador depois de uma saída ou do outro lado da estrada, incluindo o caminho até lá e a inversão de marcha) e a potência máxima do carregador (<span class="kw">${BOLT}</span>).</p>
   <p>Todas as estradas principais até ao destino estão na linha, com o estilo da sinalização de cada país, incluindo troços sem carregadores: cada uma mostra a que distância começa e quanto mede (↕). A estrada em que está fica logo acima de si. Não quer estas linhas? No botão das marcas (canto superior esquerdo), defina <b>Estradas principais na linha</b> como <b>Só mudanças</b>, ou toque simplesmente numa linha de estrada (toque num número de estrada na linha para as voltar a mostrar): fica então um número na linha apenas onde a estrada muda entre carregadores. Em cima aparece a estrada em que está e as duas seguintes; uma estrada desaparece quando passa o seu fim.</p>
-  <p>O <b>menu ☰</b> no canto superior esquerdo tem Novo percurso e Ajuda. No canto superior direito está a <b>hora do estado</b> dos carregadores (agora, ou há quantos minutos; toque para atualizar, no máximo uma vez por minuto, mas logo uma vez após uma atualização falhada).</p>
+  <p>O <b>menu ☰</b> no canto superior esquerdo tem Alterar percurso e Ajuda. No canto superior direito está a <b>hora do estado</b> dos carregadores (agora, ou há quantos minutos; toque para atualizar, no máximo uma vez por minuto, mas logo uma vez após uma atualização falhada).</p>
   <p>A sua própria linha mostra a <b>próxima manobra</b>: uma seta grande no lugar da sua seta de posição, a distância a diminuir e a estrada para onde vira. Uma rotunda é desenhada com a saída onde a estrada realmente sai e o número da saída no meio ("2.ª saída", ou "em frente"). Nos últimos 500 m toda a linha pulsa: uma faixa branca passa por ela no sentido da manobra (da esquerda para a direita para a direita, da direita para a esquerda para a esquerda) e, em frente, toda a linha alterna suavemente entre preto e branco. Passa cerca de uma vez por segundo enquanto conduz e duas vezes mais depressa nos últimos 50 m; quando está parado (um semáforo), passa mais três vezes e depois fica branca até arrancar. Um "manter à esquerda/direita" em que simplesmente continua na mesma autoestrada não é mostrado. Numa autoestrada, a <b>próxima saída</b> do seu lado conta para trás à direita, com número e nome; se sair nessa saída, o número passa para a manobra. A linha de baixo do ecrã mostra uma bússola (no sentido em que conduz), a hora da última atualização de localização e o número da estrada com a saída ou localidade seguinte (A17 Zevenbergen), ou em estradas menores a localidade e a rua. Com a linha de depuração ligada, mostra em vez disso as coordenadas, a direção e a precisão do GPS, e cada percurso planeado fica guardado 30 dias com o id após # na linha de depuração. Numa estrada principal atualiza a cada posição GPS; em estradas menores após uma viragem (60° ou mais num minuto), a cada 2 km e quando toca na sua linha.</p>
 
   <h3>Cortes de estrada</h3>
@@ -2106,7 +2119,7 @@ const HELP_I18N = {
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
     <li>O ecrã mantém-se ligado enquanto conduz. ${esc(T(awakeText()))} Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
     <li>Quando chega, há uma pequena celebração e o ecrã pode voltar a desligar-se.</li>
-    <li><b>Novo percurso</b> leva-o de volta ao ecrã inicial com o destino e os pontos intermédios ainda preenchidos, para poder corrigir um e voltar a planear. <b>Limpar</b>, no canto superior direito, apaga todos os campos para recomeçar.</li>
+    <li><b>Alterar percurso</b> leva-o ao ecrã inicial com o destino e os pontos intermédios ainda preenchidos, para poder corrigir um e voltar a planear. <b>‹ Percurso</b>, no canto superior esquerdo, leva-o de volta ao percurso sem alterações. <b>Limpar</b>, no canto superior direito, apaga todos os campos para recomeçar.</li>
   </ul>
 
   <div class="help-actions">
@@ -3042,7 +3055,7 @@ function wireSearch(inputId, listId, key) {
   const syncClear = () => { clear.hidden = isVia ? false : !input.value; };
   input.addEventListener("input", () => { syncClear(); search(); });
   // Tapping a field shows the places used before, also when a place from an earlier route is
-  // still remembered for it but the field itself is empty (after "New route").
+  // still remembered for it but the field itself is empty (after "Change route" + Clear).
   const onFocus = () => { if (input.value.trim().length < 3) showRecent(); };
   input.addEventListener("focus", onFocus);
   input.addEventListener("click", onFocus); // iOS: a tap on a field that already has focus
@@ -3790,6 +3803,7 @@ $("planBtn").addEventListener("click", async () => {
     }
     state.hidden.clear(); saveHidden();
     await plan(from, state.brands);
+    state.editFrom = null; syncBackToRoute(); // the route you came from is replaced now
     startDriving();
     closeOptions();
     // Not a toast in the middle of the screen: the banner at the bottom, which goes away by itself.
@@ -3893,11 +3907,12 @@ function sideOf(s) {
 
 // ------------------------------------------------------------- driving
 
-function startDriving() {
+function startDriving({ resume = false } = {}) {
   $("start").hidden = true;
   $("drive").hidden = false;
   stopTracking();
-  if ($("sim").checked) startSimulation(); else startGps();
+  // Back from Change route: a simulated drive carries on where it was instead of starting over.
+  if ($("sim").checked) startSimulation(resume ? state.user?.km || 0 : 0); else startGps();
   state.statusTimer = setInterval(refreshStatus, STATUS_EVERY_MS);
   keepAwake();
   render();
@@ -3957,8 +3972,8 @@ $("youRow").addEventListener("click", () => {
 });
 
 // Drives the route at 100 km/h, sped up 30 times, so a test drive takes minutes.
-function startSimulation() {
-  let k = 0;
+function startSimulation(fromKm = 0) {
+  let k = fromKm;
   state.simTimer = setInterval(() => {
     k = Math.min(k + (100 * 30) / 3600, state.route.distanceKm);
     onPosition(pointAtKm(k), 10);
@@ -5106,21 +5121,37 @@ $("mySide").addEventListener("click", () => {
 });
 syncMySide();
 
-$("newRoute").addEventListener("click", () => {
-  // Taken before the route is dropped: the start screen is filled from it (fillStartFromRoute).
-  const trip = { to: state.to, vias: state.vias || [], from: state.from, drivenKm: state.user?.km ?? 0 };
-  state.stickToBottom = true;
-  stopTracking();
-  localStorage.removeItem(STORE_KEY);
-  state.route = null; state.stations = [];
-  state.arrived = false; state.wasAway = false;
+$("changeRoute").addEventListener("click", () => {
+  // The route stays: nothing is thrown away until a new one is planned, so ‹ Route goes back to it
+  // without asking the Worker for anything. What planning may change on the way (the fields write
+  // to state.to/from/vias, Plan route resets avoid/arrived/hidden) is kept here to put back.
+  state.editFrom = { to: state.to, vias: (state.vias || []).slice(), from: state.from, avoid: state.avoid || [],
+    arrived: state.arrived, wasAway: state.wasAway, hidden: [...state.hidden] };
+  stopTracking(); // no GPS or status timer while on the start screen
   letSleep();
-  fillStartFromRoute(trip);
+  fillStartFromRoute({ to: state.to, vias: state.vias || [], from: state.from, drivenKm: state.user?.km ?? 0 });
+  syncBackToRoute();
   $("drive").hidden = true; $("start").hidden = false; refreshServiceNotice();
   $("offRoute").hidden = true;
 });
+function syncBackToRoute() {
+  const on = !!(state.editFrom && state.route);
+  $("backToRoute").hidden = !on;
+  $("start").classList.toggle("editing", on);
+}
+function backToRoute() {
+  const t = state.editFrom;
+  if (!t || !state.route) return;
+  Object.assign(state, { to: t.to, vias: t.vias, from: t.from, avoid: t.avoid, arrived: t.arrived, wasAway: t.wasAway });
+  state.hidden = new Set(t.hidden); saveHidden();
+  state.editFrom = null; syncBackToRoute();
+  showStartError(""); closeOptions();
+  state.stickToBottom = true;
+  startDriving({ resume: true });
+}
+$("backToRoute").addEventListener("click", backToRoute);
 
-// Start screen fields. New route fills them from the trip you were on, so fixing a typo in the
+// Start screen fields. Change route fills them from the trip you were on, so fixing a typo in the
 // destination or a via point is one change and Plan route; Clear empties them all to start over.
 // A field and what it stands for (state[k]) are always set together.
 const START_FIELDS = ["to", "from", "via1", "via2"];
@@ -6407,7 +6438,7 @@ function helpHtml() {
   <h3>The screen while driving</h3>
   <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. Don't want these rows? In the brands button (top left), set <b>Main roads on the line</b> to <b>Changes only</b>, or just tap a road row (tap a road badge on the line to bring them back): then a badge sits on the line only where the road changes between chargers. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
-  <p>The <b>☰ menu</b> top left holds New route and Help. Top right is the <b>status time</b> of the chargers (now, or how many minutes old; tap it to update, at most once a minute, but right away once after a failed update).</p>
+  <p>The <b>☰ menu</b> top left holds Change route and Help. Top right is the <b>status time</b> of the chargers (now, or how many minutes old; tap it to update, at most once a minute, but right away once after a failed update).</p>
   <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto. A roundabout is drawn with its exit where the road really leaves and the exit number in the middle ("2nd exit", or "straight on"). In the last 500 m the whole row pulses: a white band sweeps across it the way you turn (left to right for right, right to left for left), and straight on the whole row fades between black and white. It sweeps about once a second while you drive and twice as fast in the last 50 m; when you stand still (a traffic light), it sweeps three more times and then holds still in white until you drive off. A "keep left/right" where you simply stay on the same motorway isn't shown. On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
 
   <h3>Road closures</h3>
@@ -6453,7 +6484,7 @@ function helpHtml() {
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${esc(awakeText())} If it still turns off, check that Low Power Mode is off.</li>
     <li>When you arrive, there's a small celebration, and the screen may turn off again.</li>
-    <li><b>New route</b> takes you back to the start screen with your destination and via points still filled in, so you can fix one and plan again. <b>Clear</b> top right empties all fields to start over.</li>
+    <li><b>Change route</b> takes you to the start screen with your destination and via points still filled in, so you can fix one and plan again. <b>‹ Route</b> top left takes you back to your route unchanged. <b>Clear</b> top right empties all fields to start over.</li>
   </ul>
 
   <div class="help-actions">
@@ -6523,7 +6554,7 @@ $("menuBtn").addEventListener("click", (e) => {
   $("menu").hidden = !open; $("menuBtn").setAttribute("aria-expanded", String(open));
 });
 document.addEventListener("click", (e) => { if (!$("menu").hidden && !e.target.closest(".menu-wrap")) closeMenu(); });
-$("newRoute").addEventListener("click", closeMenu);
+$("changeRoute").addEventListener("click", closeMenu);
 // Tap the status time: update the chargers on screen (at most once a minute, like a tap on a row).
 $("age").addEventListener("click", () => {
   if (statusBusy()) return;

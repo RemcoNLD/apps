@@ -183,6 +183,9 @@ EXACT = {
 # ---- driving screen
 "Menu": ("Menu", "Menu"),
 "New route": ("Nieuwe route", "Novo percurso"),
+"Change route": ("Route wijzigen", "Alterar percurso"),
+"‹ Route": ("‹ Route", "‹ Percurso"),
+"Back to the route": ("Terug naar de route", "Voltar ao percurso"),
 "Help": ("Help", "Ajuda"),
 "Easy to reach": ("Makkelijk bereikbaar", "Fácil acesso"),
 "Choose which brands to show": ("Kies welke merken je ziet", "Escolha que marcas mostrar"),

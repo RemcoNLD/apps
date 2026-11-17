@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.152"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.153"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -185,10 +185,18 @@
     background: var(--asphalt); }
   /* While driving the page itself never scrolls (only the list does): pinned to the screen. iOS can leave
      a home-screen app scrolled, with a gap at the bottom, after the keyboard closes; this rules that out. */
-  body:has(#drive:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
-  /* Bottom gap (.152): a home-screen app on iOS can get a viewport that ends short of the screen (about
-     the status bar's height), so everything fixed to "bottom: 0" stopped above an empty strip. fitScreen()
-     measures the gap and sets --app-h (the full screen height) and --app-under (the gap); not set = no change. */
+  body:has(#drive:not([hidden])) { position: fixed; inset: 0; overflow: hidden; height: var(--app-h, auto); }
+  /* Bottom gap (.152/.153): iOS 26 sizes a home-screen app's viewport short by the status bar's height
+     when it uses viewport-fit=cover with the black-translucent status bar (WebKit bug 301108): innerHeight,
+     100dvh and friends all come up ~59 px short, so everything fixed to "bottom: 0" stopped above an empty
+     strip. fitScreen() measures the gap against window.screen and sets --app-h (full screen height) and
+     --app-under (the gap). .152 stretched the layers, but the pinned body above (overflow: hidden, still
+     the short height) clipped them: .153 gives the body and the document the full height too. The media
+     rule is the known WebKit workaround (a document at least screen tall gets the full viewport). */
+  @media (display-mode: standalone) {
+    html { min-height: min(100lvh, calc(100% + env(safe-area-inset-top, 0px))); }
+  }
+  html { min-height: var(--app-h, auto); }
   #drive, .sheet, .intro, .splash, .backdrop { height: var(--app-h, auto); }
   html .navsheet { bottom: calc(0px - var(--app-under, 0px)); }
   html .toast { margin-bottom: calc(0px - var(--app-under, 0px)); }
@@ -2349,8 +2357,13 @@ function fitScreen() {
   const full = innerWidth > innerHeight ? Math.min(sw, sh) : Math.max(sw, sh);
   const gap = full - innerHeight;
   VP.inner = innerHeight; VP.full = full;
-  VP.fixed = standalone && !typing && full > 0 && gap > 0 && gap < 140;
-  if (VP.fixed) { root.style.setProperty("--app-h", full + "px"); root.style.setProperty("--app-under", gap + "px"); }
+  // Once corrected, keep it for this orientation: with the taller document iOS may report the full
+  // height, and dropping the correction then would make it short again (flip-flop).
+  const orient = innerWidth > innerHeight ? "l" : "p";
+  if (VP.orient !== orient) { VP.orient = orient; VP.fixed = false; }
+  if (standalone && !typing && full > 0 && gap > 0 && gap < 140) VP.fixed = true;
+  if (!standalone) VP.fixed = false;
+  if (VP.fixed) { root.style.setProperty("--app-h", full + "px"); root.style.setProperty("--app-under", Math.max(0, gap) + "px"); }
   else if (!typing) { root.style.removeProperty("--app-h"); root.style.removeProperty("--app-under"); }
   if (typeof renderDebug === "function") try { renderDebug(); } catch (_) {}
 }
@@ -3175,8 +3188,10 @@ function renderDebug() {
   const pAt = state.route?.plannedAt || state.plannedAt;
   const planned = pAt ? ` P${hm(pAt)}` : "";
   const rid = r?.debugId ? ` #${r.debugId}` : r ? " #-" : "";
-  // V852/790+  viewport check: screen height / page height, + = stretched to the screen (.152)
-  const vp = ` V${VP.full}/${VP.inner}${VP.fixed ? "+" : ""}`;
+  // V852/790+b852  viewport check: screen height / page height, + = stretched to the screen (.152)
+  //   ...b852  where the driving screen's bottom edge is (should equal the first number)
+  const db = Math.round($("drive").getBoundingClientRect().bottom);
+  const vp = ` V${VP.full}/${VP.inner}${VP.fixed ? "+" : ""}b${db}`;
   el.innerHTML = `${app} ${w} ${roads}${planned}${rid}${vp}`;
 }
 $("debugToggle").checked = debugOn();

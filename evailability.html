@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.129"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.130"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -638,20 +638,51 @@
   .dots span.on { opacity: 1; background: var(--sign-blue); }
   .intro-foot .primary { margin: 0; width: auto; padding: 14px 26px; }
 
-  .lock { z-index: 50; justify-content: center; }
-  .lock-box { width: 100%; max-width: 420px; margin: 0 auto; padding: 24px; }
-  .lock-box h2 { font-size: 1.8rem; margin: 0 0 8px; }
-  .lock-box p { color: var(--muted); margin: 0 0 18px; line-height: 1.45; }
-  .lock-box .input { font-size: 1.3rem; letter-spacing: .08em; }
-  .lock-box .primary { margin-top: 14px; }
-  .lock-box .error { margin-top: 12px; }
-  .lock-box #lockRetry { margin-top: 4px; font-size: 1rem; }
-  .lock-box .lock-ask { margin: 22px 0 0; font-size: 1rem; }
-  .lock-box .ask h3 { font-size: 1.3rem; margin: 0 0 6px; }
-  .lock-box .ask .input { margin-top: 10px; font-size: 1.05rem; letter-spacing: normal; }
-  .lock-box .ask textarea.input { resize: vertical; font-family: inherit; }
-  .lock-box .ask .ask-privacy { font-size: .85rem; margin: 12px 0 6px; }
-  .lock-box .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+  /* Lock screen: key, request / trial form, waiting, trial ended. One column, centred, calm. */
+  .lock { z-index: 50; justify-content: center; overflow-y: auto;
+    background: radial-gradient(120% 70% at 50% -10%, color-mix(in srgb, var(--sign-blue) 22%, transparent), transparent 60%), var(--asphalt); }
+  .lock-box { width: 100%; max-width: 400px; margin: auto; padding: 28px 24px 32px; }
+  .lock-hero { display: flex; justify-content: center; margin: 0 0 14px; }
+  .lock-hero svg { width: 92px; height: 92px; filter: drop-shadow(0 6px 18px color-mix(in srgb, var(--free) 28%, transparent)); }
+  .lock-hero .seg { fill: none; stroke-width: 5; stroke-linecap: butt; }
+  .lock-box h2 { font-size: 2rem; margin: 0; text-align: center; letter-spacing: -.02em; }
+  .lock-tag { text-align: center; color: var(--muted); margin: 6px 0 26px; line-height: 1.4; }
+  .lock-card { background: var(--asphalt-raised); border-radius: 16px; padding: 20px 18px;
+    box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 10px 30px rgba(0,0,0,.18); }
+  .lock-card h3 { font-size: 1.25rem; margin: 0 0 6px; }
+  .lock-card p { color: var(--muted); margin: 0 0 14px; line-height: 1.45; font-size: .98rem; }
+  .lock .lbl { display: block; font-size: .85rem; font-weight: 700; color: var(--muted); margin: 14px 0 6px; letter-spacing: .02em; }
+  .lock .lbl:first-of-type { margin-top: 0; }
+  .lock .input { background: var(--asphalt); border: 2px solid rgba(127,127,127,.22); font-size: 1.05rem; }
+  .lock .input:focus { border-color: var(--sign-blue); }
+  .lock #lockCode { font-size: 1.35rem; letter-spacing: .12em; text-align: center; font-weight: 700; }
+  .lock .hint { color: var(--muted); font-size: .85rem; margin: 8px 0 0; text-align: center; }
+  .lock textarea.input { resize: none; font-family: inherit; min-height: 64px; }
+  .lock .primary { margin-top: 16px; border-radius: 12px; }
+  .lock .secondary { display: block; width: 100%; margin-top: 10px; padding: 14px; font-size: 1.05rem; font-weight: 800;
+    background: transparent; color: var(--line); border: 2px solid rgba(127,127,127,.35); border-radius: 12px; }
+  .lock .error { margin: 12px 0 0; text-align: center; }
+  .lock #lockRetry { display: block; margin: 10px auto 0; font-size: 1rem; }
+  .lock .or { display: flex; align-items: center; gap: 12px; margin: 24px 0 4px; color: var(--muted); font-size: .9rem; }
+  .lock .or::before, .lock .or::after { content: ""; flex: 1; height: 1px; background: rgba(127,127,127,.3); }
+  .lock .back { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 12px; padding: 4px 0; background: none; border: 0;
+    color: var(--muted); font-weight: 700; font-size: .95rem; cursor: pointer; }
+  .lock .privacy { display: flex; gap: 8px; align-items: flex-start; font-size: .82rem; color: var(--muted); margin: 14px 0 0; line-height: 1.4; }
+  .lock .privacy svg { flex: none; width: 15px; height: 15px; margin-top: 1px; }
+  .lock .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+  .lock .center { text-align: center; }
+  .lock .state-icon { display: flex; justify-content: center; margin: 2px 0 12px; }
+  .lock .state-icon svg { width: 56px; height: 56px; }
+  .lock .pulse { animation: lockspin 2.4s linear infinite; transform-origin: 50% 50%; }
+  @keyframes lockspin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .lock .pulse { animation: none; } }
+  .lock .reply { margin: 4px 0 14px; padding: 12px 14px; border-left: 3px solid var(--sign-blue); border-radius: 0 10px 10px 0;
+    background: var(--asphalt); color: var(--line); font-size: .98rem; line-height: 1.45; white-space: pre-wrap; text-align: left; }
+  .lock .stats { display: flex; gap: 10px; margin: 2px 0 6px; }
+  .lock .stats div { flex: 1; background: var(--asphalt); border-radius: 12px; padding: 10px; text-align: center; }
+  .lock .stats b { display: block; font-size: 1.4rem; }
+  .lock .stats span { font-size: .8rem; color: var(--muted); }
+  .lock .textlink { display: block; margin: 16px auto 0; background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: .95rem; cursor: pointer; }
   .account .trial-line { color: var(--muted); font-size: .85rem; padding: 0 0 10px; margin-top: -4px; }
   /* Availability history in the press-and-hold sheet */
   .navsheet .hist { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--asphalt); }
@@ -1075,30 +1106,72 @@
 
 <div class="intro lock" id="lock" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
   <div class="lock-box">
+    <div class="lock-hero"><svg viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-90 20 20)">
+        <circle class="seg" cx="20" cy="20" r="16" stroke="var(--free)" stroke-dasharray="40 60.5" stroke-dashoffset="-1.5"/>
+        <circle class="seg" cx="20" cy="20" r="16" stroke="var(--danger)" stroke-dasharray="22 78.5" stroke-dashoffset="-44.5"/>
+        <circle class="seg" cx="20" cy="20" r="16" stroke="var(--free)" stroke-dasharray="26 74.5" stroke-dashoffset="-69.5"/></g>
+        <path d="M21.6 10.5 14.5 21.8h5l-1.4 7.7 7.4-11.6h-5.1z" fill="var(--full)"/></svg></div>
     <h2 id="lockTitle">EVailability</h2>
-    <p>Enter your access key. You only need to do this once on this device.</p>
-    <input id="lockCode" class="input" type="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX" aria-label="Access key">
-    <button type="button" class="primary" id="lockBtn">Open</button>
-    <p class="error" id="lockError" hidden></p>
-    <button type="button" class="link" id="lockRetry" hidden>Check again</button>
-    <p class="lock-ask" id="lockAsk" hidden>No key? <button type="button" class="link" id="askOpen">Request one</button></p>
-    <!-- Self-service (Users page / usage page setting): ask for a key, or get a trial straight away -->
-    <form class="ask" id="askForm" hidden autocomplete="on">
-      <h3 id="askTitle">Request a key</h3>
-      <p id="askIntro"></p>
-      <input class="input" id="askName" type="text" autocomplete="name" placeholder="Your name" aria-label="Your name" maxlength="60">
-      <input class="input" id="askEmail" type="email" autocomplete="email" inputmode="email" placeholder="Email address" aria-label="Email address" maxlength="120" required>
-      <textarea class="input" id="askNote" rows="2" placeholder="Anything to add? (optional)" aria-label="Note" maxlength="300"></textarea>
-      <input type="text" id="askWebsite" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
-      <button type="submit" class="primary" id="askBtn">Send</button>
-      <p class="error" id="askError" hidden></p>
-      <p class="ask-privacy">Your email is stored encrypted and only used to contact you about your key. Ask and it’s deleted.</p>
-      <button type="button" class="link" id="askBack">Back</button>
+    <p class="lock-tag">Free fast chargers along your route, live.</p>
+
+    <!-- 1. Enter a key -->
+    <div class="lv" id="lvKey">
+      <div class="lock-card">
+        <label class="lbl" for="lockCode">Your access key</label>
+        <input id="lockCode" class="input" type="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX">
+        <p class="hint">Only needed once on this device.</p>
+        <button type="button" class="primary" id="lockBtn">Open</button>
+        <p class="error" id="lockError" hidden></p>
+        <button type="button" class="link" id="lockRetry" hidden>Check again</button>
+      </div>
+      <div id="lockAsk" hidden>
+        <div class="or">No key yet?</div>
+        <button type="button" class="secondary" id="askOpen">Request a key</button>
+      </div>
+    </div>
+
+    <!-- 2. Ask for a key, or start a trial (self-service) -->
+    <form class="lv" id="askForm" hidden autocomplete="on">
+      <button type="button" class="back" id="askBack">‹ Back</button>
+      <div class="lock-card">
+        <h3 id="askTitle">Request a key</h3>
+        <p id="askIntro"></p>
+        <label class="lbl" for="askName">Name</label>
+        <input class="input" id="askName" type="text" autocomplete="name" placeholder="Your name" maxlength="60">
+        <label class="lbl" for="askEmail">Email</label>
+        <input class="input" id="askEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" maxlength="120" required>
+        <label class="lbl" for="askNote" id="askNoteLbl">Note <span style="font-weight:400">(optional)</span></label>
+        <textarea class="input" id="askNote" rows="2" placeholder="How did you hear about it?" maxlength="300"></textarea>
+        <input type="text" id="askWebsite" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+        <button type="submit" class="primary" id="askBtn">Send request</button>
+        <p class="error" id="askError" hidden></p>
+        <p class="privacy"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg><span>Your email is stored encrypted and only used to contact you about your key. Ask and it’s deleted.</span></p>
+      </div>
     </form>
-    <div class="ask" id="askWait" hidden>
-      <h3>Request sent</h3>
-      <p id="askWaitText">Thanks! This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.</p>
-      <button type="button" class="link" id="askWaitKey">I have a key</button>
+
+    <!-- 3. Waiting for approval, or declined -->
+    <div class="lv" id="askWait" hidden>
+      <div class="lock-card center">
+        <div class="state-icon" id="askWaitIcon"></div>
+        <h3 id="askWaitTitle">Request sent</h3>
+        <p id="askWaitText"></p>
+        <div class="reply" id="askReply" hidden></div>
+        <button type="button" class="secondary" id="askAgain" hidden>Send a new request</button>
+      </div>
+      <button type="button" class="textlink" id="askWaitKey">I have a key</button>
+    </div>
+
+    <!-- 4. Trial over: extend once, or ask for a full key -->
+    <div class="lv" id="trialEnd" hidden>
+      <div class="lock-card center">
+        <div class="state-icon"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" fill="none" stroke="var(--full)" stroke-width="4" stroke-dasharray="70 30.5" transform="rotate(-90 20 20)"/><path d="M20 12v9l5 3" fill="none" stroke="var(--line)" stroke-width="2.6" stroke-linecap="round"/></svg></div>
+        <h3 id="trialEndTitle">Your trial has ended</h3>
+        <p id="trialEndText"></p>
+        <button type="button" class="primary" id="trialExtend" hidden>One more day, 5 more routes</button>
+        <button type="button" class="secondary" id="trialFull" hidden>Ask for a full key</button>
+        <p class="error" id="trialErr" hidden></p>
+      </div>
+      <button type="button" class="textlink" id="trialKey">I have a key</button>
     </div>
   </div>
 </div>
@@ -1327,9 +1400,14 @@ async function api(path, body, timeoutMs, retry = true) {
   if (res.status === 401) { // key not valid (now): ask again, saying why
     // Switched off is a pause: keep the token, so the app opens again by itself once it's switched back
     // on (Check again, or any later request). Replaced, deleted or no key: forget it, a key is needed.
-    const paused = data.reason === "off";
-    if (!paused) try { localStorage.removeItem(ACCESS_KEY); } catch (_) {}
-    showLock(data.error, paused);
+    if (data.reason === "trial-ended") showTrialEnded(data); // keeps the token: extend or make full
+    else {
+      const paused = data.reason === "off";
+      if (!paused) try { localStorage.removeItem(ACCESS_KEY); } catch (_) {}
+      showLock(data.error, paused);
+    }
+  } else if (res.status === 403 && data.reason === "trial-ended") { // routes used up
+    showTrialEnded(data);
   } else if (res.ok && !$("lock").hidden && accessToken()) hideLock(); // switched back on
   if (!res.ok) throw new Error(data.error || `The server answered ${res.status}`);
   return data;
@@ -1397,7 +1475,7 @@ renderErrors();
 function showLock(why, paused = false) {
   const wasHidden = $("lock").hidden;
   $("lock").hidden = false;
-  if (wasHidden && !paused) refreshAsk();
+  if (wasHidden && !paused) refreshAsk(); else lockView("key");
   if (why) { $("lockError").textContent = paused ? `${why} It opens again once it’s switched back on.` : why; $("lockError").hidden = false; }
   $("lockRetry").hidden = !paused;
   if (wasHidden && !paused) setTimeout(() => $("lockCode").focus(), 50); // paused: no keyboard over the message
@@ -1453,33 +1531,45 @@ async function unlock() {
 }
 
 // ------------------------------------------------------------- self-service (no key yet)
-// "No key? Request one" shows when the server's self-service setting is on. In "requests" mode the
-// request waits for approval and this device keeps a pickup token: it checks every minute while the
-// lock screen is up (and when the app comes back) and signs in by itself once approved. In "trial" mode
-// the answer is a trial sign-in straight away (Netherlands only, limited days and routes).
+// The lock screen has four views: key, form (request a key / start a trial), wait (request sent, or
+// declined with Remco's note) and trialEnd (extend once, or ask for a full key). "No key? Request one"
+// shows when the server's self-service setting is on. A request keeps a pickup token on this device:
+// it checks every minute while the lock screen is up (and when the app comes back) and signs in by
+// itself once approved. In trial mode the answer is a trial sign-in straight away.
 const ASK_KEY = "evailability-request"; // {id, pickup} of this device's open request
-let askMode = "off", askTimer = null;
+let askMode = "off", askTimer = null, askFromTrial = false;
 const askPending = () => { try { return JSON.parse(localStorage.getItem(ASK_KEY) || "null"); } catch (_) { return null; } };
-function showAskView(view) { // "key" | "form" | "wait"
-  const key = view === "key";
-  for (const id of ["lockCode", "lockBtn"]) $(id).hidden = !key;
-  $("lockTitle").nextElementSibling.hidden = !key;
-  $("lockAsk").hidden = !key || askMode === "off";
-  $("askForm").hidden = view !== "form";
-  $("askWait").hidden = view !== "wait";
-  if (!key) { $("lockError").hidden = true; $("lockRetry").hidden = true; }
+function lockView(view) { // "key" | "form" | "wait" | "trialEnd"
+  for (const [id, v] of [["lvKey", "key"], ["askForm", "form"], ["askWait", "wait"], ["trialEnd", "trialEnd"]]) $(id).hidden = view !== v;
+  $("lockAsk").hidden = askMode === "off";
+  if (view !== "key") { $("lockError").hidden = true; $("lockRetry").hidden = true; }
+  $("lock").scrollTop = 0;
+}
+const ICON_WAIT = `<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" fill="none" stroke="rgba(127,127,127,.25)" stroke-width="4"/><circle class="pulse" cx="20" cy="20" r="16" fill="none" stroke="var(--sign-blue)" stroke-width="4" stroke-linecap="round" stroke-dasharray="26 75"/></svg>`;
+const ICON_NO = `<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" fill="none" stroke="var(--offline)" stroke-width="4"/><path d="M14 20h12" stroke="var(--line)" stroke-width="2.8" stroke-linecap="round"/></svg>`;
+function showWait(state, reply = "") {
+  lockView("wait");
+  const declined = state === "declined", gone = state === "unknown";
+  $("askWaitIcon").innerHTML = declined || gone ? ICON_NO : ICON_WAIT;
+  $("askWaitTitle").textContent = declined ? "Not approved" : gone ? "Request not found" : "Request sent";
+  $("askWaitText").textContent = declined ? "Sorry, your request wasn’t approved this time." + (reply ? " A note for you:" : "")
+    : gone ? "This request is no longer known. You can send a new one."
+    : (state === "trialUsed" ? "A trial was already used on this device or with this email, or today’s trials are gone, so this became a request. " : "Thanks! ")
+      + "This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.";
+  $("askReply").hidden = !reply; $("askReply").textContent = reply;
+  $("askAgain").hidden = !(declined || gone) || askMode === "off";
 }
 async function refreshAsk() {
   try { askMode = (await (await fetch(`${WORKER}/self-service`, { cache: "no-store" })).json()).mode || "off"; } catch (_) {}
-  const trial = askMode === "trial";
-  $("askOpen").textContent = trial ? "Try it free" : "Request one";
-  $("askTitle").textContent = trial ? "Try EVailability" : "Request a key";
-  $("askIntro").textContent = trial
-    ? "Get a trial straight away: live status in the Netherlands, for a limited number of days and routes."
+  const trial = askMode === "trial" && !askFromTrial;
+  $("askOpen").textContent = trial ? "Try it free" : "Request a key";
+  $("askTitle").textContent = askFromTrial ? "Ask for a full key" : trial ? "Try EVailability" : "Request a key";
+  $("askIntro").textContent = askFromTrial ? "Leave your email and you’ll hear back. Once approved, this app opens again by itself."
+    : trial ? "Start straight away: live status in the Netherlands, for a few days and routes."
     : "Leave your email and you’ll hear back. Once approved, this screen opens by itself.";
   $("askBtn").textContent = trial ? "Start trial" : "Send request";
-  if (askPending()) { showAskView("wait"); checkAsk(); }
-  else if (!$("askForm").hidden) {} else showAskView("key");
+  if (askPending()) { showWait("pending"); checkAsk(); }
+  else if ($("askForm").hidden && $("trialEnd").hidden) lockView("key");
 }
 async function sendAsk(e) {
   e.preventDefault();
@@ -1492,9 +1582,7 @@ async function sendAsk(e) {
     if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
     if (data.token) return signedIn(data);
     if (data.id) localStorage.setItem(ASK_KEY, JSON.stringify({ id: data.id, pickup: data.pickup }));
-    $("askWaitText").textContent = (data.trialUsed ? "A trial was already used on this device or with this email, or today’s trials are gone, so this became a request. " : "Thanks! ")
-      + "This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.";
-    showAskView("wait");
+    showWait(data.trialUsed && !askFromTrial ? "trialUsed" : "pending");
     clearInterval(askTimer); askTimer = setInterval(checkAsk, 60000);
   } catch (err) {
     $("askError").textContent = /fetch|load failed|network/i.test(err.message) ? "Couldn’t reach the server. Try again." : err.message;
@@ -1508,8 +1596,8 @@ async function checkAsk() {
     const d = await (await fetch(`${WORKER}/request/status?id=${encodeURIComponent(p.id)}&t=${encodeURIComponent(p.pickup)}`, { cache: "no-store" })).json();
     if (d.status === "approved" && d.token) signedIn(d);
     else if (d.status === "declined" || d.status === "unknown") {
-      localStorage.removeItem(ASK_KEY);
-      $("askWaitText").textContent = d.status === "declined" ? "Your request wasn’t approved. Sorry!" : "This request is no longer known. You can send a new one.";
+      localStorage.removeItem(ASK_KEY); clearInterval(askTimer);
+      showWait(d.status, d.reply || "");
     }
   } catch (_) {}
 }
@@ -1518,16 +1606,52 @@ function signedIn(data) {
     localStorage.setItem(ACCESS_KEY, data.token);
     data.name ? localStorage.setItem(ACCESS_NAME_KEY, data.name) : localStorage.removeItem(ACCESS_NAME_KEY);
     localStorage.setItem(DEBUG_ALLOWED_KEY, data.debug ? "1" : "0");
+    data.trial ? localStorage.setItem(TRIAL_KEY, JSON.stringify(data.trial)) : localStorage.removeItem(TRIAL_KEY);
     localStorage.removeItem(ASK_KEY);
   } catch (_) {}
-  clearInterval(askTimer);
-  showAskView("key");
+  clearInterval(askTimer); askFromTrial = false;
+  lockView("key");
   hideLock();
   refreshMe();
 }
-$("askOpen").addEventListener("click", () => { showAskView("form"); setTimeout(() => $("askEmail").focus(), 50); });
-$("askBack").addEventListener("click", () => showAskView("key"));
-$("askWaitKey").addEventListener("click", () => { clearInterval(askTimer); showAskView("key"); });
+// Trial over (time or routes): the device keeps its sign-in. Extend once (+1 day, +5 routes), or ask
+// for a full key; once Remco makes it full, this same sign-in works again.
+let trialEndInfo = null;
+function showTrialEnded(data) {
+  trialEndInfo = data;
+  const t = data.trial || {};
+  $("lock").hidden = false;
+  lockView("trialEnd");
+  const outOfRoutes = t.routesLeft === 0 && Date.parse(t.until) > Date.now();
+  $("trialEndTitle").textContent = outOfRoutes ? "Your trial routes are used up" : "Your trial has ended";
+  $("trialEndText").textContent = t.canExtend
+    ? `Thanks for trying EVailability! You can extend it once by ${t.extend?.days || 1} day and ${t.extend?.routes || 5} routes, or ask for a full key.`
+    : "Thanks for trying EVailability! For more, ask for a full key; this app opens again by itself once you have one.";
+  $("trialExtend").hidden = !t.canExtend;
+  $("trialFull").hidden = data.selfService === false;
+  $("trialErr").hidden = true;
+}
+$("trialExtend").addEventListener("click", async () => {
+  $("trialExtend").disabled = true;
+  try {
+    const res = await fetch(`${WORKER}/trial/extend`, { method: "POST", headers: { "X-Access": accessToken() } });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || `Error ${res.status}`);
+    try { localStorage.setItem(TRIAL_KEY, JSON.stringify(d.trial)); } catch (_) {}
+    lockView("key"); hideLock(); refreshMe();
+  } catch (err) { $("trialErr").textContent = err.message; $("trialErr").hidden = false; }
+  finally { $("trialExtend").disabled = false; }
+});
+$("trialFull").addEventListener("click", () => {
+  askFromTrial = true;
+  try { $("askName").value = $("askName").value || localStorage.getItem(ACCESS_NAME_KEY) || ""; } catch (_) {}
+  refreshAsk(); lockView("form"); setTimeout(() => $("askEmail").focus(), 50);
+});
+$("trialKey").addEventListener("click", () => lockView("key"));
+$("askOpen").addEventListener("click", () => { askFromTrial = false; refreshAsk(); lockView("form"); setTimeout(() => $("askEmail").focus(), 50); });
+$("askBack").addEventListener("click", () => (askFromTrial && trialEndInfo ? showTrialEnded(trialEndInfo) : lockView("key")));
+$("askWaitKey").addEventListener("click", () => { clearInterval(askTimer); lockView("key"); });
+$("askAgain").addEventListener("click", () => lockView("form"));
 $("askForm").addEventListener("submit", sendAsk);
 document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("lock").hidden && askPending()) checkAsk(); });
 

@@ -32,7 +32,9 @@
 //   GET  /me                    who this key is: {name, debug, trial?} (debug: may use debug mode)
 //   GET  /self-service          public: {mode: "off"|"requests"|"trial"} (the lock screen's request link)
 //   POST /request               public: {email, name?, note?} → {pending, id, pickup} or, in trial mode, {token, …}
-//   GET  /request/status?id=&t= public: the asking device's pickup: {status} and {token} once approved
+//   GET  /request/status?id=&t= public: the asking device's pickup: {status} and {token} once approved,
+//                               or {status:"declined", reply} with Remco's note
+//   POST /trial/extend          a trial key (X-Access) extends itself once: +1 day and +5 routes
 //                               create/regenerate answer the new key once; only its hash is kept
 //   POST /admin/settings        {settings:{key: value}} saves them (one KV write); empty value = default
 //   GET  /debug/ndw?lat=&lon=   raw Dutch (NDW) data around a point, to tune the parser
@@ -56,7 +58,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.118";
+const WORKER_VERSION = "2026-11-17.119";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -155,7 +157,7 @@ function json(request, data, status = 200) {
 }
 
 class HttpError extends Error {
-  constructor(status, message, reason) { super(message); this.status = status; this.reason = reason; }
+  constructor(status, message, reason, extra) { super(message); this.status = status; this.reason = reason; this.extra = extra; }
 }
 
 // ---------------------------------------------------------------- usage counting
@@ -2648,7 +2650,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/self-service", "/request", "/request/status", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/self-service", "/request", "/request/status", "/trial/extend", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -2761,7 +2763,11 @@ async function handleUsers(request, env) {
       const r = reqs.find((x) => x.id === body.id);
       if (!r) throw new HttpError(404, "No such request");
       if (body.action === "delete-request") reqs = reqs.filter((x) => x !== r);
-      else if (body.action === "decline") { r.status = "declined"; r.done = now; }
+      else if (body.action === "decline") {
+        r.status = "declined"; r.done = now;
+        const reply = String(body.note || "").trim().slice(0, 500);
+        if (reply) r.reply = reply; // shown on the asking device
+      }
       else {
         if (r.status !== "pending") throw new HttpError(400, "This request was already handled");
         key = newKey();
@@ -2811,7 +2817,7 @@ async function handleUsers(request, env) {
     legacyCode: !!setting(env, "legacyCode"),
     selfService: selfServiceMode(env),
     crypt: crypt ? { wrapped: crypt.wrapped, at: crypt.at } : null,
-    requests: reqs.slice().reverse().map((r) => ({ id: r.id, at: r.at, kind: r.kind, status: r.status, name: r.name, note: r.note,
+    requests: reqs.slice().reverse().map((r) => ({ id: r.id, at: r.at, kind: r.kind, status: r.status, name: r.name, note: r.note, reply: r.reply || null,
       emailEnc: r.emailEnc || null, userId: r.userId || null, done: r.done || null })),
     users: list.map((u) => {
       const perDay = days.map((d) => d.users[u.id]?.n || 0).reverse(); // oldest first
@@ -2830,7 +2836,7 @@ async function handleUsers(request, env) {
   });
 }
 const publicUser = (u) => ({ id: u.id, label: u.label, active: u.active !== false, debug: !!u.debug,
-  trial: u.trial ? { until: u.trial.until, routes: u.trial.routes, used: u.trial.used || 0 } : null, emailEnc: u.emailEnc || null, created: u.created, keyMade: u.keyMade || u.created, gen: u.gen || 1 });
+  trial: u.trial ? { until: u.trial.until, routes: u.trial.routes, used: u.trial.used || 0, extended: u.trial.extended || null } : null, emailEnc: u.emailEnc || null, created: u.created, keyMade: u.keyMade || u.created, gen: u.gen || 1 });
 
 // ---------------------------------------------------------------- self-service: requests and trials
 // With selfService on, the lock screen offers "No key? Request one": email, name, a note.
@@ -2842,6 +2848,26 @@ const publicUser = (u) => ({ id: u.id, label: u.label, active: u.active !== fals
 // is stored locked with the admin password and only opened in the admin's browser. The Worker can't read
 // them back. A one-way HMAC of the email spots repeats. Requests live in KV "requests" (one record).
 const TRIAL_STATUS_GAP_MS = 3 * 60 * 1000; // trial keys: live status at most every 3 minutes
+const TRIAL_EXTEND = { days: 1, routes: 5 }; // once per trial, by the user, when it has run out
+const trialInfo = (t) => ({ until: t.until, routesLeft: Math.max(0, t.routes - (t.used || 0)), canExtend: !t.extended,
+  extend: TRIAL_EXTEND });
+async function handleTrialExtend(request, env) {
+  const given = request.headers.get("X-Access") || "";
+  const [, id, gen, sig] = given.split(".");
+  if (!given.startsWith("u1.") || !id || !sig || !sameText(sig, await userSig(env, id, gen))) throw new HttpError(401, "Access key needed");
+  const users = [...(await loadUsers(env, true))];
+  const u = users.find((x) => x.id === id && String(x.gen || 1) === gen);
+  if (!u?.trial) throw new HttpError(400, "This isn’t a trial key.");
+  if (u.trial.extended) throw new HttpError(400, "The trial was already extended once.");
+  const now = Date.now();
+  const ended = now > Date.parse(u.trial.until) || (u.trial.used || 0) >= u.trial.routes;
+  if (!ended) throw new HttpError(400, "Your trial is still running.");
+  u.trial.until = new Date(Math.max(now, Date.parse(u.trial.until)) + TRIAL_EXTEND.days * 86400000).toISOString();
+  u.trial.routes = Math.max(u.trial.routes, u.trial.used || 0) + TRIAL_EXTEND.routes;
+  u.trial.extended = new Date(now).toISOString();
+  await saveUsers(env, users);
+  return json(request, { ok: true, trial: trialInfo(u.trial) });
+}
 const selfServiceMode = (env) => { const m = setting(env, "selfService"); return m === "requests" || m === "trial" ? m : "off"; };
 async function loadRequests(env) {
   try { return JSON.parse((await kvGet(env, "requests")) || "[]"); } catch (_) { return []; }
@@ -2920,6 +2946,7 @@ async function handleRequestStatus(request, env, url) {
   let r = memoGet(k);
   if (r === undefined) { r = (await loadRequests(env)).find((x) => x.id === id) || null; memoSet(k, r, 30 * 1000); }
   if (!r || !t || !sameText(r.pickup || "", await hmac(env, `pickup:${t}`))) return json(request, { status: "unknown" });
+  if (r.status === "declined") return json(request, { status: "declined", reply: r.reply || null });
   if (r.status !== "approved" || !r.userId) return json(request, { status: r.status });
   const u = (await loadUsers(env)).find((x) => x.id === r.userId);
   if (!u) return json(request, { status: "unknown" });
@@ -2935,7 +2962,9 @@ async function trialGate(path, request, env, who) {
     const users = [...(await loadUsers(env, true))];
     const u = users.find((x) => x.id === who.id);
     if (!u?.trial) return;
-    if ((u.trial.used || 0) >= u.trial.routes) throw new HttpError(403, "Your trial’s routes are used up. Ask for a full key.", "trial-routes");
+    if ((u.trial.used || 0) >= u.trial.routes) {
+      throw new HttpError(403, "Your trial’s routes are used up.", "trial-ended", { trial: trialInfo(u.trial), selfService: selfServiceMode(env) !== "off" });
+    }
     u.trial.used = (u.trial.used || 0) + 1;
     await saveUsers(env, users);
   }
@@ -2956,7 +2985,7 @@ async function whoIs(request, env, url) {
     if (u.active === false) throw new HttpError(401, "This access key is switched off for now.", "off");
     if (u.trial && Date.now() > Date.parse(u.trial.until)) {
       // Like "off": the device keeps its token, so it works again if the key is made full.
-      throw new HttpError(401, "Your trial has ended. Ask for a full key, and this app opens again once you have one.", "off");
+      throw new HttpError(401, "Your trial has ended.", "trial-ended", { trial: trialInfo(u.trial), selfService: selfServiceMode(env) !== "off" });
     }
     return { id, name: u.label, debug: !!u.debug, trial: u.trial || null };
   }
@@ -3005,6 +3034,7 @@ async function route(request, env) {
   if (path === "/self-service" && request.method === "GET") return json(request, { mode: selfServiceMode(env) });
   if (path === "/request" && request.method === "POST") return handleRequest(request, env);
   if (path === "/request/status" && request.method === "GET") return handleRequestStatus(request, env, url);
+  if (path === "/trial/extend" && request.method === "POST") return handleTrialExtend(request, env);
   let who = null;
   if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/")) {
     who = await whoIs(request, env, url);
@@ -3020,7 +3050,7 @@ async function route(request, env) {
   }
   if (path === "/me" && request.method === "GET") {
     return json(request, { name: who?.name || null, debug: !!who?.debug, legacy: who?.id === "legacy",
-      trial: who?.trial ? { until: who.trial.until, routesLeft: Math.max(0, who.trial.routes - (who.trial.used || 0)) } : null });
+      trial: who?.trial ? trialInfo(who.trial) : null });
   }
 
   if (path === "/" && request.method === "GET") {
@@ -3263,7 +3293,7 @@ export default {
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
       console.log("Error", status, e.message);
-      return json(request, e.reason ? { error: e.message, reason: e.reason } : { error: e.message }, status);
+      return json(request, e.reason ? { error: e.message, reason: e.reason, ...(e.extra || {}) } : { error: e.message }, status);
     } finally {
       ctx?.waitUntil?.(flushUsage(env, urgent).catch(() => {}));
     }

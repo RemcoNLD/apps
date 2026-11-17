@@ -10,6 +10,7 @@
 //                               -> route + chargers of those brands along it (detour minutes only when cached)
 //   POST /status                {stations:[{id, lat, lon, country, brand}]}
 //   POST /fr-status             {stations:[{id, lat, lon, brand}]}  France, from one national file (read at most every 90 s)
+//   (POST /status also answers Portugal, from a 5-minute snapshot made by a GitHub job: pt-live.yml)
 //   POST /be-status             {stations:[{id, lat, lon, brand}]}  Belgium: pins → index sites with their stall ids (no live call)
 //   GET  /be-evse?id=<evse>     Belgium: one stall's live status (Eco-Movement; at most one call per 10 s, else retryAfterMs)
 //   GET  /debug/be?id=<evse>    Belgium: raw Eco-Movement answer for one stall
@@ -64,7 +65,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.1.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.2.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1543,6 +1544,138 @@ async function frStatusFor(stations, minKw = FAST_KW) {
   return { status: out, checkedAt: snap.at, index: index.built, gapMin: frGapMinNow(null), pauseMin: frPauseMinNow(null), paid: isPaid(null) };
 }
 
+// Portugal live status (MOBI.E / NAP Portugal, DATEX II, open access). The national status file is
+// ~36-40 MB of XML, far beyond the free plan's ~10 ms CPU, so it is never read here: a GitHub Actions job
+// (.github/workflows/pt-live.yml, tools/build-pt-status.py) reads it every 5 minutes and force-pushes a
+// small pt-status.json (only the stalls of data/pt-fast-sites.json) to the repo's branch "live". Each
+// Worker copy reads that file at most once a minute, so Portugal updates by itself like NL/DE/AT,
+// with no KV writes and next to no CPU. checkedAt is the source's publication time, so the app ages it
+// honestly (it allows Portugal more minutes before greying, PT_STALE_MS in the app).
+const PT_INDEX_URL = "https://remconld.github.io/apps/data/pt-fast-sites.json"; // tools/build-pt-index.py
+const PT_LIVE_URL = "https://raw.githubusercontent.com/RemcoNLD/apps/live/pt-status.json";
+const PT_INDEX_MS = 24 * 3600 * 1000;
+const PT_SNAPSHOT_MS = 60 * 1000;
+const PT_TOO_OLD_MS = 30 * 60 * 1000; // snapshot older than this: the job or the feed is down, show nothing
+const PT_MATCH_KM = 0.6, PT_NEARBY_KM = 1.2, PT_CELL = 0.02;
+const PT_MAX_STATIONS = 120;
+
+let ptIndexState = null;
+async function ptIndex() {
+  if (ptIndexState && Date.now() - ptIndexState.at < PT_INDEX_MS) return ptIndexState.promise;
+  const promise = (async () => {
+    countCall("PT index");
+    const res = await fetch(PT_INDEX_URL, { cf: { cacheTtl: 3600 } });
+    if (!res.ok) throw new HttpError(502, `Portugal index: HTTP ${res.status}`);
+    const data = await res.json();
+    const grid = new Map();
+    for (const [id, brand, operator, lat, lon, maxKw, name, pointIds, pointKw] of data.sites) {
+      const key = brandOfSite(brand, operator, name, pointIds);
+      if (!key) continue; // an operator that isn't one of the app's brands (yet)
+      const site = { key: id, brand: key, lat, lon, maxKw, name, kw: pointKw || [], n: pointIds.length };
+      const k = `${key}|${Math.floor(lat / PT_CELL)}|${Math.floor(lon / PT_CELL)}`;
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(site);
+    }
+    return { built: data.built, grid };
+  })();
+  ptIndexState = { at: Date.now(), promise };
+  promise.catch(() => { if (ptIndexState?.promise === promise) ptIndexState = null; });
+  return promise;
+}
+// The index names a brand where the builder recognised one; otherwise the Worker's own patterns decide,
+// so a brand added to BRANDS also works for Portugal before the next weekly index build.
+function brandOfSite(brand, operator, name, pointIds) {
+  if (brand && BRAND[brand]) return brand;
+  for (const b of BRANDS) if ((pointIds || []).some((id) => b.evse.test(String(id)))) return b.key;
+  const words = `${operator || ""} ${name || ""}`;
+  for (const b of BRANDS) if (b.live.test(words)) return b.key;
+  return null;
+}
+function ptSitesNear(index, brand, lat, lon, km) {
+  const out = [];
+  const cy = Math.floor(lat / PT_CELL), cx = Math.floor(lon / PT_CELL);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    for (const s of index.grid.get(`${brand}|${cy + dy}|${cx + dx}`) || []) {
+      const d = haversineKm([s.lon, s.lat], [lon, lat]);
+      if (d <= km) out.push({ s, d });
+    }
+  }
+  return out.sort((a, b) => a.d - b.d);
+}
+
+let ptSnapState = null;
+async function ptSnapshot() {
+  if (ptSnapState && Date.now() - ptSnapState.at < PT_SNAPSHOT_MS) return ptSnapState.promise;
+  const promise = (async () => {
+    countCall("PT live");
+    // The minute in the query keeps raw.githubusercontent.com's 5-minute cache from serving an old copy.
+    const res = await fetch(`${PT_LIVE_URL}?m=${Math.floor(Date.now() / 60000)}`, { cf: { cacheTtl: 60 } });
+    if (!res.ok) throw new HttpError(502, `Portugal live: HTTP ${res.status}`);
+    return res.json();
+  })();
+  ptSnapState = { at: Date.now(), promise };
+  promise.catch(() => { if (ptSnapState?.promise === promise) ptSnapState = null; });
+  return promise;
+}
+
+// One index site → counts at the chosen power. Letters per point: F free, U in use, O out of order,
+// ? unknown, - not in the live file (left out). Out-of-order stalls stay in the total (grey segments).
+function ptSummary(site, snap, minKw = FAST_KW) {
+  const base = { maxKw: site.maxKw, source: "MOBI.E / NAP Portugal", checkedAt: snap.pub };
+  const rec = snap.s?.[site.key];
+  if (!rec) return { ...base, available: null, total: null, note: "no live data for this site" };
+  const [codes, ages] = rec;
+  const pubMs = Date.parse(snap.pub);
+  const all = [...codes].map((c, i) => ({ c, kw: site.kw[i], age: ages?.[i] })).filter((p) => p.c !== "-");
+  const live = byPower(all, (p) => p.kw, minKw);
+  if (!live.length) return { ...base, available: null, total: null, note: "no live data for this site" };
+  const at = (p) => (p.age == null ? null : pubMs - p.age * 60000);
+  const times = live.map(at).filter((t) => t != null);
+  const changedAt = times.length ? new Date(Math.max(...times)).toISOString() : null;
+  const offline = live.filter((p) => p.c === "O").length;
+  const free = live.filter((p) => p.c === "F").length;
+  const known = live.filter((p) => p.c === "F" || p.c === "U").length;
+  if (offline === live.length) return { ...base, available: 0, total: live.length, offline, state: "likely_offline", changedAt };
+  if (!known) return { ...base, available: null, total: live.length, offline, changedAt, note: "status unknown" };
+  const state = free ? "free" : "full";
+  const taken = live.filter((p) => p.c === "U").map(at).filter((t) => t != null);
+  return {
+    ...base, available: free, total: live.length, offline, state, changedAt,
+    fullSince: state === "full" && taken.length ? new Date(Math.max(...taken)).toISOString() : null,
+  };
+}
+
+// All Portuguese stations of one /status call from one snapshot read.
+async function ptStatusFor(stations) {
+  const out = {};
+  if (!stations.length) return out;
+  let index, snap;
+  try {
+    [index, snap] = await Promise.all([ptIndex(), ptSnapshot()]);
+  } catch (e) {
+    console.log("Portugal failed", e.message);
+    for (const st of stations) out[st.id] = { failed: true, note: `lookup failed: ${String(e.message).slice(0, 80)}` };
+    return out;
+  }
+  const tooOld = !Date.parse(snap.pub) || Date.now() - Date.parse(snap.pub) > PT_TOO_OLD_MS;
+  for (const st of stations.slice(0, PT_MAX_STATIONS)) {
+    const brand = brandOf(st.brand).key;
+    const near = ptSitesNear(index, brand, Number(st.lat), Number(st.lon), PT_NEARBY_KM);
+    if (!near.length || near[0].d > PT_MATCH_KM) { out[st.id] = null; continue; }
+    if (tooOld) { out[st.id] = { available: null, total: null, source: "MOBI.E / NAP Portugal", checkedAt: snap.pub, note: "live data out of date" }; continue; }
+    const main = near[0].s;
+    out[st.id] = {
+      ...ptSummary(main, snap, st.minKw), liveId: main.key, liveLat: main.lat, liveLon: main.lon,
+      nearby: near.slice(0, 4).map(({ s }) => {
+        const c = ptSummary(s, snap, st.minKw);
+        return { id: s.key, lat: s.lat, lon: s.lon, name: s.name || null, available: c.available, total: c.total,
+          offline: c.offline, maxKw: c.maxKw, state: c.state, changedAt: c.changedAt, fullSince: c.fullSince };
+      }),
+    };
+  }
+  return out;
+}
+
 // Belgium live status (Eco-Movement, DATEX II). The static index (tools/build-be-index.py) gives each
 // site's fast DC stalls; live status exists only per stall (/datex2/v1/status/{evse_id}), and only one
 // request every 10 s per IP is allowed across all endpoints (2 per minute per stall, per token). So
@@ -1782,6 +1915,7 @@ async function statusForMany(stations, env) {
   const at = stations.filter((s) => s.country === "AT").slice(0, paid ? 12 : MAX_AT_LOOKUPS);
   const de = stations.filter((s) => s.country === "DE").slice(0, paid ? 40 : MAX_DE_LOOKUPS);
   const list = [...nl, ...de, ...at];
+  Object.assign(out, await ptStatusFor(stations.filter((s) => s.country === "PT")));
   for (let i = 0; i < list.length; i += 5) { // max 5 at a time (NDW allows 10 per second)
     const batch = list.slice(i, i + 5);
     const res = await Promise.all(batch.map((s) => liveStatus(s, env)));

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.28.2"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.29.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1241,7 +1241,7 @@
   </div>
   <ul id="fromResults" class="results"></ul>
 
-  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT · FR, BE (tap)</span></div>
+  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT, PT · FR, BE (tap)</span></div>
   <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
   <div class="brands-head" style="margin-top:14px"><span>Charging power</span><span class="hint">Change any time</span></div>
   <div class="power" role="group" aria-label="Minimum charging power" data-power>
@@ -1606,7 +1606,7 @@ const I18N_TEXT = {
 "Remove via point": "Viapunt verwijderen",
 "Clear": "Wissen",
 "Chargers": "Laders",
-"Live: NL, DE, AT · FR, BE (tap)": "Live: NL, DE, AT · FR, BE (tik)",
+"Live: NL, DE, AT, PT · FR, BE (tap)": "Live: NL, DE, AT, PT · FR, BE (tik)",
 "Charging power": "Laadvermogen",
 "Change any time": "Altijd te wijzigen",
 "Minimum charging power": "Minimaal laadvermogen",
@@ -1880,7 +1880,7 @@ const I18N_TEXT = {
 "Remove via point": "Remover ponto intermédio",
 "Clear": "Limpar",
 "Chargers": "Carregadores",
-"Live: NL, DE, AT · FR, BE (tap)": "Em direto: NL, DE, AT · FR, BE (toque)",
+"Live: NL, DE, AT, PT · FR, BE (tap)": "Em direto: NL, DE, AT, PT · FR, BE (toque)",
 "Charging power": "Potência de carregamento",
 "Change any time": "Pode mudar a qualquer momento",
 "Minimum charging power": "Potência mínima de carregamento",
@@ -2074,6 +2074,7 @@ const HELP_I18N = {
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">Elke minuut vanzelf; <b>tik op een lader</b> om hem nu bij te werken.</div>
     <div class="k">${flags("FR")}</div><div class="v">Tik op een Franse lader: alle Franse laders op je route worden bijgewerkt, hoogstens eens per paar minuten.</div>
     <div class="k">${flags("BE")}</div><div class="v">Tik op een locatie: de laders worden één voor één gecontroleerd (± 10 s per stuk) en de ring vult zich.</div>
+    <div class="k">${flags("PT")}</div><div class="v">Vanzelf, elke 5 minuten: zo vaak als de Portugese bron bijwerkt. De ringen worden pas na 8 minuten grijs.</div>
   </div>
   <p>Een lader die nu vrij is, is misschien niet meer vrij als je aankomt.</p>
 
@@ -2115,7 +2116,7 @@ const HELP_I18N = {
   <div class="credits">
     <h3>Gegevens en bronnen</h3>
     <p>Routes en plaatsen: <b>openrouteservice</b> van HeiGIT. Kaartgegevens © <b>OpenStreetMap</b>-bijdragers (ODbL).</p>
-    <p>Laders: <b>Open Charge Map</b> (CC BY 4.0). Live status: <b>NDW</b> (Nederland), <b>MobiData BW</b> (Duitsland), <b>E-Control</b> (Oostenrijk), <b>transport.data.gouv.fr</b> (Frankrijk, Licence Ouverte 2.0), <b>Eco-Movement</b> via het Belgische toegangspunt (België).</p>
+    <p>Laders: <b>Open Charge Map</b> (CC BY 4.0). Live status: <b>NDW</b> (Nederland), <b>MobiData BW</b> (Duitsland), <b>E-Control</b> (Oostenrijk), <b>transport.data.gouv.fr</b> (Frankrijk, Licence Ouverte 2.0), <b>Eco-Movement</b> via het Belgische toegangspunt (België), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
     <p>Wegafsluitingen: <b>NDW</b> en <b>Die Autobahn GmbH des Bundes</b>.</p>
     <p>Merknamen en logo's zijn van hun eigenaren. EVailability is onafhankelijk en niet verbonden aan een laadnetwerk of gegevensleverancier. <a href="privacy.html?back=help">Privacybeleid</a></p>
   </div>`,
@@ -2157,6 +2158,7 @@ const HELP_I18N = {
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">A cada minuto, sozinho; <b>toque num carregador</b> para o atualizar já.</div>
     <div class="k">${flags("FR")}</div><div class="v">Toque num carregador francês: todos os carregadores franceses do percurso são atualizados, no máximo de poucos em poucos minutos.</div>
     <div class="k">${flags("BE")}</div><div class="v">Toque num local: os carregadores são verificados um a um (± 10 s cada) e o anel vai-se preenchendo.</div>
+    <div class="k">${flags("PT")}</div><div class="v">Sozinho, a cada 5 minutos: tantas vezes quanto a fonte portuguesa atualiza. Os anéis só ficam cinzentos após 8 minutos.</div>
   </div>
   <p>Um carregador livre agora pode já não estar livre quando chegar.</p>
 
@@ -2198,7 +2200,7 @@ const HELP_I18N = {
   <div class="credits">
     <h3>Dados e créditos</h3>
     <p>Percursos e locais: <b>openrouteservice</b> da HeiGIT. Dados do mapa © contribuidores do <b>OpenStreetMap</b> (ODbL).</p>
-    <p>Carregadores: <b>Open Charge Map</b> (CC BY 4.0). Estado em direto: <b>NDW</b> (Países Baixos), <b>MobiData BW</b> (Alemanha), <b>E-Control</b> (Áustria), <b>transport.data.gouv.fr</b> (França, Licence Ouverte 2.0), <b>Eco-Movement</b> através do ponto de acesso belga (Bélgica).</p>
+    <p>Carregadores: <b>Open Charge Map</b> (CC BY 4.0). Estado em direto: <b>NDW</b> (Países Baixos), <b>MobiData BW</b> (Alemanha), <b>E-Control</b> (Áustria), <b>transport.data.gouv.fr</b> (França, Licence Ouverte 2.0), <b>Eco-Movement</b> através do ponto de acesso belga (Bélgica), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
     <p>Cortes de estrada: <b>NDW</b> e <b>Die Autobahn GmbH des Bundes</b>.</p>
     <p>Os nomes e logótipos das marcas pertencem aos respetivos proprietários. O EVailability é independente e não está associado a nenhuma rede de carregamento nem fornecedor de dados. <a href="privacy.html?back=help">Política de privacidade</a></p>
   </div>`,
@@ -2331,6 +2333,11 @@ const STATUS_EVERY_MS = 60 * 1000;
 const FRESH_MS = 60 * 1000;         // a charger checked within a minute isn't asked again when it scrolls into view
 const STALE_MS = 3 * 60 * 1000;     // further ones turn grey after 3 minutes; tap to refresh
 const OLD_MS = 5 * 60 * 1000;       // after 5 minutes the numbers are only outlined: really old
+// Portugal's source is a national file published every 5 minutes (read by a job, then by the Worker):
+// its values are typically 2–7 minutes old when they arrive, so they grey later.
+const PT_STALE_MS = 8 * 60 * 1000, PT_OLD_MS = 12 * 60 * 1000;
+const staleMs = (s) => (s.country === "PT" ? PT_STALE_MS : STALE_MS);
+const oldMs = (s) => (s.country === "PT" ? PT_OLD_MS : OLD_MS);
 // France: one national file for the whole country, which the server can read only now and then
 // (it costs more CPU than the free plan allows; automatic updates used up the Worker's allowance on
 // 14 Nov). So France is tap-only: a tap on a French charger updates every French charger on the
@@ -5682,7 +5689,7 @@ function nameSourceHtml(members, label) {
 }
 
 // Debug mode: the last status answer per charger, so a "?" or "–" can be explained.
-const LIVE_SOURCE = { NL: "NDW", DE: "MobiData BW (OCPDB)", AT: "E-Control", FR: "transport.data.gouv.fr", BE: "Eco-Movement" };
+const LIVE_SOURCE = { NL: "NDW", DE: "MobiData BW (OCPDB)", AT: "E-Control", FR: "transport.data.gouv.fr", BE: "Eco-Movement", PT: "MOBI.E / NAP Portugal" };
 function statusDebugHtml(members) {
   const t = (v) => { const d = Date.parse(v || ""); return d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : null; };
   const ago = (ms) => (ms ? `${waitText(Date.now() - ms)} ago` : "never");
@@ -6107,11 +6114,11 @@ function availRing(info, extra = "") {
 function shownStatus(s) {
   let info = statusInfo(s);
   const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
-  const stale = !s.statusAt || Date.now() - s.statusAt > STALE_MS;
+  const stale = !s.statusAt || Date.now() - s.statusAt > staleMs(s);
   // Updating a recent value: nothing changes on screen until the answer differs.
   // Grey only when the value is old (or there's none yet).
   if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="${loading ? "Updating" : "Tap to check"}">↻</span>` };
-  info.old = !!s.status && !!s.statusAt && Date.now() - s.statusAt > OLD_MS;
+  info.old = !!s.status && !!s.statusAt && Date.now() - s.statusAt > oldMs(s);
   info.st = s.status || null;
   return info;
 }
@@ -6494,6 +6501,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.29", date: "2026-11-17", title: { en: "Portugal live", nl: "Portugal live", pt: "Portugal em direto" },
+    items: { en: ["Live status in Portugal: free chargers update by themselves every 5 minutes, as often as the Portuguese source (MOBI.E) publishes."],
+      nl: ["Live status in Portugal: vrije laders worden vanzelf elke 5 minuten bijgewerkt, zo vaak als de Portugese bron (MOBI.E) publiceert."],
+      pt: ["Estado em direto em Portugal: os carregadores livres atualizam-se sozinhos a cada 5 minutos, tantas vezes quanto a fonte portuguesa (MOBI.E) publica."] } },
   { v: "0.28", date: "2026-11-17", title: { en: "Help and What’s new", nl: "Help en Wat is er nieuw", pt: "Ajuda e Novidades" },
     items: { en: ["Help is shorter and written for the drive: topics fold open, and flags show how each country updates.", "A version number on the start screen and the splash, with this list of changes."],
       nl: ["Help is korter en geschreven voor onderweg: onderwerpen klappen open, en vlaggen laten zien hoe elk land wordt bijgewerkt.", "Een versienummer op het startscherm en het openingsscherm, met dit overzicht van wijzigingen."],
@@ -6628,11 +6639,13 @@ $("version").addEventListener("click", () => { $("help").hidden = true; openChan
 
 // Help: small country flags (inline SVG tricolours, so they look the same on every device).
 const FLAG_BANDS = { NL: ["h", "#AE1C28", "#FFFFFF", "#21468B"], DE: ["h", "#000000", "#DD0000", "#FFCE00"], AT: ["h", "#C8102E", "#FFFFFF", "#C8102E"],
-  FR: ["v", "#002395", "#FFFFFF", "#ED2939"], BE: ["v", "#000000", "#FDDA24", "#EF3340"] };
-const FLAG_NAMES = { NL: "Netherlands", DE: "Germany", AT: "Austria", FR: "France", BE: "Belgium" };
+  FR: ["v", "#002395", "#FFFFFF", "#ED2939"], BE: ["v", "#000000", "#FDDA24", "#EF3340"],
+  PT: ["pt", "#046A38", "#DA291C", "#FFE900"] }; // Portugal: green 2/5, red 3/5, a yellow disc on the seam
+const FLAG_NAMES = { NL: "Netherlands", DE: "Germany", AT: "Austria", FR: "France", BE: "Belgium", PT: "Portugal" };
 function flags(...cc) {
   return cc.map((c) => {
     const [dir, a, b, d] = FLAG_BANDS[c];
+    if (dir === "pt") return `<svg class="flag" viewBox="0 0 18 12" role="img" aria-label="${T(FLAG_NAMES[c])}"><rect width="7.2" height="12" fill="${a}"/><rect x="7.2" width="10.8" height="12" fill="${b}"/><circle cx="7.2" cy="6" r="2.6" fill="${d}"/><circle cx="7.2" cy="6" r="1.5" fill="${b}"/></svg>`;
     const r = (i, col) => dir === "h" ? `<rect y="${i * 4}" width="18" height="4" fill="${col}"/>` : `<rect x="${i * 6}" width="6" height="12" fill="${col}"/>`;
     return `<svg class="flag" viewBox="0 0 18 12" role="img" aria-label="${T(FLAG_NAMES[c])}">${r(0, a)}${r(1, b)}${r(2, d)}</svg>`;
   }).join("");
@@ -6677,6 +6690,7 @@ function helpHtml() {
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">Every minute by itself; <b>tap a charger</b> to update it now.</div>
     <div class="k">${flags("FR")}</div><div class="v">Tap a French charger: all French chargers on your route update, at most every few minutes.</div>
     <div class="k">${flags("BE")}</div><div class="v">Tap a site: its chargers are checked one by one (about 10 s each) and the ring fills in.</div>
+    <div class="k">${flags("PT")}</div><div class="v">By itself, every 5 minutes: as often as the Portuguese source updates. Its rings grey only after 8 minutes.</div>
   </div>
   <p>A charger that's free now may not be free when you arrive.</p>
 
@@ -6718,7 +6732,7 @@ function helpHtml() {
   <div class="credits">
     <h3>Data and credits</h3>
     <p>Routes and places: <b>openrouteservice</b> by HeiGIT. Map data © <b>OpenStreetMap</b> contributors (ODbL).</p>
-    <p>Chargers: <b>Open Charge Map</b> (CC BY 4.0). Live status: <b>NDW</b> (Netherlands), <b>MobiData BW</b> (Germany), <b>E-Control</b> (Austria), <b>transport.data.gouv.fr</b> (France, Licence Ouverte 2.0), <b>Eco-Movement</b> via the Belgian access point (Belgium).</p>
+    <p>Chargers: <b>Open Charge Map</b> (CC BY 4.0). Live status: <b>NDW</b> (Netherlands), <b>MobiData BW</b> (Germany), <b>E-Control</b> (Austria), <b>transport.data.gouv.fr</b> (France, Licence Ouverte 2.0), <b>Eco-Movement</b> via the Belgian access point (Belgium), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
     <p>Road closures: <b>NDW</b> and <b>Die Autobahn GmbH des Bundes</b>.</p>
     <p>Brand names and logos belong to their owners. EVailability is independent and not affiliated with any charging network or data provider. <a href="privacy.html?back=help">Privacy policy</a></p>
   </div>`;

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.1.0"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.2.0"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -194,6 +194,7 @@ const LABELS = {
   "Open Charge Map": "Open Charge Map", "NDW": "NDW (Netherlands live)", "E-Control": "E-Control (Austria live)",
   "MobiData BW": "MobiData BW (Germany live)", "Nominatim": "Nominatim (backup search)",
   "PAN FR": "transport.data.gouv.fr (France live)", "PAN FR index": "France index (GitHub Pages)",
+  "PT live": "Portugal live (snapshot from the GitHub job)", "PT index": "Portugal index (GitHub Pages)",
   "Worker requests": "Worker requests", "KV reads": "KV reads", "KV writes": "KV writes", "Logo fetch": "Brand logos",
 };
 const ORS_LABELS = { directions: "Routes", matrix: "Detours (matrix)", "geocode/search": "Place search", "geocode/reverse": "Place names" };
@@ -346,7 +347,8 @@ function render(d) {
 
   // Sources without a daily limit: one card, a line each.
   const free = [["Open Charge Map", "Open Charge Map"], ["NDW", "NDW (Netherlands live)"], ["MobiData BW", "MobiData BW (Germany live)"],
-    ["E-Control", "E-Control (Austria live)"], ["PAN FR", "France live: whole-file reads"], ["PAN FR index", "France index loads"]];
+    ["E-Control", "E-Control (Austria live)"], ["PAN FR", "France live: whole-file reads"], ["PAN FR index", "France index loads"],
+    ["PT live", "Portugal live: snapshot reads"], ["PT index", "Portugal index loads"]];
   const rest = ["Logo fetch", "Nominatim", ...Object.keys(calls)].filter((k, i, a) => a.indexOf(k) === i && !used.has(k)
     && !free.some(([f]) => f === k) && calls[k] != null);
   html += group("Other sources", free.map(([k, label]) => line(k, label)).join("") + rest.map((k) => line(k)).join(""),

@@ -146,7 +146,7 @@ EXACT = {
 "Remove via point": ("Viapunt verwijderen", "Remover ponto intermédio"),
 "Clear": ("Wissen", "Limpar"),
 "Chargers": ("Laders", "Carregadores"),
-"Live: NL, DE, AT · FR, BE (tap)": ("Live: NL, DE, AT · FR, BE (tik)", "Em direto: NL, DE, AT · FR, BE (toque)"),
+"Live: NL, DE, AT, PT · FR, BE (tap)": ("Live: NL, DE, AT, PT · FR, BE (tik)", "Em direto: NL, DE, AT, PT · FR, BE (toque)"),
 "Charging power": ("Laadvermogen", "Potência de carregamento"),
 "Change any time": ("Altijd te wijzigen", "Pode mudar a qualquer momento"),
 "Minimum charging power": ("Minimaal laadvermogen", "Potência mínima de carregamento"),
@@ -284,6 +284,7 @@ EXACT = {
 "Austria": ("Oostenrijk", "Áustria"),
 "France": ("Frankrijk", "França"),
 "Belgium": ("België", "Bélgica"),
+"Portugal": ("Portugal", "Portugal"),
 "Don’t show the splash screen at start": ("Startscherm niet tonen bij openen", "Não mostrar o ecrã inicial ao abrir"),
 # ---- intro and splash
 "Introduction": ("Introductie", "Introdução"),

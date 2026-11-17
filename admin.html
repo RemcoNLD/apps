@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.7"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="2026-11-16.8"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -126,6 +126,8 @@
   #routeView .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin-top: 6px; font-size: .92rem; }
   #routeView .kv > :nth-child(odd) { color: var(--muted); }
   #routeView .hl { color: var(--warn); font-weight: 700; }
+  .reqbadge { display: inline-block; min-width: 20px; height: 20px; margin-left: 6px; padding: 0 6px; border-radius: 10px;
+    background: var(--bad, #e0574f); color: #fff; font-size: .78rem; font-weight: 800; line-height: 20px; text-align: center; text-decoration: none; vertical-align: 1px; }
 </style>
 </head>
 <body>
@@ -141,7 +143,7 @@
   <label class="remember"><input id="remember" type="checkbox" checked> Remember me on this device</label>
 </form>
 <div class="session" id="session" hidden>
-  <a class="link" href="users.html">Users &amp; keys</a>
+  <a class="link" href="users.html">Users &amp; keys<span class="reqbadge" id="reqBadge" hidden></span></a>
   <button type="button" class="link" id="refresh">Refresh</button>
   <button type="button" class="link" id="logout">Log out</button>
 </div>
@@ -385,6 +387,9 @@ async function load(token = $("pw").value.trim()) {
     showLoggedIn(true);
     KNOWN_LIMITS = data.plan?.paid ? PAID_LIMITS : FREE_LIMITS;
     render(data);
+    $("reqBadge").hidden = !data.openRequests;
+    $("reqBadge").textContent = data.openRequests || "";
+    $("reqBadge").title = `${data.openRequests} open request${data.openRequests === 1 ? "" : "s"}`;
     loadSettings(token);
   } catch (e) {
     $("out").innerHTML = "";
@@ -406,7 +411,9 @@ async function loadSettings(token) {
     $("settings").innerHTML = `<div class="card small error">Settings couldn’t be loaded: ${esc(e.message)}</div>`;
   }
 }
-const showVal = (s, v) => (s.type === "bool" ? (v ? "on" : "off") : s.type === "choice" ? `${v} h`
+// Number choices are hours (closures); text choices show as they are, capitalised (self-service).
+const choiceLabel = (o) => typeof o === "number" ? `${o} h` : String(o).charAt(0).toUpperCase() + String(o).slice(1);
+const showVal = (s, v) => (s.type === "bool" ? (v ? "on" : "off") : s.type === "choice" ? choiceLabel(typeof s.options?.[0] === "number" ? Number(v) : v)
   : v === "" || v == null ? (s.type === "date" ? "not set (free plan)" : "empty") : String(v));
 function renderSettings(data, msg = "") {
   // Back to default without a separate link: an emptied field shows the default as grey placeholder
@@ -417,7 +424,7 @@ function renderSettings(data, msg = "") {
     const def = esc(String(s.default ?? ""));
     if (s.type === "bool") control = `<label class="switch"><input type="checkbox" data-key="${esc(s.key)}" data-default="${def}" ${s.value ? "checked" : ""} aria-label="${esc(s.label)}"><span></span></label>`;
     else if (s.type === "choice") control = `<select data-key="${esc(s.key)}" data-default="${def}" aria-label="${esc(s.label)}">${s.options.map((o) =>
-      `<option value="${o}" ${Number(s.value) === o ? "selected" : ""}>${o} h${o === Number(s.default) ? " (default)" : ""}</option>`).join("")}</select>`;
+      `<option value="${o}" ${String(s.value) === String(o) ? "selected" : ""}>${choiceLabel(o)}${String(o) === String(s.default) ? " (default)" : ""}</option>`).join("")}</select>`;
     else control = `<span class="inwrap"><input type="${s.type === "number" ? "number" : s.type === "date" ? "date" : "text"}" data-key="${esc(s.key)}" value="${s.changed ? esc(s.value ?? "") : ""}"
       ${s.type === "number" ? `min="${s.min}" max="${s.max}" inputmode="numeric"` : ""} placeholder="${esc(showVal(s, s.default))}" aria-label="${esc(s.label)}"><button type="button" class="clr" data-clear tabindex="-1" aria-label="Back to default">×</button></span>`;
     return `<div class="set"><div class="row">

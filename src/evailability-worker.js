@@ -29,7 +29,10 @@
 //   GET  /admin/users           access keys: label, status, dates, use per day (same header)
 //   POST /admin/users           {action:"create", label} | {action:"regenerate"|"disable"|"enable"|"delete", id}
 //                               | {action:"set", id, active?, debug?} (the switches in the list)
-//   GET  /me                    who this key is: {name, debug} (debug: may use debug mode)
+//   GET  /me                    who this key is: {name, debug, trial?} (debug: may use debug mode)
+//   GET  /self-service          public: {mode: "off"|"requests"|"trial"} (the lock screen's request link)
+//   POST /request               public: {email, name?, note?} → {pending, id, pickup} or, in trial mode, {token, …}
+//   GET  /request/status?id=&t= public: the asking device's pickup: {status} and {token} once approved
 //                               create/regenerate answer the new key once; only its hash is kept
 //   POST /admin/settings        {settings:{key: value}} saves them (one KV write); empty value = default
 //   GET  /debug/ndw?lat=&lon=   raw Dutch (NDW) data around a point, to tune the parser
@@ -53,7 +56,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-16.117";
+const WORKER_VERSION = "2026-11-16.118";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -252,6 +255,14 @@ function checkAdmin(request, env) {
 const SETTINGS = [
   { key: "paidUntil", type: "date", label: "Workers Paid until", def: () => "",
     help: "The last day of a Cloudflare Workers Paid period (Billing > Subscriptions, 'Ending on'). Until then: France updates by itself (every 2 minutes unless set below), a short pause after an error, more chargers ahead kept fresh, and the usage page shows the Paid allowances. After it everything returns to the free settings by itself. Empty: free plan." },
+  { key: "selfService", type: "choice", options: ["off", "requests", "trial"], label: "Self-service keys", def: () => "off",
+    help: "Off: the lock screen only asks for a key. Requests: people without a key can ask for one with their email; you approve them on the Users page. Trial: they get a trial key straight away (Netherlands only, slower updates, limited days and routes); a second trial on the same device or email becomes a request." },
+  { key: "trialDays", type: "number", min: 1, max: 60, label: "Trial: days", def: () => 7,
+    help: "How long a trial key works." },
+  { key: "trialRoutes", type: "number", min: 1, max: 200, label: "Trial: routes", def: () => 10,
+    help: "How many routes a trial key may plan." },
+  { key: "trialPerDay", type: "number", min: 0, max: 100, label: "Trial: new trials per day", def: () => 5,
+    help: "At most this many automatic trials a day (everyone together); after that people get a request instead." },
   { key: "legacyCode", type: "bool", label: "Old access code (11-proef)", def: () => true,
     help: "On: the old shared 9-digit code still opens the app, and devices that used it keep working. Switch off once everyone has a personal key (Users page); those devices then ask for a key." },
   { key: "frLive", type: "bool", label: "France live (tap)", def: (env) => env.FR_LIVE !== "off",
@@ -308,7 +319,7 @@ async function handleSettings(request, env) {
       if (v === null || v === "") { delete next[d.key]; continue; } // back to the default
       if (d.type === "bool") v = v === true || v === "true" || v === "on";
       else if (d.type === "choice") {
-        v = Number(v);
+        if (typeof d.options[0] === "number") v = Number(v);
         if (!d.options.includes(v)) throw new HttpError(400, `${d.label}: ${d.options.join(", ")}`);
       }
       else if (d.type === "date") {
@@ -363,8 +374,10 @@ async function handleUsage(request, env) {
     }
     period = { from, to, calls: sums };
   }
+  const openRequests = (await loadRequests(env)).filter((r) => r.status === "pending").length;
   return json(request, {
     stored: !!env.USAGE,
+    openRequests, // badge on the "Users & keys" link
     plan: { paid: isPaid(env), until: paidUntil(env) || null, period },
     today: today(),
     days,
@@ -2589,7 +2602,17 @@ async function handleLogo(request, env, key) {
 async function handleStatus(request, env) {
   const body = await request.json().catch(() => ({}));
   const minKw = minKwOf(body.minKw);
-  const stations = (Array.isArray(body.stations) ? body.stations : []).map((st) => ({ ...st, minKw }));
+  let stations = (Array.isArray(body.stations) ? body.stations : []).map((st) => ({ ...st, minKw }));
+  const who = WHO_OF.get(request);
+  if (who?.trial) {
+    // Trial: live status in the Netherlands only, and at most every TRIAL_STATUS_GAP_MS per key.
+    stations = stations.filter((st) => (st.country || "").toUpperCase() === "NL");
+    const k = `trialstatus:${who.id}`, last = memoGet(k) || 0;
+    if (Date.now() - last < TRIAL_STATUS_GAP_MS) {
+      return json(request, { status: {}, checkedAt: new Date().toISOString(), trial: true, retryAfterMs: TRIAL_STATUS_GAP_MS - (Date.now() - last) });
+    }
+    memoSet(k, Date.now(), TRIAL_STATUS_GAP_MS);
+  }
   return json(request, { status: await statusForMany(stations, env), checkedAt: new Date().toISOString(), paid: isPaid(env) });
 }
 
@@ -2625,7 +2648,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/self-service", "/request", "/request/status", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -2731,6 +2754,33 @@ async function handleUsers(request, env) {
       user = find();
       if (typeof body.active === "boolean") { user.active = body.active; user.changed = now; }
       if (typeof body.debug === "boolean") user.debug = body.debug;
+      if (body.full === true) delete user.trial; // a trial becomes a full key (same key, devices keep working)
+    } else if (body.action === "approve" || body.action === "decline" || body.action === "delete-request") {
+      // Requests (self-service). Approve makes a full key from it; the asking device picks up its sign-in.
+      let reqs = await loadRequests(env);
+      const r = reqs.find((x) => x.id === body.id);
+      if (!r) throw new HttpError(404, "No such request");
+      if (body.action === "delete-request") reqs = reqs.filter((x) => x !== r);
+      else if (body.action === "decline") { r.status = "declined"; r.done = now; }
+      else {
+        if (r.status !== "pending") throw new HttpError(400, "This request was already handled");
+        key = newKey();
+        user = { id: userId(), label: String(body.label || r.name || "New user").trim().slice(0, 60), hash: await keyHash(env, key.replace(/-/g, "")),
+          gen: 1, active: true, created: now, keyMade: now, emailEnc: r.emailEnc || null };
+        list.push(user);
+        r.status = "approved"; r.userId = user.id; r.done = now;
+        await saveUsers(env, list);
+      }
+      await saveRequests(env, reqs);
+      return json(request, { ok: true, key, user: user && publicUser(user) });
+    } else if (body.action === "crypt") {
+      // The Users page's email key: public half (JWK) plus the private half locked with the admin password.
+      if (!body.pub || !body.wrapped) throw new HttpError(400, "pub and wrapped needed");
+      const had = await kvGet(env, "crypt");
+      if (had && !body.replace) throw new HttpError(409, "Email encryption is already set up");
+      await env.USAGE.put("crypt", JSON.stringify({ pub: body.pub, wrapped: body.wrapped, at: now }));
+      countCall("KV writes");
+      return json(request, { ok: true });
     } else if (body.action === "rename") {
       user = find();
       const label = String(body.label || "").trim().slice(0, 60);
@@ -2755,8 +2805,14 @@ async function handleUsers(request, env) {
   for (const [id, u] of Object.entries(usage.users)) { // this copy's, not saved yet
     mergeUser(days[0].users[id] || (days[0].users[id] = { n: 0, last: 0 }), u);
   }
+  const reqs = await loadRequests(env);
+  const crypt = JSON.parse((await kvGet(env, "crypt")) || "null");
   return json(request, {
     legacyCode: !!setting(env, "legacyCode"),
+    selfService: selfServiceMode(env),
+    crypt: crypt ? { wrapped: crypt.wrapped, at: crypt.at } : null,
+    requests: reqs.slice().reverse().map((r) => ({ id: r.id, at: r.at, kind: r.kind, status: r.status, name: r.name, note: r.note,
+      emailEnc: r.emailEnc || null, userId: r.userId || null, done: r.done || null })),
     users: list.map((u) => {
       const perDay = days.map((d) => d.users[u.id]?.n || 0).reverse(); // oldest first
       const last = Math.max(0, ...days.map((d) => d.users[u.id]?.last || 0));
@@ -2773,7 +2829,117 @@ async function handleUsers(request, env) {
     legacyPerDay: days.map((d) => d.users.legacy?.n || 0).reverse(),
   });
 }
-const publicUser = (u) => ({ id: u.id, label: u.label, active: u.active !== false, debug: !!u.debug, created: u.created, keyMade: u.keyMade || u.created, gen: u.gen || 1 });
+const publicUser = (u) => ({ id: u.id, label: u.label, active: u.active !== false, debug: !!u.debug,
+  trial: u.trial ? { until: u.trial.until, routes: u.trial.routes, used: u.trial.used || 0 } : null, emailEnc: u.emailEnc || null, created: u.created, keyMade: u.keyMade || u.created, gen: u.gen || 1 });
+
+// ---------------------------------------------------------------- self-service: requests and trials
+// With selfService on, the lock screen offers "No key? Request one": email, name, a note.
+//  - requests: kept as a pending request; Remco approves it on the Users page, the asking device picks up
+//    its sign-in by itself (pickup token) and Remco can mail the key with his own mail app.
+//  - trial: a trial key straight away (Netherlands only, slower status, trialDays / trialRoutes), at most
+//    trialPerDay a day, one per device and per email; a second one becomes a request.
+// Emails are locked with RSA-OAEP using a public key the Users page made (KV "crypt"); its private half
+// is stored locked with the admin password and only opened in the admin's browser. The Worker can't read
+// them back. A one-way HMAC of the email spots repeats. Requests live in KV "requests" (one record).
+const TRIAL_STATUS_GAP_MS = 3 * 60 * 1000; // trial keys: live status at most every 3 minutes
+const selfServiceMode = (env) => { const m = setting(env, "selfService"); return m === "requests" || m === "trial" ? m : "off"; };
+async function loadRequests(env) {
+  try { return JSON.parse((await kvGet(env, "requests")) || "[]"); } catch (_) { return []; }
+}
+async function saveRequests(env, list) {
+  const cut = Date.now() - 90 * 86400000; // done requests older than 90 days go
+  list = list.filter((r) => r.status === "pending" || Date.parse(r.at) > cut).slice(-300);
+  await env.USAGE.put("requests", JSON.stringify(list));
+  countCall("KV writes");
+  return list;
+}
+async function encryptEmail(env, email) {
+  const crypt = JSON.parse((await kvGet(env, "crypt")) || "null");
+  if (!crypt?.pub) return null; // not set up yet: the email isn't kept (the request still is)
+  const key = await crypto.subtle.importKey("jwk", crypt.pub, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+  const enc = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, key, new TextEncoder().encode(email));
+  return btoa(String.fromCharCode(...new Uint8Array(enc)));
+}
+const emailHash = (env, email) => hmac(env, `email:${email.trim().toLowerCase()}`);
+const randomToken = () => [...crypto.getRandomValues(new Uint8Array(18))].map((b) => b.toString(16).padStart(2, "0")).join("");
+function tokenFor(env, u) { return userSig(env, u.id, u.gen || 1).then((sig) => `u1.${u.id}.${u.gen || 1}.${sig}`); }
+
+async function handleRequest(request, env) {
+  const mode = selfServiceMode(env);
+  if (mode === "off") throw new HttpError(403, "Requests are closed at the moment.");
+  if (!env.USAGE) throw new HttpError(503, "No KV store bound");
+  const ip = request.headers.get("CF-Connecting-IP") || "?";
+  const rk = `req:${ip}`;
+  if ((memoGet(rk) || 0) >= 3) throw new HttpError(429, "Too many requests from here. Try again in an hour.");
+  memoSet(rk, (memoGet(rk) || 0) + 1, 60 * 60 * 1000);
+  const body = await request.json().catch(() => ({}));
+  if (body.website) return json(request, { pending: true }); // honeypot: a bot filled the hidden field
+  const email = String(body.email || "").trim().slice(0, 120);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new HttpError(400, "That email address doesn’t look right.");
+  const name = String(body.name || "").trim().slice(0, 60);
+  const note = String(body.note || "").trim().slice(0, 300);
+  const device = String(body.device || "").replace(/[^a-z0-9]/g, "").slice(0, 12);
+  const hash = await emailHash(env, email);
+  const ipHash = (await hmac(env, `ip:${ip}`)).slice(0, 16);
+  let list = await loadRequests(env);
+  const now = new Date().toISOString(), today = now.slice(0, 10);
+
+  if (mode === "trial") {
+    const usedHere = list.some((r) => r.kind === "trial" && (r.emailHash === hash || (device && r.device === device) || (r.ipHash === ipHash && r.at.slice(0, 10) === today)));
+    const todayCount = list.filter((r) => r.kind === "trial" && r.at.slice(0, 10) === today).length;
+    if (!usedHere && todayCount < Number(setting(env, "trialPerDay"))) {
+      const users = [...(await loadUsers(env, true))];
+      if (users.length >= 200) throw new HttpError(400, "No room for new keys at the moment.");
+      const until = new Date(Date.now() + Number(setting(env, "trialDays")) * 86400000).toISOString();
+      const emailEnc = await encryptEmail(env, email);
+      const u = { id: userId(), label: name || "Trial", hash: await keyHash(env, newKey().replace(/-/g, "")), gen: 1, active: true,
+        created: now, keyMade: now, emailEnc, trial: { until, routes: Number(setting(env, "trialRoutes")), used: 0 } };
+      users.push(u);
+      await saveUsers(env, users);
+      list.push({ id: userId(), at: now, kind: "trial", status: "approved", userId: u.id, name, note, emailEnc, emailHash: hash, device, ipHash });
+      await saveRequests(env, list);
+      return json(request, { token: await tokenFor(env, u), name: u.label, trial: { until, routesLeft: u.trial.routes } });
+    }
+    // A second trial, or today's trials used up: a normal request instead.
+  }
+  let r = list.find((x) => x.status === "pending" && x.emailHash === hash);
+  const pickup = randomToken();
+  if (r) { r.pickup = await hmac(env, `pickup:${pickup}`); r.device = device || r.device; if (note) r.note = note; if (name) r.name = name; }
+  else {
+    if (list.filter((x) => x.status === "pending").length >= 50) throw new HttpError(429, "Too many open requests at the moment. Try again later.");
+    r = { id: userId(), at: now, kind: "request", status: "pending", name, note, emailEnc: await encryptEmail(env, email),
+      emailHash: hash, device, ipHash, pickup: await hmac(env, `pickup:${pickup}`) };
+    list.push(r);
+  }
+  await saveRequests(env, list);
+  return json(request, { pending: true, id: r.id, pickup, trialUsed: mode === "trial" });
+}
+async function handleRequestStatus(request, env, url) {
+  const id = url.searchParams.get("id") || "", t = url.searchParams.get("t") || "";
+  const k = `reqst:${id}`;
+  let r = memoGet(k);
+  if (r === undefined) { r = (await loadRequests(env)).find((x) => x.id === id) || null; memoSet(k, r, 30 * 1000); }
+  if (!r || !t || !sameText(r.pickup || "", await hmac(env, `pickup:${t}`))) return json(request, { status: "unknown" });
+  if (r.status !== "approved" || !r.userId) return json(request, { status: r.status });
+  const u = (await loadUsers(env)).find((x) => x.id === r.userId);
+  if (!u) return json(request, { status: "unknown" });
+  return json(request, { status: "approved", token: await tokenFor(env, u), name: u.label, debug: !!u.debug });
+}
+// Trial limits on the Worker side (who.trial set): France, Belgium and debug are for full keys; each
+// /plan uses one of the trial's routes (counted in the users record: one KV write per route).
+async function trialGate(path, request, env, who) {
+  if (path === "/fr-status" || path === "/be-status" || path === "/be-evse") {
+    throw new HttpError(403, "Live status outside the Netherlands is for full keys.", "trial-country");
+  }
+  if (path === "/plan" && request.method === "POST") {
+    const users = [...(await loadUsers(env, true))];
+    const u = users.find((x) => x.id === who.id);
+    if (!u?.trial) return;
+    if ((u.trial.used || 0) >= u.trial.routes) throw new HttpError(403, "Your trial’s routes are used up. Ask for a full key.", "trial-routes");
+    u.trial.used = (u.trial.used || 0) + 1;
+    await saveUsers(env, users);
+  }
+}
 
 // Who is asking: { id } for a personal key, { id: "legacy" } for the old shared code, { id: "admin" }
 // for the admin password, or null.
@@ -2788,7 +2954,11 @@ async function whoIs(request, env, url) {
     if (String(u.gen || 1) !== gen) throw new HttpError(401, "This access key was replaced. Enter the new one.", "replaced");
     // "off" is a pause: the app keeps its token and works again once the key is switched back on.
     if (u.active === false) throw new HttpError(401, "This access key is switched off for now.", "off");
-    return { id, name: u.label, debug: !!u.debug };
+    if (u.trial && Date.now() > Date.parse(u.trial.until)) {
+      // Like "off": the device keeps its token, so it works again if the key is made full.
+      throw new HttpError(401, "Your trial has ended. Ask for a full key, and this app opens again once you have one.", "off");
+    }
+    return { id, name: u.label, debug: !!u.debug, trial: u.trial || null };
   }
   if (sameText(given, await accessToken(env))) {
     if (!setting(env, "legacyCode")) throw new HttpError(401, "The old access code no longer works. Enter your personal key.", "legacy-off");
@@ -2832,6 +3002,9 @@ async function route(request, env) {
   if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders(request) });
   await loadSettings(env); // switches from the usage page (cached a minute); the old-code switch is one
   if (path === "/unlock" && request.method === "POST") return handleUnlock(request, env);
+  if (path === "/self-service" && request.method === "GET") return json(request, { mode: selfServiceMode(env) });
+  if (path === "/request" && request.method === "POST") return handleRequest(request, env);
+  if (path === "/request/status" && request.method === "GET") return handleRequestStatus(request, env, url);
   let who = null;
   if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/")) {
     who = await whoIs(request, env, url);
@@ -2843,9 +3016,11 @@ async function route(request, env) {
     WHO_OF.set(request, who);
     // Debug tools only for keys with Debug switched on (Users page) or the admin password.
     if (path.startsWith("/debug/") && !who.debug) throw new HttpError(403, "Debug isn’t switched on for this key");
+    if (who.trial) await trialGate(path, request, env, who);
   }
   if (path === "/me" && request.method === "GET") {
-    return json(request, { name: who?.name || null, debug: !!who?.debug, legacy: who?.id === "legacy" });
+    return json(request, { name: who?.name || null, debug: !!who?.debug, legacy: who?.id === "legacy",
+      trial: who?.trial ? { until: who.trial.until, routesLeft: Math.max(0, who.trial.routes - (who.trial.used || 0)) } : null });
   }
 
   if (path === "/" && request.method === "GET") {

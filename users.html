@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.4"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-16.5"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -55,6 +55,7 @@
   .newkey .acts { display: flex; gap: 8px; }
   .newkey .acts button { flex: 1; }
   .copied { background: var(--ok) !important; }
+  .mailbtn { display: block; margin-top: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; text-align: center; font-weight: 700; color: var(--text); text-decoration: none; word-break: break-all; }
 
   /* Filter */
   .filters { display: flex; gap: 8px; margin: 0 0 10px; flex-wrap: wrap; }
@@ -100,6 +101,22 @@
   .switch.dbg input:checked + span { background: var(--warn); }
   .empty { text-align: center; }
 
+  /* Self-service and requests */
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { flex: 1; min-height: 40px; border-radius: 0; background: transparent; color: var(--text); font-weight: 600; padding: 8px 6px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+  .req .top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .req .who2 { font-weight: 700; }
+  .req .mail { font-size: .95rem; word-break: break-all; }
+  .req .note { font-size: .92rem; margin: 6px 0 0; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .req .btns2 { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-top: 12px; }
+  .badge { display: inline-block; min-width: 22px; padding: 0 7px; border-radius: 11px; background: var(--bad); color: #fff; font-size: .85rem; font-weight: 800; text-align: center; margin-left: 6px; vertical-align: 2px; }
+  .tchip { font-size: .78rem; font-weight: 700; color: var(--blue); }
+  .hist summary { cursor: pointer; color: var(--muted); font-weight: 600; margin: 4px 0 10px; }
+  .hist .req { opacity: .8; }
+  .setup { border: 2px dashed var(--line); }
+  .user .mailline { font-size: .92rem; margin: -4px 0 12px; word-break: break-all; }
   .switch { position: relative; width: 52px; height: 30px; flex: none; }
   .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
   .switch span { position: absolute; inset: 0; border-radius: 15px; background: var(--line); transition: background .15s; }
@@ -129,10 +146,12 @@
     <button type="submit" id="createBtn">Make key</button>
   </form>
   <div id="newKey"></div>
+  <div id="requests"></div>
   <h2 id="listTitle">Keys</h2>
   <div class="filters" id="filters" role="group" aria-label="Show"></div>
   <div class="cols" id="cols" aria-hidden="true"><span>On</span><span>Debug</span></div>
   <div id="list"><p class="muted">Loading…</p></div>
+  <div id="selfsvc"></div>
   <div id="legacy"></div>
   <p class="small muted">Changes reach the app within a few minutes. Debug lets that key switch on debug mode in Help (debug line, stored routes, forced updates). Tap a name for details: devices and requests over the last 7 days. A key on 3 or more devices shows in orange; if it’s being passed around, tap New key.</p>
 </div>
@@ -173,12 +192,17 @@ async function load() {
   try {
     data = await api("/admin/users");
     $("login").hidden = true; $("app").hidden = false;
-    render();
+    await decryptAll();
+    render(); renderRequests(); renderSelfService();
   } catch (e) { showError(e); }
 }
 
 // Under the name only when a key is on more than one device (more than 2: in orange, worth a look).
 const DEV_WARN = 3;
+function trialText(u) {
+  const days = Math.ceil((Date.parse(u.trial.until) - Date.now()) / 86400000);
+  return days <= 0 ? "Trial ended" : `Trial · ${days} d · ${Math.max(0, u.trial.routes - u.trial.used)} routes left`;
+}
 const devs = (u) => (u.devices?.length || 0) < 2 ? ""
   : `<span class="devs${u.devices.length >= DEV_WARN ? " many" : ""}">${u.devices.length} devices</span>`;
 const when = (iso) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -200,7 +224,7 @@ function render() {
     return `<div class="card user${u.active ? "" : " off"}" data-id="${u.id}">
       <div class="head">
         <button type="button" class="who" aria-expanded="${isOpen}"><span class="caret" aria-hidden="true"></span>
-          <span class="nm"><span class="name">${esc(u.label)}</span>${devs(u)}</span></button>
+          <span class="nm"><span class="name">${esc(u.label)}</span>${u.trial ? `<span class="tchip">${trialText(u)}</span>` : ""}${devs(u)}</span></button>
         <label class="switch"><input type="checkbox" data-sw="active" ${u.active ? "checked" : ""} aria-label="${esc(u.label)}: key on"><span></span></label>
         <label class="switch dbg"><input type="checkbox" data-sw="debug" ${u.debug ? "checked" : ""} aria-label="${esc(u.label)}: debug mode allowed"><span></span></label>
       </div>
@@ -211,6 +235,8 @@ function render() {
           <span>Last used</span><span>${u.lastUsed ? new Date(u.lastUsed).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }) : "never"}</span>
           <span>Requests</span><span>${u.perDay.at(-1)} today, ${week} in 7 days</span>
         </div>
+        ${u.emailEnc ? `<div class="mailline">${esc(emailOf(u.emailEnc))}</div>` : ""}
+        ${u.trial ? `<button type="button" data-act="full" style="width:100%;margin-bottom:12px">Make full key (end the trial limits)</button>` : ""}
         <div class="sub">${u.devices?.length ? `Devices (${u.devices.length}, last 7 days)` : "Devices"}</div>
         ${u.devices?.length ? `<ul class="devlist">${u.devices.map((d) => `<li><span>${esc(d.kind)}<span class="id">${esc(d.id.slice(0, 4))}</span></span><span class="when">${when(d.last)}</span></li>`).join("")}</ul>`
           : `<p class="small muted" style="margin:0 0 12px">None seen yet (devices show after their first use with app version 125 or later).</p>`}
@@ -245,7 +271,93 @@ function render() {
   if (renaming) setTimeout(() => $("renameInput")?.focus(), 0);
 }
 
-function showKey(label, key, isNew) {
+
+// ---- Email encryption: emails are locked by the Worker with our public key; the private half is kept
+// locked with the admin password (PBKDF2 → AES-GCM) and only opened here, in this browser.
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+async function passKey(password, salt) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 310000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function wrapPrivate(pkcs8, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await passKey(password, salt), pkcs8);
+  return { salt: b64(salt), iv: b64(iv), data: b64(data) };
+}
+let privKey = null, privPkcs8 = null;
+async function openPrivate(password = token()) {
+  if (privKey || !data?.crypt?.wrapped) return privKey;
+  const w = data.crypt.wrapped;
+  const pkcs8 = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(w.iv) }, await passKey(password, unb64(w.salt)), unb64(w.data));
+  privPkcs8 = pkcs8;
+  privKey = await crypto.subtle.importKey("pkcs8", pkcs8, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]);
+  return privKey;
+}
+const emails = new Map(); // emailEnc → plain text, this page only
+async function decryptAll() {
+  const encs = [...data.requests.map((r) => r.emailEnc), ...data.users.map((u) => u.emailEnc)].filter((e) => e && !emails.has(e));
+  if (!encs.length || !data.crypt) return;
+  try { await openPrivate(); } catch (_) { cryptState = "wrongpw"; return; }
+  for (const e of encs) {
+    try { emails.set(e, new TextDecoder().decode(await crypto.subtle.decrypt({ name: "RSA-OAEP" }, privKey, unb64(e)))); } catch (_) { emails.set(e, null); }
+  }
+}
+let cryptState = "";
+const emailOf = (enc) => !enc ? "" : emails.get(enc) || (cryptState === "wrongpw" ? "🔒 locked (old admin password, see below)" : "🔒 locked");
+async function setupCrypt() {
+  const kp = await crypto.subtle.generateKey({ name: "RSA-OAEP", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["encrypt", "decrypt"]);
+  const pub = await crypto.subtle.exportKey("jwk", kp.publicKey);
+  const pkcs8 = await crypto.subtle.exportKey("pkcs8", kp.privateKey);
+  await api("/admin/users", { action: "crypt", pub, wrapped: await wrapPrivate(pkcs8, token()) });
+  privKey = null; await load();
+}
+async function rewrap(oldPassword) { // the admin password changed: lock the private key with the new one
+  privKey = null;
+  await openPrivate(oldPassword);
+  const pub = await crypto.subtle.exportKey("jwk", await crypto.subtle.importKey("pkcs8", privPkcs8, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["decrypt"])).then((j) => ({ kty: j.kty, n: j.n, e: j.e, alg: j.alg, ext: true, key_ops: ["encrypt"] }));
+  await api("/admin/users", { action: "crypt", replace: true, pub, wrapped: await wrapPrivate(privPkcs8, token()) });
+  cryptState = ""; privKey = null; emails.clear(); await load();
+}
+async function backupKey() {
+  await openPrivate();
+  const blob = new Blob([JSON.stringify({ note: "EVailability email key (private). Keep it safe; it opens all stored emails.", pkcs8: b64(privPkcs8) })], { type: "application/json" });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "evailability-email-key.json" });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function renderRequests() {
+  const open = data.requests.filter((r) => r.status === "pending");
+  const done = data.requests.filter((r) => r.status !== "pending");
+  const when2 = (iso) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const card = (r) => `<div class="card req" data-req="${r.id}">
+      <div class="top"><span class="who2">${esc(r.name || "No name")}${r.kind === "trial" ? ' <span class="tchip">Trial</span>' : ""}</span><span class="small muted">${when2(r.at)}</span></div>
+      <div class="mail">${esc(emailOf(r.emailEnc) || "no email kept (encryption wasn’t set up)")}</div>
+      ${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}
+      ${r.status === "pending" ? `<div class="btns2"><button type="button" data-ract="approve">Approve</button><button type="button" class="plain" data-ract="decline">Decline</button></div>`
+        : `<div class="small muted" style="margin-top:8px">${r.status === "approved" ? (r.kind === "trial" ? "Trial key given" : "Approved") : "Declined"}${r.done ? ` · ${when2(r.done)}` : ""}
+            · <button type="button" class="link" data-ract="delete-request">Delete</button></div>`}
+    </div>`;
+  const setup = !data.crypt ? `<div class="card setup"><b>Set up email encryption</b>
+      <p class="small muted" style="margin:4px 0 10px">Emails from requests are stored locked with a key made here, which only this page can open with your admin password. Until it’s set up, requests are kept without their email.</p>
+      <button type="button" id="cryptSetup">Set up now</button></div>`
+    : cryptState === "wrongpw" ? `<div class="card setup"><b>Emails are locked with an older admin password</b>
+      <p class="small muted" style="margin:4px 0 10px">Enter the old password once to move them to the current one.</p>
+      <form class="row" id="rewrapForm"><input type="password" id="oldPw" placeholder="Old admin password" autocomplete="off" aria-label="Old admin password"><button type="submit">Unlock</button></form></div>` : "";
+  $("requests").innerHTML = (open.length || done.length || setup ? `<h2>Requests${open.length ? `<span class="badge">${open.length}</span>` : ""}</h2>` : "") + setup
+    + open.map(card).join("")
+    + (open.length || !done.length ? "" : `<p class="small muted">No open requests.</p>`)
+    + (done.length ? `<details class="hist"><summary>Handled (${done.length})</summary>${done.map(card).join("")}</details>` : "");
+}
+function renderSelfService() {
+  const m = data.selfService;
+  const help = { off: "The lock screen only asks for a key.", requests: "People without a key can ask for one; you approve them here.", trial: "People get a trial key straight away (Netherlands only, slower updates, limited days and routes; set on the usage page). A second trial on the same device or email becomes a request." }[m];
+  $("selfsvc").innerHTML = `<h2>Self-service</h2><div class="card">
+    <div class="seg" role="group" aria-label="Self-service">${["off", "requests", "trial"].map((k) => `<button type="button" data-ss="${k}" aria-pressed="${m === k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>
+    <p class="small muted" style="margin:10px 0 0">${help}${data.crypt ? ` <button type="button" class="link" id="cryptBackup">Download email key backup</button>` : ""}</p></div>`;
+}
+
+function showKey(label, key, isNew, email = "") {
   $("newKey").innerHTML = `<div class="card newkey" role="status">
     <div class="who">${isNew ? "Key for" : "New key for"} ${esc(label)}</div>
     <div class="key" id="keyText">${esc(key)}</div>
@@ -253,6 +365,7 @@ function showKey(label, key, isNew) {
       <button type="button" id="copyBtn">Copy key</button>
       ${navigator.share ? `<button type="button" class="plain" id="shareBtn">Share…</button>` : ""}
     </div>
+    ${email ? `<a class="plain mailbtn" id="mailBtn" href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent("Your EVailability key")}&body=${encodeURIComponent(`Hi ${label},\n\nHere is your access key for EVailability: ${key}\n\nOpen https://remconld.github.io/apps/evailability.html and enter it once. If you asked from your phone, the app may already have opened by itself.\n\nRemco`)}">Email key to ${esc(email)}</a>` : ""}
     <p class="small muted" style="margin:10px 0 0">Only shown now. Copy it before you leave this page.
       <button type="button" class="link" id="doneBtn">Done</button></p>
   </div>`;
@@ -310,6 +423,10 @@ $("list").addEventListener("click", async (e) => {
   if (act === "cancel") { confirming = null; return render(); }
   if (act === "delete" || act === "regenerate") { confirming = { id, act }; return render(); }
   if (act === "rename") { renaming = id; return render(); }
+  if (act === "full") {
+    try { await api("/admin/users", { action: "set", id, full: true }); await load(); } catch (err) { showError(err); }
+    return;
+  }
   const action = act.replace(/-yes$/, "");
   const btn = e.target.closest("button"); btn.disabled = true;
   try {
@@ -327,6 +444,29 @@ $("list").addEventListener("submit", async (e) => {
   if (!label) return;
   try { await api("/admin/users", { action: "rename", id, label }); renaming = null; await load(); }
   catch (err) { showError(err); }
+});
+$("requests").addEventListener("click", async (e) => {
+  if (e.target.id === "cryptSetup") { e.target.disabled = true; try { await setupCrypt(); } catch (err) { showError(err); e.target.disabled = false; } return; }
+  const b = e.target.closest("[data-ract]");
+  if (!b) return;
+  const id = e.target.closest("[data-req]").dataset.req;
+  const r = data.requests.find((x) => x.id === id);
+  b.disabled = true;
+  try {
+    const out = await api("/admin/users", { action: b.dataset.ract, id });
+    if (b.dataset.ract === "approve") showKey(out.user.label, out.key, true, emails.get(r.emailEnc) || "");
+    await load();
+  } catch (err) { showError(err); b.disabled = false; }
+});
+$("requests").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try { await rewrap($("oldPw").value); } catch (_) { showError("That old password didn’t open the emails."); }
+});
+$("selfsvc").addEventListener("click", async (e) => {
+  if (e.target.id === "cryptBackup") { try { await backupKey(); } catch (err) { showError(err); } return; }
+  const b = e.target.closest("[data-ss]");
+  if (!b || b.getAttribute("aria-pressed") === "true") return;
+  try { await api("/admin/settings", { settings: { selfService: b.dataset.ss } }); await load(); } catch (err) { showError(err); }
 });
 $("filters").addEventListener("click", (e) => {
   const b = e.target.closest("[data-f]");

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.128"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-16.129"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -646,6 +646,13 @@
   .lock-box .primary { margin-top: 14px; }
   .lock-box .error { margin-top: 12px; }
   .lock-box #lockRetry { margin-top: 4px; font-size: 1rem; }
+  .lock-box .lock-ask { margin: 22px 0 0; font-size: 1rem; }
+  .lock-box .ask h3 { font-size: 1.3rem; margin: 0 0 6px; }
+  .lock-box .ask .input { margin-top: 10px; font-size: 1.05rem; letter-spacing: normal; }
+  .lock-box .ask textarea.input { resize: vertical; font-family: inherit; }
+  .lock-box .ask .ask-privacy { font-size: .85rem; margin: 12px 0 6px; }
+  .lock-box .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+  .account .trial-line { color: var(--muted); font-size: .85rem; padding: 0 0 10px; margin-top: -4px; }
   /* Availability history in the press-and-hold sheet */
   .navsheet .hist { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--asphalt); }
   .navsheet .hist div { display: flex; gap: 8px; align-items: baseline; line-height: 1.4; }
@@ -1032,6 +1039,7 @@
       <span id="accountWho"></span>
       <button type="button" class="link" id="logoutBtn">Log out</button>
     </div>
+    <div class="trial-line" id="accTrial" hidden></div>
     <div class="acc-debug" id="accDebug" hidden>
       <label class="acc-row" for="debugToggle">
         <span><b>Debug mode</b><span class="acc-sub">Versions, data sources, route id and coordinates while driving</span></span>
@@ -1073,6 +1081,25 @@
     <button type="button" class="primary" id="lockBtn">Open</button>
     <p class="error" id="lockError" hidden></p>
     <button type="button" class="link" id="lockRetry" hidden>Check again</button>
+    <p class="lock-ask" id="lockAsk" hidden>No key? <button type="button" class="link" id="askOpen">Request one</button></p>
+    <!-- Self-service (Users page / usage page setting): ask for a key, or get a trial straight away -->
+    <form class="ask" id="askForm" hidden autocomplete="on">
+      <h3 id="askTitle">Request a key</h3>
+      <p id="askIntro"></p>
+      <input class="input" id="askName" type="text" autocomplete="name" placeholder="Your name" aria-label="Your name" maxlength="60">
+      <input class="input" id="askEmail" type="email" autocomplete="email" inputmode="email" placeholder="Email address" aria-label="Email address" maxlength="120" required>
+      <textarea class="input" id="askNote" rows="2" placeholder="Anything to add? (optional)" aria-label="Note" maxlength="300"></textarea>
+      <input type="text" id="askWebsite" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+      <button type="submit" class="primary" id="askBtn">Send</button>
+      <p class="error" id="askError" hidden></p>
+      <p class="ask-privacy">Your email is stored encrypted and only used to contact you about your key. Ask and it’s deleted.</p>
+      <button type="button" class="link" id="askBack">Back</button>
+    </form>
+    <div class="ask" id="askWait" hidden>
+      <h3>Request sent</h3>
+      <p id="askWaitText">Thanks! This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.</p>
+      <button type="button" class="link" id="askWaitKey">I have a key</button>
+    </div>
   </div>
 </div>
 
@@ -1277,6 +1304,7 @@ const DEVICE_ID = (() => {
 })();
 const withDevice = (path) => DEVICE_ID ? `${path}${path.includes("?") ? "&" : "?"}d=${DEVICE_ID}` : path;
 const ACCESS_NAME_KEY = "evailability-access-name"; // the key's label, shown in Help
+const TRIAL_KEY = "evailability-trial"; // {until, routesLeft} for a trial key (from /me)
 const accessToken = () => { try { return localStorage.getItem(ACCESS_KEY) || ""; } catch (_) { return ""; } };
 async function api(path, body, timeoutMs, retry = true) {
   const headers = { "X-Access": accessToken() };
@@ -1369,6 +1397,7 @@ renderErrors();
 function showLock(why, paused = false) {
   const wasHidden = $("lock").hidden;
   $("lock").hidden = false;
+  if (wasHidden && !paused) refreshAsk();
   if (why) { $("lockError").textContent = paused ? `${why} It opens again once it’s switched back on.` : why; $("lockError").hidden = false; }
   $("lockRetry").hidden = !paused;
   if (wasHidden && !paused) setTimeout(() => $("lockCode").focus(), 50); // paused: no keyboard over the message
@@ -1422,6 +1451,85 @@ async function unlock() {
     $("lockBtn").disabled = false;
   }
 }
+
+// ------------------------------------------------------------- self-service (no key yet)
+// "No key? Request one" shows when the server's self-service setting is on. In "requests" mode the
+// request waits for approval and this device keeps a pickup token: it checks every minute while the
+// lock screen is up (and when the app comes back) and signs in by itself once approved. In "trial" mode
+// the answer is a trial sign-in straight away (Netherlands only, limited days and routes).
+const ASK_KEY = "evailability-request"; // {id, pickup} of this device's open request
+let askMode = "off", askTimer = null;
+const askPending = () => { try { return JSON.parse(localStorage.getItem(ASK_KEY) || "null"); } catch (_) { return null; } };
+function showAskView(view) { // "key" | "form" | "wait"
+  const key = view === "key";
+  for (const id of ["lockCode", "lockBtn"]) $(id).hidden = !key;
+  $("lockTitle").nextElementSibling.hidden = !key;
+  $("lockAsk").hidden = !key || askMode === "off";
+  $("askForm").hidden = view !== "form";
+  $("askWait").hidden = view !== "wait";
+  if (!key) { $("lockError").hidden = true; $("lockRetry").hidden = true; }
+}
+async function refreshAsk() {
+  try { askMode = (await (await fetch(`${WORKER}/self-service`, { cache: "no-store" })).json()).mode || "off"; } catch (_) {}
+  const trial = askMode === "trial";
+  $("askOpen").textContent = trial ? "Try it free" : "Request one";
+  $("askTitle").textContent = trial ? "Try EVailability" : "Request a key";
+  $("askIntro").textContent = trial
+    ? "Get a trial straight away: live status in the Netherlands, for a limited number of days and routes."
+    : "Leave your email and you’ll hear back. Once approved, this screen opens by itself.";
+  $("askBtn").textContent = trial ? "Start trial" : "Send request";
+  if (askPending()) { showAskView("wait"); checkAsk(); }
+  else if (!$("askForm").hidden) {} else showAskView("key");
+}
+async function sendAsk(e) {
+  e.preventDefault();
+  $("askError").hidden = true;
+  $("askBtn").disabled = true;
+  try {
+    const res = await fetch(`${WORKER}/request`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("askName").value, email: $("askEmail").value, note: $("askNote").value, website: $("askWebsite").value, device: DEVICE_ID }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    if (data.token) return signedIn(data);
+    if (data.id) localStorage.setItem(ASK_KEY, JSON.stringify({ id: data.id, pickup: data.pickup }));
+    $("askWaitText").textContent = (data.trialUsed ? "A trial was already used on this device or with this email, or today’s trials are gone, so this became a request. " : "Thanks! ")
+      + "This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.";
+    showAskView("wait");
+    clearInterval(askTimer); askTimer = setInterval(checkAsk, 60000);
+  } catch (err) {
+    $("askError").textContent = /fetch|load failed|network/i.test(err.message) ? "Couldn’t reach the server. Try again." : err.message;
+    $("askError").hidden = false;
+  } finally { $("askBtn").disabled = false; }
+}
+async function checkAsk() {
+  const p = askPending();
+  if (!p || $("lock").hidden) { clearInterval(askTimer); return; }
+  try {
+    const d = await (await fetch(`${WORKER}/request/status?id=${encodeURIComponent(p.id)}&t=${encodeURIComponent(p.pickup)}`, { cache: "no-store" })).json();
+    if (d.status === "approved" && d.token) signedIn(d);
+    else if (d.status === "declined" || d.status === "unknown") {
+      localStorage.removeItem(ASK_KEY);
+      $("askWaitText").textContent = d.status === "declined" ? "Your request wasn’t approved. Sorry!" : "This request is no longer known. You can send a new one.";
+    }
+  } catch (_) {}
+}
+function signedIn(data) {
+  try {
+    localStorage.setItem(ACCESS_KEY, data.token);
+    data.name ? localStorage.setItem(ACCESS_NAME_KEY, data.name) : localStorage.removeItem(ACCESS_NAME_KEY);
+    localStorage.setItem(DEBUG_ALLOWED_KEY, data.debug ? "1" : "0");
+    localStorage.removeItem(ASK_KEY);
+  } catch (_) {}
+  clearInterval(askTimer);
+  showAskView("key");
+  hideLock();
+  refreshMe();
+}
+$("askOpen").addEventListener("click", () => { showAskView("form"); setTimeout(() => $("askEmail").focus(), 50); });
+$("askBack").addEventListener("click", () => showAskView("key"));
+$("askWaitKey").addEventListener("click", () => { clearInterval(askTimer); showAskView("key"); });
+$("askForm").addEventListener("submit", sendAsk);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("lock").hidden && askPending()) checkAsk(); });
 
 // ------------------------------------------------------------- start screen
 
@@ -1665,6 +1773,7 @@ async function refreshMe() {
     try {
       localStorage.setItem(DEBUG_ALLOWED_KEY, me.debug ? "1" : "0");
       me.name ? localStorage.setItem(ACCESS_NAME_KEY, me.name) : localStorage.removeItem(ACCESS_NAME_KEY);
+      me.trial ? localStorage.setItem(TRIAL_KEY, JSON.stringify(me.trial)) : localStorage.removeItem(TRIAL_KEY);
     } catch (_) {}
     if (was && !me.debug) { errors = []; saveErrors(); } // no debug any more: nothing waiting to pop up later
     if (was !== !!me.debug) { refreshDebugInfo(true); renderDebug(); renderErrors(); try { render(); } catch (_) {} }
@@ -4858,6 +4967,12 @@ function renderAccount() {
   $("logoutBtn").hidden = !tok;
   $("logoutBtn").textContent = "Log out"; $("logoutBtn").classList.remove("sure");
   $("accDebug").hidden = !tok || !debugAllowed();
+  let trial = null; try { trial = JSON.parse(localStorage.getItem(TRIAL_KEY) || "null"); } catch (_) {}
+  $("accTrial").hidden = !tok || !trial;
+  if (trial) {
+    const days = Math.max(0, Math.ceil((Date.parse(trial.until) - Date.now()) / 86400000));
+    $("accTrial").textContent = `Trial: ${days} day${days === 1 ? "" : "s"} and ${trial.routesLeft} route${trial.routesLeft === 1 ? "" : "s"} left · live status in the Netherlands only`;
+  }
   $("debugToggle").checked = debugOn();
 }
 let logoutTimer = null;
@@ -4869,7 +4984,7 @@ $("logoutBtn").addEventListener("click", () => {
     return;
   }
   clearTimeout(logoutTimer);
-  try { localStorage.removeItem(ACCESS_KEY); localStorage.removeItem(ACCESS_NAME_KEY); localStorage.removeItem(DEBUG_ALLOWED_KEY); } catch (_) {}
+  try { [ACCESS_KEY, ACCESS_NAME_KEY, DEBUG_ALLOWED_KEY, TRIAL_KEY].forEach((k) => localStorage.removeItem(k)); } catch (_) {}
   $("help").hidden = true; renderDebug(); renderErrors();
   showLock();
 });

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.153"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.154"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -614,6 +614,12 @@
   }
   .start-top { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
   .start-top .apps-back { margin: 0; font-size: 1.9rem; line-height: 1; padding: 0 6px 4px 0; }
+  /* Clear: empties every address field to start over (shown only when there is something to clear) */
+  .start-clear {
+    height: 36px; flex-shrink: 0; padding: 0 14px; border-radius: 18px; background: none;
+    border: 2px solid var(--muted); color: var(--muted); font-weight: 700; font-size: .95rem;
+  }
+  .start-clear:active { color: var(--line); border-color: var(--line); }
   /* Compact address rows: a short tag on the left, the field, and (for To) a + for via points */
   .fld { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .fld .tag { width: 40px; flex-shrink: 0; color: var(--muted); font-weight: 700; font-size: .95rem; }
@@ -1164,6 +1170,7 @@
   <div class="start-top">
     <a class="apps-back" id="appsBack" href="./" aria-label="Back to apps" hidden>‹</a>
     <h1>EVailability</h1>
+    <button type="button" class="start-clear" id="clearStart" hidden>Clear</button>
     <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
   </div>
   <div class="svc-notice" id="svcNotice" role="status" hidden></div>
@@ -2021,7 +2028,7 @@ const HELP_I18N = {
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
     <li>Het scherm blijft aan tijdens het rijden. ${esc(T(awakeText()))} Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
     <li>Als je aankomt, is er een klein feestje, en daarna mag het scherm weer uit.</li>
-    <li><b>Nieuwe route</b> brengt je terug naar het startscherm.</li>
+    <li><b>Nieuwe route</b> brengt je terug naar het startscherm met je bestemming en viapunten nog ingevuld, zodat je er een kunt verbeteren en opnieuw plannen. <b>Wissen</b> rechtsboven maakt alle velden leeg om opnieuw te beginnen.</li>
   </ul>
 
   <div class="help-actions">
@@ -2099,7 +2106,7 @@ const HELP_I18N = {
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
     <li>O ecrã mantém-se ligado enquanto conduz. ${esc(T(awakeText()))} Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
     <li>Quando chega, há uma pequena celebração e o ecrã pode voltar a desligar-se.</li>
-    <li><b>Novo percurso</b> leva-o de volta ao ecrã inicial.</li>
+    <li><b>Novo percurso</b> leva-o de volta ao ecrã inicial com o destino e os pontos intermédios ainda preenchidos, para poder corrigir um e voltar a planear. <b>Limpar</b>, no canto superior direito, apaga todos os campos para recomeçar.</li>
   </ul>
 
   <div class="help-actions">
@@ -3059,6 +3066,7 @@ function updatePlanBtn() {
   const fromOk = !$("from").value.trim() || state.from;
   const viaOk = [1, 2].every((n) => $(`via${n}Row`).hidden || !$(`via${n}`).value.trim() || state[`via${n}`]);
   $("planBtn").disabled = !(state.to && fromOk && viaOk);
+  syncStartClear();
 }
 
 function showStartError(msg) { const p = $("startError"); p.textContent = msg; p.hidden = !msg; if (msg) setTimeout(refreshServiceNotice, 500); }
@@ -5099,22 +5107,55 @@ $("mySide").addEventListener("click", () => {
 syncMySide();
 
 $("newRoute").addEventListener("click", () => {
+  // Taken before the route is dropped: the start screen is filled from it (fillStartFromRoute).
+  const trip = { to: state.to, vias: state.vias || [], from: state.from, drivenKm: state.user?.km ?? 0 };
   state.stickToBottom = true;
   stopTracking();
   localStorage.removeItem(STORE_KEY);
   state.route = null; state.stations = [];
   state.arrived = false; state.wasAway = false;
   letSleep();
-  // A clean start screen: the fields and what they stand for are emptied together (before, a
-  // destination from an earlier route could still count while its field showed nothing).
-  // The previous places are one tap away in each field's history.
-  for (const k of ["to", "from", "via1", "via2"]) { state[k] = null; $(k).value = ""; $(`${k}Results`).innerHTML = ""; }
-  $("via1Row").hidden = true; $("via2Row").hidden = true; syncAddVia();
-  document.querySelectorAll(".clear-btn[data-for='to'], .clear-btn[data-for='from']").forEach((b) => { b.hidden = true; });
-  updatePlanBtn();
+  fillStartFromRoute(trip);
   $("drive").hidden = true; $("start").hidden = false; refreshServiceNotice();
   $("offRoute").hidden = true;
 });
+
+// Start screen fields. New route fills them from the trip you were on, so fixing a typo in the
+// destination or a via point is one change and Plan route; Clear empties them all to start over.
+// A field and what it stands for (state[k]) are always set together.
+const START_FIELDS = ["to", "from", "via1", "via2"];
+function setStartField(k, place) {
+  state[k] = place ? { ...place } : null;
+  $(k).value = place ? shortPlace(place.label) : "";
+  $(`${k}Results`).innerHTML = "";
+  if (k === "to" || k === "from") document.querySelector(`.clear-btn[data-for="${k}"]`).hidden = !place;
+}
+function syncStartClear() {
+  $("clearStart").hidden = $("via1Row").hidden && !START_FIELDS.some((k) => $(k).value.trim());
+}
+function clearStart() {
+  for (const k of START_FIELDS) setStartField(k, null);
+  $("via1Row").hidden = true; $("via2Row").hidden = true; syncAddVia();
+  updatePlanBtn();
+}
+function fillStartFromRoute({ to, vias, from, drivenKm }) {
+  clearStart();
+  if (!to) return;
+  setStartField("to", to);
+  // Your own via points still ahead, in driving order (passed ones were already dropped). A route
+  // option you picked is stored as an automatic via ("Chosen route"): not shown, so planning again
+  // offers the options anew.
+  const own = vias.filter((v) => v && !v.auto && Number.isFinite(v.lat));
+  // The screen reads bottom to top: the lower field (via2 when both are used) is driven first.
+  const rows = own.length >= 2 ? [["via2", own[0]], ["via1", own[1]]] : own.length ? [["via1", own[0]]] : [];
+  for (const [k, v] of rows) { $(`${k}Row`).hidden = false; setStartField(k, v); }
+  // A typed start only while you haven't driven off yet (fixing a mistake right after planning);
+  // once on the way, From stays empty so the new route starts where you are.
+  if (from && drivenKm < 2) setStartField("from", from);
+  syncAddVia(); updatePlanBtn();
+}
+$("clearStart").addEventListener("click", clearStart);
+for (const k of START_FIELDS) $(k).addEventListener("input", syncStartClear);
 
 function showBanner(text, { ok = false, retry = false, hideAfter = 0 } = {}) {
   clearTimeout(state.bannerTimer);
@@ -6412,7 +6453,7 @@ function helpHtml() {
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${esc(awakeText())} If it still turns off, check that Low Power Mode is off.</li>
     <li>When you arrive, there's a small celebration, and the screen may turn off again.</li>
-    <li><b>New route</b> takes you back to the start screen.</li>
+    <li><b>New route</b> takes you back to the start screen with your destination and via points still filled in, so you can fix one and plan again. <b>Clear</b> top right empties all fields to start over.</li>
   </ul>
 
   <div class="help-actions">

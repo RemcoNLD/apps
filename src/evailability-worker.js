@@ -30,6 +30,8 @@
 //   POST /admin/users           {action:"create", label} | {action:"regenerate"|"disable"|"enable"|"delete", id}
 //                               | {action:"set", id, active?, debug?} (the switches in the list)
 //   GET  /me                    who this key is: {name, debug, trial?} (debug: may use debug mode)
+//   GET  /service-status        public: {notices: [{id, text}]} for the start screen: your own notice
+//                               (setting serviceNotice) and, automatically, trouble at the route service
 //   GET  /self-service          public: {mode: "off"|"requests"|"trial"} (the lock screen's request link)
 //   POST /request               public: {email, name?, note?} → {pending, id, pickup} or, in trial mode, {token, …}
 //   GET  /request/status?id=&t= public: the asking device's pickup: {status} and {token} once approved,
@@ -62,7 +64,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-17.123";
+const WORKER_VERSION = "2026-11-17.124";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -261,6 +263,8 @@ function checkAdmin(request, env) {
 const SETTINGS = [
   { key: "paidUntil", type: "date", label: "Workers Paid until", def: () => "",
     help: "The last day of a Cloudflare Workers Paid period (Billing > Subscriptions, 'Ending on'). Until then: France updates by itself (every 2 minutes unless set below), a short pause after an error, more chargers ahead kept fresh, and the usage page shows the Paid allowances. After it everything returns to the free settings by itself. Empty: free plan." },
+  { key: "serviceNotice", type: "text", label: "Notice on the start screen", def: () => "",
+    help: "Shown at the top of the route planning screen for everyone, until you empty it. Trouble at the route service is announced there by itself (and goes away when it works again); this is for anything else, up to 200 characters." },
   { key: "selfService", type: "choice", options: ["off", "requests", "trial"], label: "Self-service keys", def: () => "off",
     help: "Off: the lock screen only asks for a key. Requests: people without a key can ask for one with their email; you approve them on the Users page. Trial: they get a trial key straight away (Netherlands only, slower updates, limited days and routes); a second trial on the same device or email becomes a request." },
   { key: "trialDays", type: "number", min: 1, max: 60, label: "Trial: days", def: () => 7,
@@ -335,7 +339,7 @@ async function handleSettings(request, env) {
       else if (d.type === "number") {
         v = Number(v);
         if (!Number.isFinite(v) || v < d.min || v > d.max) throw new HttpError(400, `${d.label}: ${d.min} to ${d.max}`);
-      } else v = String(v).trim().slice(0, 100);
+      } else v = String(v).trim().slice(0, d.key === "serviceNotice" ? 200 : 100);
       next[d.key] = v;
       if (d.key === "frGapMin") next.frGapPlan = isPaid(env) ? "paid" : "free"; // the plan it was entered under
     }
@@ -394,6 +398,8 @@ async function handleUsage(request, env) {
   });
 }
 
+// The Worker's env (bindings and secrets; the same for every request), for bookkeeping in fetchJson.
+let ENV_NOW = null;
 async function fetchJson(url, init = {}, label = "upstream") {
   // The routing service (openrouteservice) sometimes answers 500/502/503/504 for a moment ("There was
   // a problem proxying the request"): try again twice, after about 0.7 and 1.8 s, before giving up.
@@ -408,6 +414,7 @@ async function fetchJson(url, init = {}, label = "upstream") {
     countCall(`${label} retried`);
     await sleep(retries[attempt]);
   }
+  if (label === "Routing") noteRouteHealth(ENV_NOW, res.ok || res.status < 500).catch(() => {});
   if (!res.ok && label === "Routing" && res.status >= 500) {
     throw new HttpError(502, `The route service (openrouteservice) isn’t answering properly right now (${res.status}). It’s usually back within a few minutes; try again then.`);
   }
@@ -2667,7 +2674,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -2872,6 +2879,41 @@ async function handleUsers(request, env) {
 }
 const publicUser = (u) => ({ id: u.id, label: u.label, active: u.active !== false, debug: !!u.debug,
   trial: u.trial ? { until: u.trial.until, routes: u.trial.routes, used: u.trial.used || 0, extended: u.trial.extended || null } : null, emailEnc: u.emailEnc || null, created: u.created, keyMade: u.keyMade || u.created, gen: u.gen || 1 });
+
+// ---------------------------------------------------------------- service status (start-screen notice)
+// Trouble at the route service is noted in KV "health" only when it changes (works → failing, or
+// failing → working again at least 3 minutes after the last failure), so it costs a write now and then.
+// Without traffic it clears by itself 15 minutes after the last failure.
+const HEALTH_CLEAR_MS = 3 * 60 * 1000, HEALTH_STALE_MS = 15 * 60 * 1000;
+async function loadHealth(env) {
+  let h = memoGet("health");
+  if (h === undefined) { try { h = JSON.parse((await kvGet(env, "health")) || "{}"); } catch (_) { h = {}; } memoSet("health", h, 30 * 1000); }
+  return h;
+}
+async function noteRouteHealth(env, ok) {
+  if (!env?.USAGE) return;
+  const h = await loadHealth(env), now = Date.now();
+  const down = h.ors?.down;
+  let next = null;
+  if (!ok && !down) next = { down: true, since: now, lastFail: now };
+  else if (!ok && down && now - (h.ors.lastFail || 0) > 60 * 1000) next = { ...h.ors, lastFail: now }; // at most a write a minute
+  else if (ok && down && now - (h.ors.lastFail || 0) > HEALTH_CLEAR_MS) next = { down: false, since: now };
+  if (!next) return;
+  const nh = { ...h, ors: next };
+  memoSet("health", nh, 30 * 1000);
+  await env.USAGE.put("health", JSON.stringify(nh));
+  countCall("KV writes");
+}
+async function handleServiceStatus(request, env) {
+  const notices = [];
+  const own = String(setting(env, "serviceNotice") || "").trim();
+  if (own) notices.push({ id: "own", text: own });
+  const h = await loadHealth(env);
+  if (h.ors?.down && Date.now() - (h.ors.lastFail || 0) < HEALTH_STALE_MS) {
+    notices.push({ id: "ors", text: "We’re experiencing issues with the route service (openrouteservice), beyond our influence, that may affect your experience: planning a route can fail or take longer. It clears by itself once the service works again." });
+  }
+  return json(request, { notices });
+}
 
 // ---------------------------------------------------------------- self-service: requests and trials
 // With selfService on, the lock screen offers "No key? Request one": email, name, a note.
@@ -3156,6 +3198,7 @@ async function route(request, env) {
   if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders(request) });
   await loadSettings(env); // switches from the usage page (cached a minute); the old-code switch is one
   if (path === "/unlock" && request.method === "POST") return handleUnlock(request, env);
+  if (path === "/service-status" && request.method === "GET") return handleServiceStatus(request, env);
   if (path === "/self-service" && request.method === "GET") return json(request, { mode: selfServiceMode(env) });
   if (path === "/request" && request.method === "POST") return handleRequest(request, env);
   if (path === "/request/status" && request.method === "GET") return handleRequestStatus(request, env, url);
@@ -3414,6 +3457,7 @@ async function route(request, env) {
 
 export default {
   async fetch(request, env, ctx) {
+    ENV_NOW = env; // the same for every request of this Worker copy
     if (request.method !== "OPTIONS") countCall("Worker requests");
     // Save the tally after answering: straight away after planning (rare, many calls),
     // otherwise at most every 2 minutes. A new deploy discards anything not yet saved.

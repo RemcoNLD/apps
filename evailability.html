@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.146"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.147"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -648,6 +648,13 @@
   .intro-foot .primary { margin: 0; width: auto; padding: 14px 26px; }
 
   /* Lock screen: key, request / trial form, waiting, trial ended. One column, centred, calm. */
+  /* Service notice on the start screen: trouble at a service we depend on, or Remco's own notice */
+  .svc-notice { margin: 4px 0 12px; padding: 12px 14px 12px 44px; border-radius: 12px; position: relative; font-size: .95rem; line-height: 1.4;
+    background: color-mix(in srgb, var(--full) 12%, var(--asphalt-raised)); border: 1px solid color-mix(in srgb, var(--full) 40%, transparent); color: var(--line); }
+  .svc-notice::before { content: "!"; position: absolute; left: 14px; top: 12px; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--full); color: #1d2429; font-weight: 900; font-size: .85rem; line-height: 20px; text-align: center; }
+  .svc-notice p { margin: 0; }
+  .svc-notice p + p { margin-top: 8px; }
   /* Trial banner on the start screen */
   .trial-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 14px; padding: 10px 12px 10px 14px;
     border-radius: 12px; background: color-mix(in srgb, var(--full) 13%, var(--asphalt-raised)); border: 1px solid color-mix(in srgb, var(--full) 35%, transparent); font-size: .95rem; }
@@ -1134,6 +1141,7 @@
     <h1>EVailability</h1>
     <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
   </div>
+  <div class="svc-notice" id="svcNotice" role="status" hidden></div>
   <div class="trial-banner" id="trialBanner" hidden>
     <div><b>Trial</b> <span id="trialBannerText"></span></div>
     <button type="button" id="trialUpgrade">Get full access</button>
@@ -1961,6 +1969,25 @@ for (const id of ["askEmail", "askName", "askNote"]) $(id).addEventListener("inp
 });
 try { const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null"); if (d) { $("askEmail").value = d.e || ""; $("askName").value = d.n || ""; $("askNote").value = d.o || ""; } } catch (_) {}
 
+// Service notice on the start screen (Worker /service-status): trouble at the route service, noticed by
+// the Worker itself and gone once it works again, and Remco's own notice from the usage page. Asked when
+// the start screen shows, every 2 minutes while it does, and after a planning error.
+let svcTimer = null;
+async function refreshServiceNotice() {
+  try {
+    const d = await (await fetch(`${WORKER}/service-status`, { cache: "no-store" })).json();
+    const list = d.notices || [];
+    $("svcNotice").innerHTML = list.map((n) => `<p>${esc(n.text)}</p>`).join("");
+    $("svcNotice").hidden = !list.length;
+  } catch (_) { /* offline: leave as it was */ }
+}
+function watchServiceNotice() {
+  clearInterval(svcTimer);
+  refreshServiceNotice();
+  svcTimer = setInterval(() => { if (!$("start").hidden && !document.hidden) refreshServiceNotice(); }, 2 * 60000);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("start").hidden) refreshServiceNotice(); });
+
 // Trial banner on the start screen and the welcome after a trial starts.
 const UPGRADE_ASKED = "evailability-upgrade-asked"; // a full-access request is waiting
 function trialNow() { try { return accessToken() ? JSON.parse(localStorage.getItem(TRIAL_KEY) || "null") : null; } catch (_) { return null; } }
@@ -2153,7 +2180,7 @@ function updatePlanBtn() {
   $("planBtn").disabled = !(state.to && fromOk && viaOk);
 }
 
-function showStartError(msg) { const p = $("startError"); p.textContent = msg; p.hidden = !msg; }
+function showStartError(msg) { const p = $("startError"); p.textContent = msg; p.hidden = !msg; if (msg) setTimeout(refreshServiceNotice, 500); }
 
 // Where you are now for a new plan: the last fix if it's under 30 s old, otherwise asked again
 // (an old position would plan from where you were, e.g. still on the A28 after taking the N237).
@@ -4200,7 +4227,7 @@ $("newRoute").addEventListener("click", () => {
   $("via1Row").hidden = true; $("via2Row").hidden = true; syncAddVia();
   document.querySelectorAll(".clear-btn[data-for='to'], .clear-btn[data-for='from']").forEach((b) => { b.hidden = true; });
   updatePlanBtn();
-  $("drive").hidden = true; $("start").hidden = false;
+  $("drive").hidden = true; $("start").hidden = false; refreshServiceNotice();
   $("offRoute").hidden = true;
 });
 
@@ -5712,6 +5739,7 @@ function boot() {
   booted = true;
   restore();
   renderTrialBanner();
+  watchServiceNotice();
   refreshMe();
   if (!localStorage.getItem(INTRO_KEY)) showIntro();
 }

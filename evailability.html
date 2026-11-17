@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.155"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.156"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1980,42 +1980,43 @@ const I18N_PATTERNS = [["^Arrive (.+)$", "Aankomst $1", "Chegada $1"], ["^Signed
 // the ${…} bits (rings, marks, settings) are filled in the same way.
 const HELP_I18N = {
   nl: (dot) => `
-  <p>Snelladers langs je route, met hoeveel er vrij zijn en hoeveel je voor elk moet omrijden.</p>
+  <p>Snelladers langs je route, met hoeveel er nu vrij zijn en hoeveel je voor elk moet omrijden.</p>
 
   <h3>Een route plannen</h3>
   <ul>
     <li><b>Naar</b>: een plaats of adres. <b>Van</b> leeg laten betekent: waar je nu bent. Het <b>×</b> maakt een veld leeg.</li>
-    <li>Tik op een veld voor de <b>plaatsen die je eerder gebruikte</b> (als vertrek, via of bestemming), de laatste tien; typ om ze te filteren. Het × ernaast vergeet er een.</li>
-    <li><b>+</b> naast Naar voegt een <b>viapunt</b> toe (maximaal twee), om je eigen weg te kiezen, bijvoorbeeld via Luxemburg in plaats van Brussel. Het × op een viapunt haalt het weg. Het scherm leest van onder naar boven, zoals je rit (Van, viapunten, Naar): een nieuw viapunt komt direct onder Naar, dus voer ze in de volgorde in waarin je ze passeert. Een <b>plaats</b> als viapunt wordt gepasseerd over de hoofdweg die er het dichtst bij ligt (via Dordrecht = de N3/A16 bij Dordrecht, niet het centrum); naar een <b>straatadres</b> wordt precies gereden.</li>
+    <li>Tik op een veld voor de laatste tien <b>plaatsen die je gebruikte</b>; typ om ze te filteren. Het × ernaast vergeet er een.</li>
+    <li><b>+</b> naast Naar voegt een <b>viapunt</b> toe (maximaal twee), bijvoorbeeld via Luxemburg in plaats van Brussel. Het scherm leest van onder naar boven, zoals je rit: een nieuw viapunt komt direct onder Naar, dus voer ze in de volgorde in waarin je ze passeert. Een <b>plaats</b> als viapunt wordt gepasseerd over de hoofdweg die er het dichtst bij ligt; naar een <b>straatadres</b> wordt precies gereden. Het × op een viapunt haalt het weg.</li>
     <li>Zonder viapunt krijg je <b>routes om uit te kiezen</b>, met hun hoofdwegen en de steden onderweg.</li>
-    <li><b>Laders</b>: de merken om naar te zoeken. Alleen snelladers (50 kW en meer) worden getoond. Live vrije plekken in Nederland, Duitsland en Oostenrijk; elders alleen locatie en omrijden.</li>
+    <li><b>Laders</b>: de merken om naar te zoeken, en het laadvermogen dat je wilt (zie Laadvermogen).</li>
     <li><b>Rit simuleren</b>: rijdt de route voor je, versneld, om de app thuis uit te proberen.</li>
   </ul>
 
   <h3>Het scherm tijdens het rijden</h3>
-  <p>Je bestemming staat bovenaan, jij onderaan, en de laders daartussen in routevolgorde. Elke rij toont de afstand en rijtijd van waar je bent tot de lader zelf (bij een lader na een afrit of aan de overkant inclusief het stuk erheen en het keren), en het maximale vermogen van de lader (<span class="kw">${BOLT}</span>).</p>
-  <p>Elke hoofdweg tot je bestemming staat op de lijn, in de stijl van de borden in dat land, ook stukken zonder lader: elk toont hoe ver vooruit hij begint en hoe lang hij is (↕). De weg waarop je rijdt staat direct boven je. Wil je deze rijen niet? Zet in de merkenknop (linksboven) <b>Hoofdwegen op de lijn</b> op <b>Alleen wisselingen</b>, of tik gewoon op een wegrij (tik op een wegnummer op de lijn om ze terug te halen): dan staat er alleen een wegnummer op de lijn waar de weg tussen laders verandert. Bovenaan staan de weg waarop je rijdt en de volgende twee; een weg verdwijnt als je zijn einde passeert.</p>
-  <p>Het <b>☰ menu</b> linksboven bevat Route wijzigen en Help. Rechtsboven staat de <b>statustijd</b> van de laders (nu, of hoeveel minuten oud; tik erop om bij te werken, hoogstens één keer per minuut, maar na een mislukte update één keer meteen).</p>
-  <p>Jouw eigen rij toont de <b>volgende afslag</b>: een grote pijl op de plek van je positiepijl, de aftellende afstand en de weg die je op gaat. Een rotonde wordt getekend met de afslag waar de weg echt vertrekt en het afslagnummer in het midden ("2e afslag", of "rechtdoor"). In de laatste 500 m pulseert de hele rij: een witte band veegt erover in de richting van je afslag (van links naar rechts voor rechts, van rechts naar links voor links), en bij rechtdoor faadt de hele rij tussen zwart en wit. Hij veegt ongeveer één keer per seconde terwijl je rijdt en twee keer zo snel in de laatste 50 m; als je stilstaat (een verkeerslicht) veegt hij nog drie keer en blijft dan wit staan tot je wegrijdt. Een "links/rechts aanhouden" waarbij je gewoon op dezelfde snelweg blijft, wordt niet getoond. Op een snelweg telt rechts de <b>volgende afrit</b> aan jouw kant af, met nummer en naam; ga je bij die afrit eraf, dan komt het nummer bij de afslag te staan. De onderste regel van het scherm toont een kompas (in je rijrichting), de tijd van de laatste locatie-update en het wegnummer met de eerstvolgende afrit of plaats (A17 Zevenbergen), of op kleinere wegen de plaats en straat. Met de debugregel aan zie je in plaats daarvan je coördinaten, richting en GPS-nauwkeurigheid, en elke geplande route wordt 30 dagen bewaard onder het id na # op de debugregel. Op een hoofdweg wordt hij bij elke GPS-meting bijgewerkt; op kleinere wegen na een afslag (60° of meer binnen een minuut), elke 2 km en als je op je rij tikt.</p>
+  <p>Je bestemming staat bovenaan, jij onderaan, en de laders daartussen in de volgorde waarin je ze tegenkomt. Elke rij toont de afstand en rijtijd tot de lader zelf (na een afrit of aan de overkant inclusief het stuk erheen en het keren) en het maximale vermogen (<span class="kw">${BOLT}</span>).</p>
+  <p>Ook de hoofdwegen tot je bestemming staan op de lijn, in de stijl van de borden in dat land, elk met hoe ver vooruit hij begint en hoe lang hij is (↕). Bovenaan staan de weg waarop je rijdt en de volgende twee. Liever minder rijen? Tik op een wegrij, of zet in de merkenknop (linksboven) <b>Hoofdwegen op de lijn</b> op <b>Alleen wisselingen</b>: dan staat er alleen een wegnummer waar de weg verandert. Tik op een wegnummer op de lijn om de rijen terug te halen.</p>
+  <p>Het <b>☰ menu</b> linksboven bevat Route wijzigen en Help. Rechtsboven staat hoe oud de <b>status van de laders</b> is; tik erop om bij te werken.</p>
+  <p>Jouw eigen rij toont de <b>volgende afslag</b>: een grote pijl, de aftellende afstand en de weg die je op gaat. Bij een rotonde zie je welke afslag je neemt. In de laatste 500 m pulseert de rij in de richting van je afslag. Op een snelweg telt rechts de <b>volgende afrit</b> aan jouw kant af.</p>
+  <p>De onderste regel toont een kompas, de tijd van je laatste locatie-update, en de weg waarop je rijdt met de eerstvolgende afrit of plaats (bijvoorbeeld A17 Zevenbergen), of op kleinere wegen de plaats en straat.</p>
 
   <h3>Wegafsluitingen</h3>
-  <p>Geplande afsluitingen in Nederland en Duitsland staan als rode rij op de lijn (<b>A1 afgesloten · Dortmund/Unna – Kamener Kreuz</b>), alleen als ze op je route liggen, in jouw richting, en gelden rond het moment dat je er bent: met de afstand en tot wanneer hij dicht is. Afsluitingen in de andere richting, rijstrookafsluitingen en afsluitingen alleen voor vrachtwagens worden niet getoond. <b>Vermijden</b> plant een nieuwe route eromheen; met meer dan één afsluiting vooruit heet de knop <b>Alles vermijden</b> en gaat hij om allemaal tegelijk heen (maximaal 10). Dat blijft zo voor deze rit (ook als je een nieuwe route krijgt) tot je een nieuwe route plant. De routeplanner zelf kent deze afsluitingen niet: zonder Vermijden gaat de route er nog steeds doorheen. De afsluitingen worden elke paar uur bijgewerkt. Straten in de bebouwde kom zitten er niet bij. Konden de afsluitingen niet worden geladen, of zijn ze langer niet bijgewerkt dan zou moeten, dan meldt een bericht dat na het plannen.</p>
+  <p>Geplande afsluitingen in Nederland en Duitsland staan als rode rij op de lijn (<b>A1 afgesloten · Dortmund/Unna – Kamener Kreuz</b>), met de afstand en tot wanneer hij dicht is. Alleen afsluitingen op je route, in jouw richting en geldig als je er bent worden getoond; rijstrookafsluitingen en afsluitingen alleen voor vrachtwagens niet. <b>Vermijden</b> plant een nieuwe route eromheen; met meer dan één afsluiting vooruit gaat <b>Alles vermijden</b> om allemaal tegelijk heen. Dat blijft zo voor de rest van deze rit, ook als je een nieuwe route krijgt. Zonder Vermijden gaat je route er nog steeds doorheen. Afsluitingen worden elke paar uur bijgewerkt; straten in de bebouwde kom zitten er niet bij. Konden ze niet worden geladen, dan meldt een bericht dat na het plannen.</p>
 
   <h3>Vrij of niet</h3>
   <div class="legend">
-    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 vrij.</b> De ring toont alle laders op de locatie, één segment per lader: <b style="color:var(--free)">groen</b> vrij, <b style="color:var(--danger)">rood</b> in gebruik, een grijze omlijning buiten gebruik: hij is er, maar werkt niet (hier 3 vrij, 4 in gebruik, 1 kapot van de 8). Houd ingedrukt voor de aantallen.</div>
+    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 vrij.</b> De ring heeft één segment per lader op de locatie: <b style="color:var(--free)">groen</b> vrij, <b style="color:var(--danger)">rood</b> in gebruik, een grijze omlijning buiten gebruik (hier 3 vrij, 4 in gebruik en 1 buiten gebruik, van de 8). Houd ingedrukt voor de aantallen.</div>
     <div class="k">${demoRing(0, 4)}</div><div class="v">Alles bezet.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Uit</b>: gemeld als buiten gebruik, of er is al uren niets veranderd.</div>
-    <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grijs met ?</b>: waarschijnlijk niet live. De bron heeft op deze locatie al meer dan een dag niets veranderd (3 dagen bij kleine locaties), dus het getal is de laatste melding en kan fout zijn. De stip op de lijn is hol.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> nog niet gecontroleerd, tik om te controleren. Een vervaagde ring en grijs getal zijn meer dan 3 minuten oud; een grijze ring en omlijnd getal meer dan 5 minuten. De stip op de lijn houdt zijn kleur. Frankrijk wordt alleen bijgewerkt als je op een Franse lader tikt: dan worden alle Franse laders op de route bijgewerkt, hoogstens eens per paar minuten (5, of 2 als de server op het betaalde plan van Cloudflare draait, en dan werkt Frankrijk zichzelf ook bij). België wordt per locatie bijgewerkt als je erop tikt: de snellaadpunten worden één voor één gecontroleerd, elk ongeveer 10 seconden, en de ring vult zich terwijl ze binnenkomen (gestreepte segmenten zijn nog niet gecontroleerd, vaag omlijnde gaven geen bruikbare status); hoogstens eens per minuut per locatie. Een draaiende veeg in de stip betekent dat hij bijwerkt, en een getal dat verandert springt even op.</div>
-    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">Geen live gegevens voor deze lader (voorlopig België en Frankrijk).</div>
+    <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grijs met ?</b>: waarschijnlijk niet live. Er is op deze locatie al meer dan een dag niets veranderd (3 dagen bij kleine locaties), dus het getal kan verouderd zijn. De stip op de lijn is hol.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> nog niet gecontroleerd: tik om te controleren. Een vervaagde ring met grijs getal is meer dan 3 minuten oud; een grijze ring met omlijnd getal meer dan 5 minuten. Een draaiende veeg in de stip betekent dat hij bijwerkt; een getal dat verandert springt even op.</div>
+    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">Geen live gegevens voor deze lader.</div>
   </div>
-  <p>De locaties van laders komen uit Open Charge Map, en in Nederland ook uit de nationale open data (NDW), zodat locaties die in Open Charge Map ontbreken kort na het plannen verschijnen. Live status komt uit de nationale open data in Nederland, Duitsland en Oostenrijk. De laders op het scherm worden elke minuut bijgewerkt; <b>tik op een lader</b> om hem nu bij te werken. Rechtsonder staat hoe oud de status is, of een draaiende ring tijdens het bijwerken.</p>
-  <p>Een lader die nu vrij is, is geen garantie dat hij nog vrij is als je aankomt.</p>
+  <p>Het aantal telt alleen laders met het gekozen vermogen of meer. In Nederland, Duitsland en Oostenrijk worden de laders op het scherm elke minuut bijgewerkt; <b>tik op een lader</b> om hem nu bij te werken (hoogstens eens per minuut). Sommige laders verschijnen kort na het plannen.</p>
+  <p><b>Frankrijk</b> wordt bijgewerkt als je op een Franse lader tikt: dan worden alle Franse laders op je route tegelijk bijgewerkt, hoogstens eens per paar minuten. <b>België</b> wordt per locatie bijgewerkt als je erop tikt: de laders worden één voor één gecontroleerd, elk ongeveer 10 seconden, en de ring vult zich terwijl ze binnenkomen (gestreept: nog niet gecontroleerd; vaag omlijnd: geen bruikbare status).</p>
+  <p>Een lader die nu vrij is, is misschien niet meer vrij als je aankomt.</p>
 
-  <h3>Geen verbinding en fouten</h3>
+  <h3>Geen verbinding</h3>
   <p>Zonder internet (vliegtuigmodus, geen bereik) meldt een grijs bericht boven je locatie dat, en rechtsboven staat <b>Status offline</b>. De laders houden hun laatst bekende status, je positie en de route blijven werken, en alles wordt vanzelf bijgewerkt zodra je weer online bent.</p>
-  <p>Met de debugregel aan (hieronder) worden ook fouten getoond (een opzoeking die mislukte, geen GPS-meting): er verschijnt een rood bericht <b>onder je positie</b>. Nieuwe sluiten erachter aan (de rode <b>+N</b> toont hoeveel er wachten); dezelfde fout nog eens telt alleen op (×3). <b>Tik op het bericht</b> als je het gelezen hebt om het volgende te zien, of op <b>×</b> om ze allemaal te wissen.</p>
 
   <h3>Omrijden</h3>
   <div class="legend">
@@ -2027,21 +2028,21 @@ const HELP_I18N = {
   <p><b>Makkelijk bereikbaar</b> verbergt de heen-en-terugritten en houdt de laders aan jouw kant plus die met kort omrijden.</p>
 
   <h3>Laadvermogen</h3>
-  <p>Kies <b>Snel</b> (50 kW en meer), <b>Extra snel</b> (150 kW en meer) of <b>HPC</b> (300 kW en meer) op het startscherm of onder de merklogo's; Extra snel tot je iets anders kiest. Het filtert meteen, zonder opnieuw te plannen. Meldt de live data een lager maximum dan de vermelding van de lader, dan telt de live waarde. Staat het hoger dan Snel, dan toont de merkenknop het minimum (bijv. <b>150+</b>).</p>
+  <p>Kies <b>Snel</b> (50 kW en meer), <b>Extra snel</b> (150 kW en meer) of <b>HPC</b> (300 kW en meer) op het startscherm of onder de merklogo's. Het filtert meteen, zonder opnieuw te plannen. Hoger dan Snel toont de merkenknop het minimum (bijv. <b>150+</b>).</p>
   <p>Op een verzorgingsplaats komen de laders aan jouw kant eerst; die aan de overkant volgen, met de afstand inclusief het keren.</p>
 
   <h3>Merken</h3>
-  <p>Locaties met meerdere merken delen één rij, met rechts een ring per merk. Tik bovenaan op de <b>logo's</b> om de merken op je route meteen te verbergen of te tonen. Voeg je een merk toe dat niet op de route stond, dan wordt de route opnieuw gepland vanaf waar je bent.</p>
+  <p>Locaties met meerdere merken delen één rij, met rechts een ring per merk. Tik bovenaan op de <b>logo's</b> om merken op je route meteen te verbergen of te tonen. Voeg je een merk toe dat niet op de route stond, dan wordt de route opnieuw gepland vanaf waar je bent.</p>
 
   <h3>Onderweg</h3>
   <ul>
     <li><b>Scroll omhoog</b> voor laders verder vooruit. De blauwe pijl brengt je terug naar de volgende.</li>
     <li><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent.</li>
-    <li><b>Tik op een lader</b> om zijn status bij te werken (hoogstens eens per minuut; een lader zonder bruikbare status kan één keer meteen opnieuw). <b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps of Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
+    <li><b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps, Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
-    <li>Het scherm blijft aan tijdens het rijden. ${esc(T(awakeText()))} Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
-    <li>Als je aankomt, is er een klein feestje, en daarna mag het scherm weer uit.</li>
-    <li><b>Route wijzigen</b> brengt je naar het startscherm met je bestemming en viapunten nog ingevuld, zodat je er een kunt verbeteren en opnieuw plannen. <b>‹ Route</b> linksboven brengt je ongewijzigd terug naar je route. <b>Wissen</b> rechtsboven maakt alle velden leeg om opnieuw te beginnen.</li>
+    <li>Het scherm blijft aan tijdens het rijden. ${screenAwake() ? "" : "Op dit moment kan het uitgaan: tik tijdens het rijden één keer op het scherm. "}Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
+    <li>Als je aankomt, is er een klein feestje.</li>
+    <li><b>Route wijzigen</b> brengt je naar het startscherm met je bestemming en viapunten nog ingevuld, zodat je er een kunt aanpassen en opnieuw plannen. <b>‹ Route</b> linksboven brengt je ongewijzigd terug naar je route; <b>Wissen</b> rechtsboven maakt alle velden leeg.</li>
   </ul>
 
   <div class="help-actions">
@@ -2058,42 +2059,43 @@ const HELP_I18N = {
   </div>`,
 
   pt: (dot) => `
-  <p>Carregadores rápidos no seu percurso, com quantos estão livres e quanto desvio exige cada um.</p>
+  <p>Carregadores rápidos no seu percurso, com quantos estão livres neste momento e quanto desvio exige cada um.</p>
 
   <h3>Planear um percurso</h3>
   <ul>
     <li><b>Para</b>: uma localidade ou morada. <b>De</b> vazio significa onde está agora. O <b>×</b> limpa um campo.</li>
-    <li>Toque num campo para ver os <b>locais que usou antes</b> (como partida, ponto intermédio ou destino), os últimos dez; escreva para os filtrar. O × ao lado de um esquece-o.</li>
-    <li><b>+</b> ao lado de Para adiciona um <b>ponto intermédio</b> (até dois), para escolher o seu próprio caminho, por exemplo pelo Luxemburgo em vez de Bruxelas. O × num ponto intermédio remove-o. O ecrã lê-se de baixo para cima, como a sua viagem (De, pontos intermédios, Para): um novo ponto intermédio fica logo abaixo de Para, por isso introduza-os pela ordem em que vai passar por eles. Uma <b>localidade</b> como ponto intermédio é passada pela estrada principal mais próxima (por Dordrecht = a N3/A16 junto a Dordrecht, não o centro); a uma <b>morada</b> vai-se exatamente.</li>
+    <li>Toque num campo para ver os últimos dez <b>locais que usou</b>; escreva para os filtrar. O × ao lado de um esquece-o.</li>
+    <li><b>+</b> ao lado de Para adiciona um <b>ponto intermédio</b> (até dois), por exemplo pelo Luxemburgo em vez de Bruxelas. O ecrã lê-se de baixo para cima, como a sua viagem: um novo ponto intermédio fica logo abaixo de Para, por isso introduza-os pela ordem em que vai passar por eles. Uma <b>localidade</b> como ponto intermédio é passada pela estrada principal mais próxima; a uma <b>morada</b> vai-se exatamente. O × num ponto intermédio remove-o.</li>
     <li>Sem ponto intermédio, recebe <b>percursos à escolha</b>, com as estradas principais e as cidades pelo caminho.</li>
-    <li><b>Carregadores</b>: as marcas a procurar. Só são mostrados carregadores rápidos (50 kW ou mais). Lugares livres em direto nos Países Baixos, Alemanha e Áustria; noutros países só localização e desvio.</li>
+    <li><b>Carregadores</b>: as marcas a procurar e a potência de carregamento que pretende (ver Potência de carregamento).</li>
     <li><b>Simular a viagem</b>: faz o percurso por si, acelerado, para experimentar a app em casa.</li>
   </ul>
 
   <h3>O ecrã durante a condução</h3>
-  <p>O seu destino está em cima, você em baixo, e os carregadores pelo meio, pela ordem do percurso. Cada linha mostra a distância e o tempo de condução desde onde está até ao próprio carregador (para um carregador depois de uma saída ou do outro lado da estrada, incluindo o caminho até lá e a inversão de marcha) e a potência máxima do carregador (<span class="kw">${BOLT}</span>).</p>
-  <p>Todas as estradas principais até ao destino estão na linha, com o estilo da sinalização de cada país, incluindo troços sem carregadores: cada uma mostra a que distância começa e quanto mede (↕). A estrada em que está fica logo acima de si. Não quer estas linhas? No botão das marcas (canto superior esquerdo), defina <b>Estradas principais na linha</b> como <b>Só mudanças</b>, ou toque simplesmente numa linha de estrada (toque num número de estrada na linha para as voltar a mostrar): fica então um número na linha apenas onde a estrada muda entre carregadores. Em cima aparece a estrada em que está e as duas seguintes; uma estrada desaparece quando passa o seu fim.</p>
-  <p>O <b>menu ☰</b> no canto superior esquerdo tem Alterar percurso e Ajuda. No canto superior direito está a <b>hora do estado</b> dos carregadores (agora, ou há quantos minutos; toque para atualizar, no máximo uma vez por minuto, mas logo uma vez após uma atualização falhada).</p>
-  <p>A sua própria linha mostra a <b>próxima manobra</b>: uma seta grande no lugar da sua seta de posição, a distância a diminuir e a estrada para onde vira. Uma rotunda é desenhada com a saída onde a estrada realmente sai e o número da saída no meio ("2.ª saída", ou "em frente"). Nos últimos 500 m toda a linha pulsa: uma faixa branca passa por ela no sentido da manobra (da esquerda para a direita para a direita, da direita para a esquerda para a esquerda) e, em frente, toda a linha alterna suavemente entre preto e branco. Passa cerca de uma vez por segundo enquanto conduz e duas vezes mais depressa nos últimos 50 m; quando está parado (um semáforo), passa mais três vezes e depois fica branca até arrancar. Um "manter à esquerda/direita" em que simplesmente continua na mesma autoestrada não é mostrado. Numa autoestrada, a <b>próxima saída</b> do seu lado conta para trás à direita, com número e nome; se sair nessa saída, o número passa para a manobra. A linha de baixo do ecrã mostra uma bússola (no sentido em que conduz), a hora da última atualização de localização e o número da estrada com a saída ou localidade seguinte (A17 Zevenbergen), ou em estradas menores a localidade e a rua. Com a linha de depuração ligada, mostra em vez disso as coordenadas, a direção e a precisão do GPS, e cada percurso planeado fica guardado 30 dias com o id após # na linha de depuração. Numa estrada principal atualiza a cada posição GPS; em estradas menores após uma viragem (60° ou mais num minuto), a cada 2 km e quando toca na sua linha.</p>
+  <p>O seu destino está em cima, você em baixo, e os carregadores pelo meio, pela ordem em que os encontra. Cada linha mostra a distância e o tempo de condução até ao próprio carregador (depois de uma saída ou do outro lado da estrada, incluindo o caminho até lá e a inversão de marcha) e a potência máxima (<span class="kw">${BOLT}</span>).</p>
+  <p>As estradas principais até ao destino também estão na linha, com o estilo da sinalização de cada país, cada uma com a que distância começa e quanto mede (↕). Em cima aparece a estrada em que está e as duas seguintes. Prefere menos linhas? Toque numa linha de estrada, ou no botão das marcas (canto superior esquerdo) defina <b>Estradas principais na linha</b> como <b>Só mudanças</b>: o número da estrada só aparece onde a estrada muda. Toque num número de estrada na linha para voltar a mostrar as linhas.</p>
+  <p>O <b>menu ☰</b> no canto superior esquerdo tem Alterar percurso e Ajuda. No canto superior direito vê a idade do <b>estado dos carregadores</b>; toque para atualizar.</p>
+  <p>A sua própria linha mostra a <b>próxima manobra</b>: uma seta grande, a distância a diminuir e a estrada para onde vira. Numa rotunda vê qual a saída a tomar. Nos últimos 500 m a linha pulsa no sentido da manobra. Numa autoestrada, a <b>próxima saída</b> do seu lado conta para trás à direita.</p>
+  <p>A linha de baixo mostra uma bússola, a hora da última atualização de localização e a estrada em que está com a saída ou localidade seguinte (por exemplo A17 Zevenbergen), ou em estradas menores a localidade e a rua.</p>
 
   <h3>Cortes de estrada</h3>
-  <p>Os cortes planeados nos Países Baixos e na Alemanha aparecem na linha como uma linha vermelha (<b>A1 cortada · Dortmund/Unna – Kamener Kreuz</b>), só quando estão no seu percurso, no seu sentido e em vigor por volta da hora a que lá chega: com a distância e até quando está cortada. Cortes no outro sentido, cortes de faixas e cortes só para camiões não são mostrados. <b>Evitar</b> planeia um novo percurso a contorná-lo; com mais de um corte à frente o botão diz <b>Evitar todos</b> e contorna-os todos de uma vez (até 10). Isso mantém-se nesta viagem (também quando o percurso é recalculado) até planear um novo percurso. O serviço de rotas não conhece estes cortes: sem Evitar, o percurso continua a passar por lá. Os cortes são atualizados de poucas em poucas horas. Ruas dentro das localidades não estão incluídas. Se os cortes não puderam ser carregados, ou não são atualizados há mais tempo do que deviam, uma nota avisa depois de planear.</p>
+  <p>Os cortes planeados nos Países Baixos e na Alemanha aparecem na linha como uma linha vermelha (<b>A1 cortada · Dortmund/Unna – Kamener Kreuz</b>), com a distância e até quando está cortada. Só são mostrados cortes no seu percurso, no seu sentido e em vigor quando lá chegar; cortes de faixas e cortes só para camiões não. <b>Evitar</b> planeia um novo percurso a contorná-lo; com mais de um corte à frente, <b>Evitar todos</b> contorna-os todos de uma vez. Isso mantém-se no resto desta viagem, também quando o percurso é recalculado. Sem Evitar, o percurso continua a passar pelo corte. Os cortes são atualizados de poucas em poucas horas; ruas dentro das localidades não estão incluídas. Se não puderam ser carregados, uma nota avisa depois de planear.</p>
 
   <h3>Livre ou não</h3>
   <div class="legend">
-    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 livres.</b> O anel mostra todos os carregadores do local, um segmento cada: <b style="color:var(--free)">verde</b> livre, <b style="color:var(--danger)">vermelho</b> em uso, um contorno cinzento avariado: está lá, mas não funciona (aqui 3 livres, 4 em uso, 1 avariado de 8). Mantenha premido para ver os números.</div>
+    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 livres.</b> O anel tem um segmento por carregador do local: <b style="color:var(--free)">verde</b> livre, <b style="color:var(--danger)">vermelho</b> em uso, um contorno cinzento avariado (aqui 3 livres, 4 em uso e 1 avariado, de 8). Mantenha premido para ver os números.</div>
     <div class="k">${demoRing(0, 4)}</div><div class="v">Tudo ocupado.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Desligado</b>: indicado como avariado, ou nada mudou há horas.</div>
-    <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Cinzento com ?</b>: provavelmente não está em direto. A fonte não alterou nada neste local há mais de um dia (3 dias em locais pequenos), por isso o número é o último registo e pode estar errado. O ponto na linha fica oco.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> ainda não verificado, toque para verificar. Um anel esbatido e número cinzento têm mais de 3 minutos; um anel cinzento e número contornado mais de 5 minutos. O ponto na linha mantém a cor. A França só é atualizada quando toca num carregador francês: isso atualiza todos os carregadores franceses do percurso, no máximo de poucos em poucos minutos (5, ou 2 enquanto o servidor estiver no plano pago da Cloudflare, quando a França também se atualiza sozinha). A Bélgica é atualizada um local de cada vez quando toca nele: os postos rápidos são verificados um a um, cerca de 10 segundos cada, e o anel vai-se preenchendo (segmentos tracejados ainda não verificados, contornos ténues verificados mas sem estado utilizável); no máximo uma vez por minuto por local. Uma rotação no ponto significa que está a atualizar, e um número que muda salta brevemente.</div>
-    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">Sem dados em direto para este carregador (Bélgica e França, por agora).</div>
+    <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Cinzento com ?</b>: provavelmente não está em direto. Nada mudou neste local há mais de um dia (3 dias em locais pequenos), por isso o número pode estar desatualizado. O ponto na linha fica oco.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> ainda não verificado: toque para verificar. Um anel esbatido com número cinzento tem mais de 3 minutos; um anel cinzento com número contornado mais de 5 minutos. Uma rotação no ponto significa que está a atualizar; um número que muda salta brevemente.</div>
+    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">Sem dados em direto para este carregador.</div>
   </div>
-  <p>As localizações dos carregadores vêm do Open Charge Map e, nos Países Baixos, também dos dados abertos nacionais (NDW), por isso locais em falta no Open Charge Map aparecem pouco depois de planear. O estado em direto vem dos dados abertos nacionais nos Países Baixos, Alemanha e Áustria. Os carregadores no ecrã atualizam a cada minuto; <b>toque num carregador</b> para o atualizar já. No canto inferior direito vê a idade do estado, ou um anel a rodar enquanto atualiza.</p>
-  <p>Um carregador livre agora não garante que ainda esteja livre quando chegar.</p>
+  <p>A contagem só inclui carregadores com a potência escolhida ou mais. Nos Países Baixos, Alemanha e Áustria, os carregadores no ecrã atualizam a cada minuto; <b>toque num carregador</b> para o atualizar já (no máximo uma vez por minuto). Alguns carregadores aparecem pouco depois de planear.</p>
+  <p>A <b>França</b> é atualizada quando toca num carregador francês: isso atualiza todos os carregadores franceses do percurso de uma vez, no máximo de poucos em poucos minutos. A <b>Bélgica</b> é atualizada um local de cada vez quando toca nele: os carregadores são verificados um a um, cerca de 10 segundos cada, e o anel vai-se preenchendo (tracejado: ainda não verificado; contorno ténue: sem estado utilizável).</p>
+  <p>Um carregador livre agora pode já não estar livre quando chegar.</p>
 
-  <h3>Sem ligação e erros</h3>
+  <h3>Sem ligação</h3>
   <p>Sem internet (modo de avião, sem rede) uma nota cinzenta acima da sua localização avisa, e no canto superior direito aparece <b>Estado offline</b>. Os carregadores mantêm o último estado conhecido, a sua posição e o percurso continuam a funcionar, e tudo se atualiza sozinho quando voltar a estar online.</p>
-  <p>Com a linha de depuração ligada (abaixo), os erros também são mostrados (uma consulta falhada, sem posição GPS): aparece uma mensagem vermelha <b>abaixo da sua posição</b>. As novas ficam em fila (o <b>+N</b> vermelho mostra quantas esperam); o mesmo erro outra vez só aumenta a contagem (×3). <b>Toque na mensagem</b> depois de a ler para ver a seguinte, ou em <b>×</b> para as limpar todas.</p>
 
   <h3>Desvios</h3>
   <div class="legend">
@@ -2105,21 +2107,21 @@ const HELP_I18N = {
   <p><b>Fácil acesso</b> oculta as idas e voltas e mantém os carregadores do seu lado e os com desvio curto.</p>
 
   <h3>Potência de carregamento</h3>
-  <p>Escolha <b>Rápido</b> (50 kW ou mais), <b>Extra rápido</b> (150 kW ou mais) ou <b>HPC</b> (300 kW ou mais) no ecrã inicial ou por baixo dos logótipos das marcas; Extra rápido até escolher outro. Filtra logo, sem voltar a planear. Quando os dados em direto indicam um máximo inferior ao anunciado pelo carregador, conta o valor em direto. Acima de Rápido, o botão das marcas mostra o mínimo (p. ex. <b>150+</b>).</p>
+  <p>Escolha <b>Rápido</b> (50 kW ou mais), <b>Extra rápido</b> (150 kW ou mais) ou <b>HPC</b> (300 kW ou mais) no ecrã inicial ou por baixo dos logótipos das marcas. Filtra logo, sem voltar a planear. Acima de Rápido, o botão das marcas mostra o mínimo (p. ex. <b>150+</b>).</p>
   <p>Numa área de serviço, os carregadores do seu lado aparecem primeiro; os do outro lado vêm a seguir, com a distância incluindo a inversão de marcha.</p>
 
   <h3>Marcas</h3>
-  <p>Locais com várias marcas partilham uma linha, com um anel por marca à direita. Toque nos <b>logótipos</b> em cima para ocultar ou mostrar já as marcas do seu percurso. Adicionar uma marca que não estava no percurso volta a planear a partir de onde está.</p>
+  <p>Locais com várias marcas partilham uma linha, com um anel por marca à direita. Toque nos <b>logótipos</b> em cima para ocultar ou mostrar já marcas do seu percurso. Adicionar uma marca que não estava no percurso volta a planear a partir de onde está.</p>
 
   <h3>Pelo caminho</h3>
   <ul>
     <li><b>Deslize para cima</b> para ver carregadores mais à frente. A seta azul leva-o de volta aos próximos.</li>
     <li><b>Toque no destino</b> para comparar outros percursos a partir de onde está.</li>
-    <li><b>Toque num carregador</b> para atualizar o seu estado (no máximo uma vez por minuto; um carregador sem estado utilizável pode ser tocado novamente logo, uma vez). <b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou para copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
+    <li><b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
-    <li>O ecrã mantém-se ligado enquanto conduz. ${esc(T(awakeText()))} Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
-    <li>Quando chega, há uma pequena celebração e o ecrã pode voltar a desligar-se.</li>
-    <li><b>Alterar percurso</b> leva-o ao ecrã inicial com o destino e os pontos intermédios ainda preenchidos, para poder corrigir um e voltar a planear. <b>‹ Percurso</b>, no canto superior esquerdo, leva-o de volta ao percurso sem alterações. <b>Limpar</b>, no canto superior direito, apaga todos os campos para recomeçar.</li>
+    <li>O ecrã mantém-se ligado enquanto conduz. ${screenAwake() ? "" : "Neste momento pode desligar-se: toque uma vez no ecrã durante a condução. "}Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
+    <li>Quando chega, há uma pequena celebração.</li>
+    <li><b>Alterar percurso</b> leva-o ao ecrã inicial com o destino e os pontos intermédios ainda preenchidos, para poder alterar um e voltar a planear. <b>‹ Percurso</b>, no canto superior esquerdo, leva-o de volta ao percurso sem alterações; <b>Limpar</b>, no canto superior direito, apaga todos os campos.</li>
   </ul>
 
   <div class="help-actions">
@@ -4776,6 +4778,8 @@ function letSleep() {
   state.wakeLock = null;
 }
 // What Help shows about keeping the screen on.
+// Help: is the screen being kept on right now (plain yes/no, no technical detail)?
+function screenAwake() { return !!((state.wakeLock && !state.wakeLock.released) || state.awakeVideo); }
 function awakeText() {
   const lock = state.wakeLock && !state.wakeLock.released;
   if (lock && state.awakeVideo) return "Screen stays on (wake lock and video).";
@@ -6423,42 +6427,43 @@ function helpHtml() {
   const dot = (c) => `<span class="dot" style="background:var(--${c})"></span>`;
   if (HELP_I18N[LANG]) return HELP_I18N[LANG](dot);
   return `
-  <p>Fast chargers along your route, with how many are free and how much of a detour each one is.</p>
+  <p>Fast chargers along your route, with how many are free right now and how much of a detour each one is.</p>
 
   <h3>Planning a route</h3>
   <ul>
     <li><b>To</b>: a town or address. <b>From</b> left empty means where you are now. The <b>×</b> empties a field.</li>
-    <li>Tap a field to see the <b>places you used before</b> (as start, via or destination), the last ten; type to narrow them down. The × next to one forgets it.</li>
-    <li><b>+</b> next to To adds a <b>via</b> point (up to two), to choose your own way, for example via Luxembourg instead of Brussels. The × on a via removes it. The screen reads bottom to top like your drive (From, vias, To): a new via goes right under To, so enter them in the order you'll pass them. A <b>town</b> as via is passed on the main road nearest to it (via Dordrecht = the N3/A16 by Dordrecht, not its centre); a <b>street address</b> is driven to exactly.</li>
+    <li>Tap a field to see the last ten <b>places you used</b>; type to narrow them down. The × next to one forgets it.</li>
+    <li><b>+</b> next to To adds a <b>via</b> point (up to two), for example via Luxembourg instead of Brussels. The screen reads bottom to top, like your drive: a new via goes right under To, so enter them in the order you'll pass them. A <b>town</b> as via is passed on the main road nearest to it; a <b>street address</b> is driven to exactly. The × on a via removes it.</li>
     <li>Without a via, you get <b>route options</b> to choose from, with their main roads and the cities on the way.</li>
-    <li><b>Chargers</b>: the brands to look for. Only fast chargers (50 kW and up) are shown. Live free counts in the Netherlands, Germany and Austria; elsewhere location and detour only.</li>
+    <li><b>Chargers</b>: the brands to look for, and the charging power you want (see Charging power).</li>
     <li><b>Simulate the drive</b>: drives the route for you, sped up, to try the app at home.</li>
   </ul>
 
   <h3>The screen while driving</h3>
-  <p>Your destination is at the top, you are at the bottom, and the chargers are in between in route order. Each row shows the distance and driving time from where you are to the charger itself (for a charger beyond an exit or on the other side of the road, including the drive there and any turn-around), and the charger's maximum power (<span class="kw">${BOLT}</span>).</p>
-  <p>Every main road up to your destination is on the line, styled like that country's signs, also stretches without any charger: each shows how far ahead it starts and how long it is (↕). The road you're on sits right above you. Don't want these rows? In the brands button (top left), set <b>Main roads on the line</b> to <b>Changes only</b>, or just tap a road row (tap a road badge on the line to bring them back): then a badge sits on the line only where the road changes between chargers. The top shows the road you're on and the next two; a road drops off as you pass its end.</p>
-  <p>The <b>☰ menu</b> top left holds Change route and Help. Top right is the <b>status time</b> of the chargers (now, or how many minutes old; tap it to update, at most once a minute, but right away once after a failed update).</p>
-  <p>Your own row shows the <b>next turn</b>: a big arrow in place of your position arrow, the distance counting down and the road you turn onto. A roundabout is drawn with its exit where the road really leaves and the exit number in the middle ("2nd exit", or "straight on"). In the last 500 m the whole row pulses: a white band sweeps across it the way you turn (left to right for right, right to left for left), and straight on the whole row fades between black and white. It sweeps about once a second while you drive and twice as fast in the last 50 m; when you stand still (a traffic light), it sweeps three more times and then holds still in white until you drive off. A "keep left/right" where you simply stay on the same motorway isn't shown. On a motorway, the <b>next exit</b> on your side of the road counts down on the right, with its number and name; when you leave at that exit, its number goes with the turn instead. The bottom line of the screen shows a compass (pointing the way you're driving), the time of the last location update and the road badge with the nearest exit or town after it (A17 Zevenbergen), or on smaller roads the town and street. With the debug line on, it shows your coordinates, heading and GPS accuracy instead of the name, and each planned route is kept 30 days under the id after # on the debug line (admin page &gt; Debug routes). On a main road it updates with every GPS fix; on smaller roads after a turn (60° or more within a minute), every 2 km and when you tap your row.</p>
+  <p>Your destination is at the top, you are at the bottom, and the chargers are in between in the order you reach them. Each row shows the distance and driving time to the charger itself (beyond an exit or on the other side of the road, including the drive there and any turn-around) and its maximum power (<span class="kw">${BOLT}</span>).</p>
+  <p>The main roads to your destination are on the line too, styled like that country's road signs, each with how far ahead it starts and how long it is (↕). The top shows the road you're on and the next two. Prefer fewer rows? Tap a road row, or in the brands button (top left) set <b>Main roads on the line</b> to <b>Changes only</b>: a road number then only shows where the road changes. Tap a road number on the line to bring the rows back.</p>
+  <p>The <b>☰ menu</b> top left holds Change route and Help. Top right is how old the <b>charger status</b> is; tap it to update.</p>
+  <p>Your own row shows the <b>next turn</b>: a big arrow, the distance counting down and the road you turn onto. At a roundabout you see which exit to take. In the last 500 m the row pulses in the direction you turn. On a motorway, the <b>next exit</b> on your side counts down on the right.</p>
+  <p>The bottom line shows a compass, the time of your last location update, and the road you're on with the nearest exit or town (for example A17 Zevenbergen), or on smaller roads the town and street.</p>
 
   <h3>Road closures</h3>
-  <p>Planned closures in the Netherlands and Germany show on the line as a red row (<b>A1 closed · Dortmund/Unna – Kamener Kreuz</b>), only when they're on your route, in your direction, and in force around the time you get there: with the distance and until when it's closed. Closures in the other direction, lane closures and closures for lorries only don't show. <b>Avoid</b> plans a new route around it; with more than one closure ahead the button says <b>Avoid all</b> and goes around all of them at once (up to 10). That stays for this trip (also when you're rerouted) until you plan a new route. The routing itself doesn't know these closures: without Avoid, the route still goes through. The closures are updated every few hours (the interval is set on the admin page). Town streets aren't included. If closures couldn't be loaded, or haven't been updated for longer than they should, a note says so after planning.</p>
+  <p>Planned closures in the Netherlands and Germany show on the line as a red row (<b>A1 closed · Dortmund/Unna – Kamener Kreuz</b>), with the distance and until when it's closed. Only closures on your route, in your direction and in force when you get there are shown; lane closures and closures for lorries only are not. <b>Avoid</b> plans a new route around it; with more than one closure ahead, <b>Avoid all</b> goes around all of them at once. That holds for the rest of this trip, also when you're rerouted. Without Avoid, your route still goes through the closure. Closures are updated every few hours; streets in towns aren't included. If they couldn't be loaded, a note says so after planning.</p>
 
   <h3>Free or not</h3>
   <div class="legend">
-    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 free.</b> The ring shows all chargers there, one segment each: <b style="color:var(--free)">green</b> free, <b style="color:var(--danger)">red</b> in use, a grey outline out of order: it’s there, just not working (here 3 free, 4 in use, 1 broken out of 8). Press and hold for the numbers.</div>
+    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 free.</b> The ring has one segment per charger at the site: <b style="color:var(--free)">green</b> free, <b style="color:var(--danger)">red</b> in use, a grey outline out of order (here 3 free, 4 in use and 1 out of order, out of 8). Press and hold for the numbers.</div>
     <div class="k">${demoRing(0, 4)}</div><div class="v">All in use.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Off</b>: reported out of order, or nothing has changed for hours.</div>
-    <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grey with ?</b>: probably not live. The source hasn't changed anything at this site for over a day (3 days for small sites), so the number is its last report and may be wrong. The dot on the line is hollow.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet, tap to check. A faded ring and grey number are more than 3 minutes old; a grey ring and outlined number more than 5 minutes. The dot on the line keeps its colour. France is updated only when you tap a French charger: that updates all French chargers on the route, at most once every few minutes (5, or 2 while the server runs on Cloudflare’s paid plan, when France also updates by itself). Belgium is updated one site at a time when you tap it: its fast stalls are checked one by one, about 10 seconds each, and the ring fills in as they come (dashed segments are stalls not checked yet, faint outlined ones were checked but gave no usable status); at most once a minute per site. A turning sweep in the dot means it's updating, and a number that changes pops briefly.</div>
-    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger (Belgium and France for now).</div>
+    <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grey with ?</b>: probably not live. Nothing has changed at this site for over a day (3 days for small sites), so the number may be out of date. The dot on the line is hollow.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet: tap to check. A faded ring with a grey number is more than 3 minutes old; a grey ring with an outlined number more than 5 minutes. A turning sweep in the dot means it's updating; a number that changes pops briefly.</div>
+    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger.</div>
   </div>
-  <p>Charger locations come from Open Charge Map, and in the Netherlands also from the national open data (NDW), so sites missing from Open Charge Map appear a moment after planning. Live status comes from the national open data in the Netherlands, Germany and Austria. The chargers on screen update every minute; <b>tap a charger</b> to update it now. The bottom right shows how old the status is, or a turning ring while it updates.</p>
-  <p>A free charger now is no guarantee it is still free when you arrive.</p>
+  <p>The count only includes chargers at your chosen power or more. In the Netherlands, Germany and Austria, the chargers on screen update every minute; <b>tap a charger</b> to update it now (at most once a minute). Some chargers appear a moment after planning.</p>
+  <p><b>France</b> updates when you tap a French charger: that updates all French chargers on your route at once, at most every few minutes. <b>Belgium</b> updates one site at a time when you tap it: its chargers are checked one by one, about 10 seconds each, and the ring fills in as they come (dashed: not checked yet; a faint outline: no usable status).</p>
+  <p>A charger that's free now may not be free when you arrive.</p>
 
-  <h3>No connection and errors</h3>
+  <h3>No connection</h3>
   <p>Without internet (flight mode, no signal) a grey note above your location says so, and top right shows <b>Status offline</b>. The chargers keep their last known status, your position and the route keep working, and everything updates by itself once you're back online.</p>
-  <p>With the debug line on (below), errors are shown too (a lookup that failed, no GPS fix): a red message appears <b>below your position</b>. New ones queue behind it (the red <b>+N</b> shows how many wait); the same error again only counts up (×3). <b>Tap the message</b> when you've read it to show the next, or <b>×</b> to clear them all.</p>
 
   <h3>Detours</h3>
   <div class="legend">
@@ -6470,21 +6475,21 @@ function helpHtml() {
   <p><b>Easy to reach</b> hides the round trips and keeps chargers on your side plus those with a short detour.</p>
 
   <h3>Charging power</h3>
-  <p>Choose <b>Fast</b> (50 kW and up), <b>Extra fast</b> (150 kW and up) or <b>HPC</b> (300 kW and up) on the start screen or under the brand logos; Extra fast until you choose another. It filters straight away, without planning again. Where live data reports a lower maximum than the charger's listing, the live value counts. Set above Fast, the brands button shows the minimum (e.g. <b>150+</b>).</p>
+  <p>Choose <b>Fast</b> (50 kW and up), <b>Extra fast</b> (150 kW and up) or <b>HPC</b> (300 kW and up) on the start screen or under the brand logos. It filters straight away, without planning again. Above Fast, the brands button shows the minimum (e.g. <b>150+</b>).</p>
   <p>At a service area, the chargers on your side come first; those on the other side follow, with the distance including the turn-around.</p>
 
   <h3>Brands</h3>
-  <p>Places with several brands share one row, with a line per brand on the right. Tap the <b>logos</b> at the top to hide or show the brands on your route straight away. Adding a brand that wasn't on the route plans the route again from where you are.</p>
+  <p>Places with several brands share one row, with a ring per brand on the right. Tap the <b>logos</b> at the top to hide or show brands on your route straight away. Adding a brand that wasn't on the route plans the route again from where you are.</p>
 
   <h3>On the way</h3>
   <ul>
     <li><b>Scroll up</b> to see chargers further ahead. The blue arrow brings you back to the next ones.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
-    <li><b>Tap a charger</b> to update its status (at most once a minute; a charger without a usable status can be tapped again right away, once). <b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps or Waze (tap Route or Go there to drive to it) or Flitsmeister, or to copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
+    <li><b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps, Waze or Flitsmeister, or copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
-    <li>The screen stays on while you drive. ${esc(awakeText())} If it still turns off, check that Low Power Mode is off.</li>
-    <li>When you arrive, there's a small celebration, and the screen may turn off again.</li>
-    <li><b>Change route</b> takes you to the start screen with your destination and via points still filled in, so you can fix one and plan again. <b>‹ Route</b> top left takes you back to your route unchanged. <b>Clear</b> top right empties all fields to start over.</li>
+    <li>The screen stays on while you drive. ${screenAwake() ? "" : "Right now it may turn off: tap the screen once while driving. "}If it still turns off, check that Low Power Mode is off.</li>
+    <li>When you arrive, there's a small celebration.</li>
+    <li><b>Change route</b> takes you to the start screen with your destination and via points still filled in, so you can change one and plan again. <b>‹ Route</b> top left takes you back to your route unchanged; <b>Clear</b> top right empties all fields.</li>
   </ul>
 
   <div class="help-actions">

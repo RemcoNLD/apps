@@ -1,0 +1,45 @@
+# Portugal live status: reads MOBI.E's national status file (DATEX II, ~36-40 MB, rebuilt every 5 min)
+# and keeps only the stalls in data/pt-fast-sites.json, as pt-status.json on the branch "live"
+# (force-pushed: one commit, no history, no Pages build). The Worker reads that small file.
+# GitHub's own 5-minute schedule often starts late, so cron-job.org also starts it (workflow_dispatch);
+# a run that finds the same publication as last time waits for the next one or ends without pushing.
+name: Portugal live
+on:
+  schedule:
+    - cron: "1-59/5 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: pt-live
+  cancel-in-progress: false
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            tools
+            data/pt-fast-sites.json
+          sparse-checkout-cone-mode: false
+      - name: Previous snapshot
+        run: |
+          git fetch -q --depth 1 origin live && git show origin/live:pt-status.json > /tmp/prev.json || echo "{}" > /tmp/prev.json
+      - name: Read the status file
+        id: snap
+        run: |
+          python3 tools/build-pt-status.py /tmp/pt-status.json /tmp/prev.json | tee /tmp/out.txt
+          grep -q "^CHANGED=1" /tmp/out.txt && echo "changed=1" >> "$GITHUB_OUTPUT" || echo "changed=0" >> "$GITHUB_OUTPUT"
+      - name: Publish to the live branch
+        if: steps.snap.outputs.changed == '1'
+        run: |
+          mkdir /tmp/live && cd /tmp/live
+          git init -q -b live
+          cp /tmp/pt-status.json .
+          git config user.name "pt-live-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add pt-status.json
+          git commit -q -m "Portugal live status $(date -u +%H:%M)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" live

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.9"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-17.10"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -407,6 +407,26 @@ function renderSelfService() {
     <p class="small muted" style="margin:10px 0 0">${help}${data.crypt ? ` <button type="button" class="link" id="cryptBackup">Download email key backup</button>` : ""}</p></div>`;
 }
 
+// The mail / share text: first the link that signs in by itself (the key rides in the #, which never
+// reaches a server), then the key on its own lines for typing or pasting. A mail link can only carry
+// plain text, so no bigger font: the key stands alone, with space around it, and is in the subject.
+const APP_URL = "https://remconld.github.io/apps/evailability.html";
+function keyMailText(label, key) {
+  return `Hi ${label},
+
+Your access to EVailability is ready.
+
+Tap this link to open the app. It signs you in by itself, no need to enter anything:
+${APP_URL}#key=${key}
+
+Doesn't that work, or do you use the app from your home screen? Open the app and enter this key (or copy it and tap Paste):
+
+
+        ${key.split("").join(" ")}
+
+
+Remco`;
+}
 function showKey(label, key, isNew, email = "") {
   $("newKey").innerHTML = `<div class="card newkey" role="status">
     <div class="who">${isNew ? "Key for" : "New key for"} ${esc(label)}</div>
@@ -415,7 +435,7 @@ function showKey(label, key, isNew, email = "") {
       <button type="button" id="copyBtn">Copy key</button>
       ${navigator.share ? `<button type="button" class="plain" id="shareBtn">Share…</button>` : ""}
     </div>
-    ${email ? `<a class="plain mailbtn" id="mailBtn" href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent("Your EVailability key")}&body=${encodeURIComponent(`Hi ${label},\n\nHere is your access key for EVailability: ${key}\n\nOpen https://remconld.github.io/apps/evailability.html and enter it once. If you asked from your phone, the app may already have opened by itself.\n\nRemco`)}">Email key to ${esc(email)}</a>` : ""}
+    ${email ? `<a class="plain mailbtn" id="mailBtn" href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(`Your EVailability key: ${key}`)}&body=${encodeURIComponent(keyMailText(label, key))}">Email key to ${esc(email)}</a>` : ""}
     <p class="small muted" style="margin:10px 0 0">Only shown now. Copy it before you leave this page.
       <button type="button" class="link" id="doneBtn">Done</button></p>
   </div>`;
@@ -429,7 +449,7 @@ function showKey(label, key, isNew, email = "") {
     setTimeout(() => { if ($("copyBtn")) { $("copyBtn").textContent = "Copy key"; $("copyBtn").classList.remove("copied"); } }, 2500);
   };
   if ($("shareBtn")) $("shareBtn").onclick = () => navigator.share({
-    text: `Your EVailability access key: ${key}\nOpen https://remconld.github.io/apps/evailability.html and enter it once.`,
+    text: keyMailText(label, key),
   }).catch(() => {});
   $("doneBtn").onclick = () => { $("newKey").innerHTML = ""; };
   $("newKey").scrollIntoView({ behavior: "smooth", block: "nearest" });

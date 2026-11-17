@@ -273,6 +273,12 @@ EXACT = {
 "Check for update": ("Controleren op update", "Procurar atualização"),
 "Show the introduction again": ("Introductie opnieuw tonen", "Mostrar novamente a introdução"),
 "Show the splash screen at start": ("Startscherm tonen bij openen", "Mostrar o ecrã inicial ao abrir"),
+# ---- help: country flags (aria labels)
+"Netherlands": ("Nederland", "Países Baixos"),
+"Germany": ("Duitsland", "Alemanha"),
+"Austria": ("Oostenrijk", "Áustria"),
+"France": ("Frankrijk", "França"),
+"Belgium": ("België", "Bélgica"),
 "Don’t show the splash screen at start": ("Startscherm niet tonen bij openen", "Não mostrar o ecrã inicial ao abrir"),
 # ---- intro and splash
 "Introduction": ("Introductie", "Introdução"),

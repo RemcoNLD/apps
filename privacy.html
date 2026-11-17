@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.1"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-17.2"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Privacy policy · EVailability</title>
 <style>
@@ -31,7 +31,12 @@
 </style>
 </head>
 <body>
-<a class="back" href="evailability.html">‹ EVailability</a>
+<a class="back" id="back" href="evailability.html">‹ Back</a>
+<script>
+  // Back to where it was opened: the request form (?back=request) or Help (?back=help).
+  const b = new URLSearchParams(location.search).get("back");
+  if (b === "request" || b === "help") document.getElementById("back").href = `evailability.html#${b}`;
+</script>
 <h1>Privacy policy</h1>
 <p class="updated">Last updated: 17 November 2026</p>
 
@@ -41,7 +46,7 @@
     <li>Your email is only used to contact you about your access to EVailability. Never for anything else.</li>
     <li>It is encrypted as soon as it arrives. Only the developer can unlock it; the server itself can’t read it.</li>
     <li>Nothing is sold or shared, and there is no advertising or tracking.</li>
-    <li>Want your data gone? Ask, and it’s deleted.</li>
+    <li>Want your data gone? Ask in the app, and it’s deleted.</li>
   </ul>
 </div>
 
@@ -73,7 +78,12 @@
 <p>To plan a route and show chargers, the app sends your start, destination and current position to its server, which asks route and map services (OpenRouteService, OpenStreetMap) and charger data sources. These positions are used for that request only and aren’t stored with your name or email. Your recent places and settings stay on your own phone.</p>
 
 <h2>Your rights</h2>
-<p>You can ask to see, correct or delete your data at any time, and you can object to its use. The easiest way: reply to any email you received about EVailability, or send a new request from the app with a note such as “please delete my data”. We’ll handle it promptly. If you’re not satisfied, you can complain to the Dutch data protection authority (Autoriteit Persoonsgegevens).</p>
+<p>You can ask to see, correct or delete your data at any time, and you can object to its use. Everything is done in the app:</p>
+<ul>
+  <li><b>While your request is waiting</b>: on the waiting screen, <b>Withdraw my request</b> deletes it and your email at once. <b>Send a note to the developer</b> lets you ask anything.</li>
+  <li><b>Once you have a key</b>: open Help (the <b>?</b> on the start screen) › Privacy, and choose <b>Delete my data</b> or <b>Send a note to the developer</b>. A deletion request removes your email and your key; your access stops once it’s done.</li>
+</ul>
+<p>Notes you send are encrypted the same way as your email and only read by the developer. If you’re not satisfied, you can complain to the Dutch data protection authority (Autoriteit Persoonsgegevens).</p>
 
 <h2>Changes</h2>
 <p class="muted">If this policy changes in a way that matters to you, the date above changes, and if it affects how we use your email, we’ll tell you before it applies.</p>

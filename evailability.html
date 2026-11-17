@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.132"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.133"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -650,23 +650,71 @@
   .lock .limits li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid rgba(127,127,127,.18); font-size: .96rem; line-height: 1.35; }
   .lock .limits li:first-child { border-top: 0; }
   .lock .limits i { flex: none; width: 22px; text-align: center; font-style: normal; }
-  /* The logo: a road into the distance with availability rings coming up beside it, nearest biggest,
-     the way the app shows several chargers ahead while you drive. Paused (a still) with reduced motion. */
+  /* The logo: a road into the distance with three chargers beside it, nearest biggest, the way the app
+     shows several chargers ahead. Each ring's segments change now and then: chargers taken and freed,
+     sometimes a ring all red (full) or all green. The lane markings drift gently towards you.
+     Reduced motion: a still. */
   .evlogo { overflow: hidden; }
-  .evlogo .ev-ring { opacity: 0; animation: evdrive 3.6s linear infinite; }
-  .evlogo .r2 { animation-delay: -1.2s; }
-  .evlogo .r3 { animation-delay: -2.4s; }
-  .evlogo .ev-lane { animation: evlane .6s linear infinite; }
-  @keyframes evdrive {
-    0% { transform: translate(54px, 18px) scale(.12); opacity: 0; }
-    12% { opacity: 1; }
-    45% { transform: translate(63px, 40px) scale(.55); }
-    75% { transform: translate(82px, 72px) scale(1.3); }
-    90% { opacity: 1; }
-    100% { transform: translate(100px, 100px) scale(2.1); opacity: 0; }
-  }
+  .evlogo .ev-lane { animation: evlane 2.2s linear infinite; opacity: .55; }
   @keyframes evlane { to { stroke-dashoffset: -16; } }
-  @media (prefers-reduced-motion: reduce) { .evlogo .ev-ring, .evlogo .ev-lane { animation-play-state: paused; } }
+  .evlogo .ev-seg { transition: stroke .4s; }
+  @media (prefers-reduced-motion: reduce) { .evlogo .ev-seg, .evlogo .ev-lane { animation-play-state: paused; } }
+  @keyframes ev-f0{0.0%{stroke:#43b96d}13.7%{stroke:#43b96d}16.7%{stroke:#43b96d}30.3%{stroke:#43b96d}33.3%{stroke:#43b96d}47.0%{stroke:#43b96d}50.0%{stroke:#43b96d}63.7%{stroke:#43b96d}66.7%{stroke:#e0574f}80.3%{stroke:#e0574f}83.3%{stroke:#43b96d}97.0%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-f0{animation:ev-f0 10.2s linear infinite}
+  @keyframes ev-f1{0.0%{stroke:#43b96d}13.7%{stroke:#43b96d}16.7%{stroke:#43b96d}30.3%{stroke:#43b96d}33.3%{stroke:#43b96d}47.0%{stroke:#43b96d}50.0%{stroke:#e0574f}63.7%{stroke:#e0574f}66.7%{stroke:#e0574f}80.3%{stroke:#e0574f}83.3%{stroke:#e0574f}97.0%{stroke:#e0574f}100%{stroke:#43b96d}}
+  .evlogo .ev-f1{animation:ev-f1 10.2s linear infinite}
+  @keyframes ev-f2{0.0%{stroke:#43b96d}13.7%{stroke:#43b96d}16.7%{stroke:#e0574f}30.3%{stroke:#e0574f}33.3%{stroke:#43b96d}47.0%{stroke:#43b96d}50.0%{stroke:#e0574f}63.7%{stroke:#e0574f}66.7%{stroke:#e0574f}80.3%{stroke:#e0574f}83.3%{stroke:#e0574f}97.0%{stroke:#e0574f}100%{stroke:#43b96d}}
+  .evlogo .ev-f2{animation:ev-f2 10.2s linear infinite}
+  @keyframes ev-f3{0.0%{stroke:#43b96d}13.7%{stroke:#43b96d}16.7%{stroke:#43b96d}30.3%{stroke:#43b96d}33.3%{stroke:#43b96d}47.0%{stroke:#43b96d}50.0%{stroke:#43b96d}63.7%{stroke:#43b96d}66.7%{stroke:#e0574f}80.3%{stroke:#e0574f}83.3%{stroke:#43b96d}97.0%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-f3{animation:ev-f3 10.2s linear infinite}
+  @keyframes ev-m0{0.0%{stroke:#43b96d}10.2%{stroke:#43b96d}12.5%{stroke:#43b96d}22.8%{stroke:#43b96d}25.0%{stroke:#e0574f}35.2%{stroke:#e0574f}37.5%{stroke:#e0574f}47.8%{stroke:#e0574f}50.0%{stroke:#43b96d}60.2%{stroke:#43b96d}62.5%{stroke:#43b96d}72.8%{stroke:#43b96d}75.0%{stroke:#43b96d}85.2%{stroke:#43b96d}87.5%{stroke:#43b96d}97.8%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-m0{animation:ev-m0 12.0s linear infinite}
+  @keyframes ev-m1{0.0%{stroke:#43b96d}10.2%{stroke:#43b96d}12.5%{stroke:#e0574f}22.8%{stroke:#e0574f}25.0%{stroke:#e0574f}35.2%{stroke:#e0574f}37.5%{stroke:#e0574f}47.8%{stroke:#e0574f}50.0%{stroke:#e0574f}60.2%{stroke:#e0574f}62.5%{stroke:#43b96d}72.8%{stroke:#43b96d}75.0%{stroke:#43b96d}85.2%{stroke:#43b96d}87.5%{stroke:#43b96d}97.8%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-m1{animation:ev-m1 12.0s linear infinite}
+  @keyframes ev-m2{0.0%{stroke:#e0574f}10.2%{stroke:#e0574f}12.5%{stroke:#e0574f}22.8%{stroke:#e0574f}25.0%{stroke:#e0574f}35.2%{stroke:#e0574f}37.5%{stroke:#e0574f}47.8%{stroke:#e0574f}50.0%{stroke:#e0574f}60.2%{stroke:#e0574f}62.5%{stroke:#e0574f}72.8%{stroke:#e0574f}75.0%{stroke:#43b96d}85.2%{stroke:#43b96d}87.5%{stroke:#43b96d}97.8%{stroke:#43b96d}100%{stroke:#e0574f}}
+  .evlogo .ev-m2{animation:ev-m2 12.0s linear infinite}
+  @keyframes ev-m3{0.0%{stroke:#43b96d}10.2%{stroke:#43b96d}12.5%{stroke:#43b96d}22.8%{stroke:#43b96d}25.0%{stroke:#e0574f}35.2%{stroke:#e0574f}37.5%{stroke:#e0574f}47.8%{stroke:#e0574f}50.0%{stroke:#e0574f}60.2%{stroke:#e0574f}62.5%{stroke:#e0574f}72.8%{stroke:#e0574f}75.0%{stroke:#e0574f}85.2%{stroke:#e0574f}87.5%{stroke:#43b96d}97.8%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-m3{animation:ev-m3 12.0s linear infinite}
+  @keyframes ev-n0{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#43b96d}18.2%{stroke:#43b96d}20.0%{stroke:#43b96d}28.2%{stroke:#43b96d}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#43b96d}58.2%{stroke:#43b96d}60.0%{stroke:#43b96d}68.2%{stroke:#43b96d}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-n0{animation:ev-n0 16.0s linear infinite}
+  @keyframes ev-n1{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#43b96d}18.2%{stroke:#43b96d}20.0%{stroke:#e0574f}28.2%{stroke:#e0574f}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#43b96d}68.2%{stroke:#43b96d}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-n1{animation:ev-n1 16.0s linear infinite}
+  @keyframes ev-n2{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#e0574f}18.2%{stroke:#e0574f}20.0%{stroke:#e0574f}28.2%{stroke:#e0574f}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#43b96d}68.2%{stroke:#43b96d}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-n2{animation:ev-n2 16.0s linear infinite}
+  @keyframes ev-n3{0.0%{stroke:#e0574f}8.2%{stroke:#e0574f}10.0%{stroke:#e0574f}18.2%{stroke:#e0574f}20.0%{stroke:#e0574f}28.2%{stroke:#e0574f}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#e0574f}68.2%{stroke:#e0574f}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#e0574f}}
+  .evlogo .ev-n3{animation:ev-n3 16.0s linear infinite}
+  @keyframes ev-n4{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#43b96d}18.2%{stroke:#43b96d}20.0%{stroke:#e0574f}28.2%{stroke:#e0574f}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#e0574f}68.2%{stroke:#e0574f}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#e0574f}98.2%{stroke:#e0574f}100%{stroke:#43b96d}}
+  .evlogo .ev-n4{animation:ev-n4 16.0s linear infinite}
+  @keyframes ev-n5{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#43b96d}18.2%{stroke:#43b96d}20.0%{stroke:#43b96d}28.2%{stroke:#43b96d}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#43b96d}68.2%{stroke:#43b96d}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-n5{animation:ev-n5 16.0s linear infinite}
+  @keyframes ev-f0{0.0%{stroke:#43b96d}13.7%{stroke:#43b96d}16.7%{stroke:#43b96d}30.3%{stroke:#43b96d}33.3%{stroke:#43b96d}47.0%{stroke:#43b96d}50.0%{stroke:#43b96d}63.7%{stroke:#43b96d}66.7%{stroke:#e0574f}80.3%{stroke:#e0574f}83.3%{stroke:#43b96d}97.0%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-f0{animation:ev-f0 10.2s linear infinite}
+  @keyframes ev-f1{0.0%{stroke:#43b96d}13.7%{stroke:#43b96d}16.7%{stroke:#43b96d}30.3%{stroke:#43b96d}33.3%{stroke:#43b96d}47.0%{stroke:#43b96d}50.0%{stroke:#e0574f}63.7%{stroke:#e0574f}66.7%{stroke:#e0574f}80.3%{stroke:#e0574f}83.3%{stroke:#e0574f}97.0%{stroke:#e0574f}100%{stroke:#43b96d}}
+  .evlogo .ev-f1{animation:ev-f1 10.2s linear infinite}
+  @keyframes ev-f2{0.0%{stroke:#43b96d}13.7%{stroke:#43b96d}16.7%{stroke:#e0574f}30.3%{stroke:#e0574f}33.3%{stroke:#43b96d}47.0%{stroke:#43b96d}50.0%{stroke:#e0574f}63.7%{stroke:#e0574f}66.7%{stroke:#e0574f}80.3%{stroke:#e0574f}83.3%{stroke:#e0574f}97.0%{stroke:#e0574f}100%{stroke:#43b96d}}
+  .evlogo .ev-f2{animation:ev-f2 10.2s linear infinite}
+  @keyframes ev-f3{0.0%{stroke:#43b96d}13.7%{stroke:#43b96d}16.7%{stroke:#43b96d}30.3%{stroke:#43b96d}33.3%{stroke:#43b96d}47.0%{stroke:#43b96d}50.0%{stroke:#43b96d}63.7%{stroke:#43b96d}66.7%{stroke:#e0574f}80.3%{stroke:#e0574f}83.3%{stroke:#43b96d}97.0%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-f3{animation:ev-f3 10.2s linear infinite}
+  @keyframes ev-m0{0.0%{stroke:#43b96d}10.2%{stroke:#43b96d}12.5%{stroke:#43b96d}22.8%{stroke:#43b96d}25.0%{stroke:#e0574f}35.2%{stroke:#e0574f}37.5%{stroke:#e0574f}47.8%{stroke:#e0574f}50.0%{stroke:#43b96d}60.2%{stroke:#43b96d}62.5%{stroke:#43b96d}72.8%{stroke:#43b96d}75.0%{stroke:#43b96d}85.2%{stroke:#43b96d}87.5%{stroke:#43b96d}97.8%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-m0{animation:ev-m0 12.0s linear infinite}
+  @keyframes ev-m1{0.0%{stroke:#43b96d}10.2%{stroke:#43b96d}12.5%{stroke:#e0574f}22.8%{stroke:#e0574f}25.0%{stroke:#e0574f}35.2%{stroke:#e0574f}37.5%{stroke:#e0574f}47.8%{stroke:#e0574f}50.0%{stroke:#e0574f}60.2%{stroke:#e0574f}62.5%{stroke:#43b96d}72.8%{stroke:#43b96d}75.0%{stroke:#43b96d}85.2%{stroke:#43b96d}87.5%{stroke:#43b96d}97.8%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-m1{animation:ev-m1 12.0s linear infinite}
+  @keyframes ev-m2{0.0%{stroke:#e0574f}10.2%{stroke:#e0574f}12.5%{stroke:#e0574f}22.8%{stroke:#e0574f}25.0%{stroke:#e0574f}35.2%{stroke:#e0574f}37.5%{stroke:#e0574f}47.8%{stroke:#e0574f}50.0%{stroke:#e0574f}60.2%{stroke:#e0574f}62.5%{stroke:#e0574f}72.8%{stroke:#e0574f}75.0%{stroke:#43b96d}85.2%{stroke:#43b96d}87.5%{stroke:#43b96d}97.8%{stroke:#43b96d}100%{stroke:#e0574f}}
+  .evlogo .ev-m2{animation:ev-m2 12.0s linear infinite}
+  @keyframes ev-m3{0.0%{stroke:#43b96d}10.2%{stroke:#43b96d}12.5%{stroke:#43b96d}22.8%{stroke:#43b96d}25.0%{stroke:#e0574f}35.2%{stroke:#e0574f}37.5%{stroke:#e0574f}47.8%{stroke:#e0574f}50.0%{stroke:#e0574f}60.2%{stroke:#e0574f}62.5%{stroke:#e0574f}72.8%{stroke:#e0574f}75.0%{stroke:#e0574f}85.2%{stroke:#e0574f}87.5%{stroke:#43b96d}97.8%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-m3{animation:ev-m3 12.0s linear infinite}
+  @keyframes ev-n0{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#43b96d}18.2%{stroke:#43b96d}20.0%{stroke:#43b96d}28.2%{stroke:#43b96d}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#43b96d}58.2%{stroke:#43b96d}60.0%{stroke:#43b96d}68.2%{stroke:#43b96d}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-n0{animation:ev-n0 16.0s linear infinite}
+  @keyframes ev-n1{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#43b96d}18.2%{stroke:#43b96d}20.0%{stroke:#e0574f}28.2%{stroke:#e0574f}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#43b96d}68.2%{stroke:#43b96d}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-n1{animation:ev-n1 16.0s linear infinite}
+  @keyframes ev-n2{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#e0574f}18.2%{stroke:#e0574f}20.0%{stroke:#e0574f}28.2%{stroke:#e0574f}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#43b96d}68.2%{stroke:#43b96d}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-n2{animation:ev-n2 16.0s linear infinite}
+  @keyframes ev-n3{0.0%{stroke:#e0574f}8.2%{stroke:#e0574f}10.0%{stroke:#e0574f}18.2%{stroke:#e0574f}20.0%{stroke:#e0574f}28.2%{stroke:#e0574f}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#e0574f}68.2%{stroke:#e0574f}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#e0574f}}
+  .evlogo .ev-n3{animation:ev-n3 16.0s linear infinite}
+  @keyframes ev-n4{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#43b96d}18.2%{stroke:#43b96d}20.0%{stroke:#e0574f}28.2%{stroke:#e0574f}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#e0574f}68.2%{stroke:#e0574f}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#e0574f}98.2%{stroke:#e0574f}100%{stroke:#43b96d}}
+  .evlogo .ev-n4{animation:ev-n4 16.0s linear infinite}
+  @keyframes ev-n5{0.0%{stroke:#43b96d}8.2%{stroke:#43b96d}10.0%{stroke:#43b96d}18.2%{stroke:#43b96d}20.0%{stroke:#43b96d}28.2%{stroke:#43b96d}30.0%{stroke:#e0574f}38.2%{stroke:#e0574f}40.0%{stroke:#e0574f}48.2%{stroke:#e0574f}50.0%{stroke:#e0574f}58.2%{stroke:#e0574f}60.0%{stroke:#43b96d}68.2%{stroke:#43b96d}70.0%{stroke:#43b96d}78.2%{stroke:#43b96d}80.0%{stroke:#43b96d}88.2%{stroke:#43b96d}90.0%{stroke:#43b96d}98.2%{stroke:#43b96d}100%{stroke:#43b96d}}
+  .evlogo .ev-n5{animation:ev-n5 16.0s linear infinite}
   .lock { z-index: 50; justify-content: center; overflow: hidden;
     background: radial-gradient(120% 70% at 50% -10%, color-mix(in srgb, var(--sign-blue) 22%, transparent), transparent 60%), var(--asphalt); }
   /* Header (logo, name, line) stays put; only the view below it scrolls, without a scroll bar. */
@@ -721,6 +769,16 @@
   .lock .stats div { flex: 1; background: var(--asphalt); border-radius: 12px; padding: 10px; text-align: center; }
   .lock .stats b { display: block; font-size: 1.4rem; }
   .lock .stats span { font-size: .8rem; color: var(--muted); }
+  .lock .wait-links { display: flex; flex-direction: column; align-items: center; margin-top: 4px; }
+  .lock .wait-links .textlink { margin-top: 10px; }
+  .lock .priv-form textarea, .acc-privacy textarea { width: 100%; resize: none; font-family: inherit; font-size: 1rem; min-height: 80px; text-align: left; }
+  .lock .priv-btns, .acc-privacy .priv-btns { display: flex; gap: 12px; align-items: center; justify-content: flex-end; margin-top: 10px; }
+  .lock .priv-btns .primary, .acc-privacy .priv-btns .primary { width: auto; margin: 0; padding: 10px 20px; font-size: 1rem; }
+  .acc-privacy { border-top: 1px solid rgba(127,127,127,.25); padding-bottom: 10px; }
+  #help .account .priv-links { margin: 0 0 4px; line-height: 1.8; }
+  .acc-privacy .priv-links .link, .acc-privacy .priv-links a { font-size: inherit; color: var(--line); }
+  .acc-privacy .priv-form { margin-top: 8px; }
+  #help .account .priv-done { color: var(--free); margin: 6px 0 0; }
   .lock .textlink { display: block; margin: 16px auto 0; background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: .95rem; cursor: pointer; }
   .account .trial-line { color: var(--muted); font-size: .85rem; padding: 0 0 10px; margin-top: -4px; }
   /* Availability history in the press-and-hold sheet */
@@ -929,7 +987,7 @@
 <body>
 <div class="splash" id="splash" role="dialog" aria-label="EVailability">
   <div class="head">
-    <svg class="evlogo" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="evRoadS" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="118"><stop offset="0" stop-color="#5d6a74" stop-opacity="0"/><stop offset=".45" stop-color="#5d6a74" stop-opacity=".5"/><stop offset="1" stop-color="#5d6a74" stop-opacity=".9"/></linearGradient><linearGradient id="evLaneS" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="118"><stop offset="0" stop-color="#f3f1ea" stop-opacity="0"/><stop offset="1" stop-color="#f3f1ea" stop-opacity=".9"/></linearGradient></defs><path d="M45.5 12h5L76 118H4z" fill="url(#evRoadS)"/><path d="M45.5 12 4 118M50.5 12 76 118" stroke="url(#evLaneS)" stroke-width="1.6" fill="none" opacity=".55"/><path class="ev-lane" d="M48 12 40 118" stroke="url(#evLaneS)" stroke-width="2.6" stroke-dasharray="7 9" fill="none"/><g class="ev-ring r1"><g transform="rotate(-90)"><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-1.20"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-16.91"/><circle r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-32.62"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-48.32"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g><g class="ev-ring r2"><g transform="rotate(-90)"><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-1.20"/><circle r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-11.67"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-22.14"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-32.62"/><circle r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-43.09"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-53.56"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g><g class="ev-ring r3"><g transform="rotate(-90)"><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-1.20"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-13.77"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-26.33"/><circle r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-38.90"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-51.47"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g></svg>
+    <svg class="evlogo" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="evRoadS" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="118"><stop offset="0" stop-color="#5d6a74" stop-opacity="0"/><stop offset=".45" stop-color="#5d6a74" stop-opacity=".5"/><stop offset="1" stop-color="#5d6a74" stop-opacity=".9"/></linearGradient><linearGradient id="evLaneS" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="118"><stop offset="0" stop-color="#f3f1ea" stop-opacity="0"/><stop offset="1" stop-color="#f3f1ea" stop-opacity=".9"/></linearGradient></defs><path d="M45.5 12h5L76 118H4z" fill="url(#evRoadS)"/><path d="M45.5 12 4 118M50.5 12 76 118" stroke="url(#evLaneS)" stroke-width="1.6" fill="none" opacity=".55"/><path class="ev-lane" d="M48 12 40 118" stroke="url(#evLaneS)" stroke-width="2.6" stroke-dasharray="7 9" fill="none"/><g transform="translate(55 24) scale(0.42)"><g transform="rotate(-90)"><circle class="ev-seg ev-f0" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-1.20"/><circle class="ev-seg ev-f1" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-16.91"/><circle class="ev-seg ev-f2" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-32.62"/><circle class="ev-seg ev-f3" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-48.32"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g><g transform="translate(64 46) scale(0.75)"><g transform="rotate(-90)"><circle class="ev-seg ev-m0" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-1.20"/><circle class="ev-seg ev-m1" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-16.91"/><circle class="ev-seg ev-m2" r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-32.62"/><circle class="ev-seg ev-m3" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-48.32"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g><g transform="translate(84 82) scale(1.45)"><g transform="rotate(-90)"><circle class="ev-seg ev-n0" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-1.20"/><circle class="ev-seg ev-n1" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-11.67"/><circle class="ev-seg ev-n2" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-22.14"/><circle class="ev-seg ev-n3" r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-32.62"/><circle class="ev-seg ev-n4" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-43.09"/><circle class="ev-seg ev-n5" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-53.56"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g></svg>
     <div class="sp-name"><b>EV</b>ailability</div>
   </div>
   <p class="tag">The fast chargers coming up,<br>right beside your navigation.</p>
@@ -1131,6 +1189,16 @@
       </label>
       <p class="acc-sub"><button type="button" id="copyRouteData" class="link">Copy route data</button> road numbers and the routing service’s step names, to paste in a chat</p>
     </div>
+    <div class="acc-privacy" id="accPrivacy" hidden>
+      <div class="acc-row" style="padding-bottom:4px"><span><b>Privacy</b><span class="acc-sub">Your email is encrypted and only used about your access.</span></span></div>
+      <p class="acc-sub priv-links"><button type="button" class="link" id="privNote">Send a note to the developer</button> · <button type="button" class="link" id="privDelete">Delete my data</button> · <a class="link" href="privacy.html?back=help">Privacy policy</a></p>
+      <div class="priv-form" id="privForm" hidden>
+        <p class="acc-sub" id="privFormText"></p>
+        <textarea class="input" id="privText" rows="3" maxlength="1000"></textarea>
+        <div class="priv-btns"><button type="button" class="link" id="privCancel">Cancel</button><button type="button" class="primary" id="privSend">Send</button></div>
+      </div>
+      <p class="acc-sub priv-done" id="privMsg" hidden></p>
+    </div>
   </div>
   <div id="helpBody"></div>
   <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
@@ -1159,7 +1227,7 @@
 
 <div class="intro lock" id="lock" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
   <div class="lock-box">
-    <div class="lock-hero"><svg class="evlogo" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="evRoadL" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="118"><stop offset="0" stop-color="#5d6a74" stop-opacity="0"/><stop offset=".45" stop-color="#5d6a74" stop-opacity=".5"/><stop offset="1" stop-color="#5d6a74" stop-opacity=".9"/></linearGradient><linearGradient id="evLaneL" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="118"><stop offset="0" stop-color="#f3f1ea" stop-opacity="0"/><stop offset="1" stop-color="#f3f1ea" stop-opacity=".9"/></linearGradient></defs><path d="M45.5 12h5L76 118H4z" fill="url(#evRoadL)"/><path d="M45.5 12 4 118M50.5 12 76 118" stroke="url(#evLaneL)" stroke-width="1.6" fill="none" opacity=".55"/><path class="ev-lane" d="M48 12 40 118" stroke="url(#evLaneL)" stroke-width="2.6" stroke-dasharray="7 9" fill="none"/><g class="ev-ring r1"><g transform="rotate(-90)"><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-1.20"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-16.91"/><circle r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-32.62"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-48.32"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g><g class="ev-ring r2"><g transform="rotate(-90)"><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-1.20"/><circle r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-11.67"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-22.14"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-32.62"/><circle r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-43.09"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-53.56"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g><g class="ev-ring r3"><g transform="rotate(-90)"><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-1.20"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-13.77"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-26.33"/><circle r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-38.90"/><circle r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="10.17 52.67" stroke-dashoffset="-51.47"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g></svg></div>
+    <div class="lock-hero"><svg class="evlogo" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="evRoadL" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="118"><stop offset="0" stop-color="#5d6a74" stop-opacity="0"/><stop offset=".45" stop-color="#5d6a74" stop-opacity=".5"/><stop offset="1" stop-color="#5d6a74" stop-opacity=".9"/></linearGradient><linearGradient id="evLaneL" gradientUnits="userSpaceOnUse" x1="0" y1="12" x2="0" y2="118"><stop offset="0" stop-color="#f3f1ea" stop-opacity="0"/><stop offset="1" stop-color="#f3f1ea" stop-opacity=".9"/></linearGradient></defs><path d="M45.5 12h5L76 118H4z" fill="url(#evRoadL)"/><path d="M45.5 12 4 118M50.5 12 76 118" stroke="url(#evLaneL)" stroke-width="1.6" fill="none" opacity=".55"/><path class="ev-lane" d="M48 12 40 118" stroke="url(#evLaneL)" stroke-width="2.6" stroke-dasharray="7 9" fill="none"/><g transform="translate(55 24) scale(0.42)"><g transform="rotate(-90)"><circle class="ev-seg ev-f0" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-1.20"/><circle class="ev-seg ev-f1" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-16.91"/><circle class="ev-seg ev-f2" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-32.62"/><circle class="ev-seg ev-f3" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-48.32"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g><g transform="translate(64 46) scale(0.75)"><g transform="rotate(-90)"><circle class="ev-seg ev-m0" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-1.20"/><circle class="ev-seg ev-m1" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-16.91"/><circle class="ev-seg ev-m2" r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-32.62"/><circle class="ev-seg ev-m3" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="13.31 49.52" stroke-dashoffset="-48.32"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g><g transform="translate(84 82) scale(1.45)"><g transform="rotate(-90)"><circle class="ev-seg ev-n0" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-1.20"/><circle class="ev-seg ev-n1" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-11.67"/><circle class="ev-seg ev-n2" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-22.14"/><circle class="ev-seg ev-n3" r="10" fill="none" stroke="#e0574f" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-32.62"/><circle class="ev-seg ev-n4" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-43.09"/><circle class="ev-seg ev-n5" r="10" fill="none" stroke="#43b96d" stroke-width="3.4" stroke-dasharray="8.07 54.76" stroke-dashoffset="-53.56"/></g><path d="M1.3-5.6-3.1 1.1h2.7l-.9 4.5 4.6-6.9H.6z" fill="#f0a43a"/></g></svg></div>
     <h2 id="lockTitle">EVailability</h2>
     <p class="lock-tag">Free fast chargers along your route, live.</p>
 
@@ -1194,7 +1262,7 @@
         <input type="text" id="askWebsite" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
         <button type="submit" class="primary" id="askBtn">Send request</button>
         <p class="error" id="askError" hidden></p>
-        <p class="privacy"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg><span>Your email is stored encrypted and only used to contact you about your access. It is never used for anything else or shared. <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></span></p>
+        <p class="privacy"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg><span>Your email is stored encrypted and only used to contact you about your access. It is never used for anything else or shared. <a href="privacy.html?back=request" id="privLinkForm">Privacy policy</a></span></p>
       </div>
     </form>
 
@@ -1206,6 +1274,14 @@
         <p id="askWaitText"></p>
         <div class="reply" id="askReply" hidden></div>
         <button type="button" class="secondary" id="askAgain" hidden>Send a new request</button>
+      </div>
+      <div class="wait-tools" id="waitTools" hidden>
+        <div class="priv-form" id="waitForm" hidden>
+          <textarea class="input" id="waitText" rows="3" maxlength="1000" placeholder="Your message to the developer"></textarea>
+          <div class="priv-btns"><button type="button" class="link" id="waitCancel">Cancel</button><button type="button" class="primary" id="waitSend">Send</button></div>
+        </div>
+        <p class="hint" id="waitMsg" hidden></p>
+        <div class="wait-links"><button type="button" class="textlink" id="waitNote">Send a note to the developer</button><button type="button" class="textlink" id="waitWithdraw">Withdraw my request</button></div>
       </div>
       <button type="button" class="primary" id="askWaitBack" hidden>Back to the app</button>
       <button type="button" class="textlink" id="askWaitKey">I have a key</button>
@@ -1617,6 +1693,8 @@ function showWait(state, reply = "") {
   $("askWaitIcon").innerHTML = declined || gone ? ICON_NO : ICON_WAIT;
   $("askWaitTitle").textContent = declined ? "Not approved" : gone ? "Request not found" : "Request sent";
   const upgrade = state === "upgrade" || state === "upgradeEnded";
+  $("waitTools").hidden = !(state === "pending" || state === "trialUsed");
+  $("waitForm").hidden = true; $("waitMsg").hidden = true;
   $("askWaitBack").hidden = state !== "upgrade";
   $("askWaitKey").hidden = upgrade;
   $("askWaitText").textContent = upgrade ? (state === "upgrade"
@@ -1630,6 +1708,8 @@ function showWait(state, reply = "") {
   $("askAgain").hidden = !(declined || gone) || askMode === "off";
 }
 async function refreshAsk() {
+  // A waiting request: straight to the waiting screen (no flash of the key screen while asking the server)
+  if (askPending() && !askFromTrial) { showWait("pending"); checkAsk(); }
   try { askMode = (await (await fetch(`${WORKER}/self-service`, { cache: "no-store" })).json()).mode || "off"; } catch (_) {}
   const trial = askMode === "trial" && !askFromTrial;
   $("askOpen").textContent = trial ? "Try it free" : "Request a key";
@@ -1641,7 +1721,7 @@ async function refreshAsk() {
   $("askEmail").required = !askFromTrial;
   $("askEmail").placeholder = askFromTrial ? "Optional: we have it from your trial" : "you@example.com";
   if (askFromTrial) return;
-  if (askPending()) { showWait("pending"); checkAsk(); }
+  if (askPending()) { $("askAgain").hidden = true; return; }
   else if ($("askForm").hidden && $("trialEnd").hidden) lockView("key");
 }
 async function sendAsk(e) {
@@ -1694,6 +1774,74 @@ function signedIn(data) {
   lockView("key");
   hideLock();
 }
+// Messages to the developer (Help › Privacy, or the waiting screen): a note, or a request to delete my
+// data. Sent with this device's key, or with its waiting request's pickup. Withdrawing a waiting request
+// deletes it at once.
+async function sendContact(kind, text) {
+  const p = askPending();
+  const res = await fetch(`${WORKER}/contact`, { method: "POST",
+    headers: { "Content-Type": "application/json", ...(accessToken() ? { "X-Access": accessToken() } : {}) },
+    body: JSON.stringify({ kind, text, ...(p && !accessToken() ? { id: p.id, t: p.pickup } : {}) }) });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || `Error ${res.status}`);
+}
+let privKind = "note";
+function openPriv(kind) {
+  privKind = kind;
+  $("privFormText").textContent = kind === "delete"
+    ? "This asks the developer to delete your email and your key. Your access stops once it’s done. Anything to add? (optional)"
+    : "Your message goes to the developer only, encrypted.";
+  $("privText").placeholder = kind === "delete" ? "Optional" : "Your message";
+  $("privSend").textContent = kind === "delete" ? "Request deletion" : "Send";
+  $("privForm").hidden = false; $("privMsg").hidden = true;
+  $("privText").value = ""; $("privText").focus();
+}
+$("privNote").addEventListener("click", () => openPriv("note"));
+$("privDelete").addEventListener("click", () => openPriv("delete"));
+$("privCancel").addEventListener("click", () => { $("privForm").hidden = true; });
+$("privSend").addEventListener("click", async () => {
+  $("privSend").disabled = true;
+  try {
+    await sendContact(privKind, $("privText").value);
+    $("privForm").hidden = true;
+    $("privMsg").textContent = privKind === "delete" ? "Deletion requested ✓ The developer will handle it soon." : "Sent ✓ Thanks!";
+    $("privMsg").hidden = false;
+  } catch (e) { $("privMsg").textContent = e.message; $("privMsg").hidden = false; }
+  finally { $("privSend").disabled = false; }
+});
+$("waitNote").addEventListener("click", () => { $("waitForm").hidden = false; $("waitMsg").hidden = true; $("waitText").focus(); });
+$("waitCancel").addEventListener("click", () => { $("waitForm").hidden = true; });
+$("waitSend").addEventListener("click", async () => {
+  $("waitSend").disabled = true;
+  try { await sendContact("note", $("waitText").value); $("waitForm").hidden = true; $("waitText").value = ""; $("waitMsg").textContent = "Sent ✓ Thanks!"; }
+  catch (e) { $("waitMsg").textContent = e.message; }
+  finally { $("waitMsg").hidden = false; $("waitSend").disabled = false; }
+});
+let withdrawSure = null;
+$("waitWithdraw").addEventListener("click", async () => {
+  const b = $("waitWithdraw");
+  if (!withdrawSure) { b.textContent = "Tap again to withdraw and delete it"; withdrawSure = setTimeout(() => { withdrawSure = null; b.textContent = "Withdraw my request"; }, 4000); return; }
+  clearTimeout(withdrawSure); withdrawSure = null;
+  const p = askPending();
+  try {
+    if (p) {
+      const res = await fetch(`${WORKER}/request/withdraw`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: p.id, t: p.pickup }) });
+      if (!res.ok && res.status !== 404) throw new Error((await res.json().catch(() => ({}))).error || `Error ${res.status}`);
+    }
+    try { localStorage.removeItem(ASK_KEY); } catch (_) {}
+    clearInterval(askTimer);
+    b.textContent = "Withdraw my request";
+    lockView("key");
+    $("lockError").textContent = "Your request and email were deleted."; $("lockError").hidden = false;
+  } catch (e) { b.textContent = "Withdraw my request"; $("waitMsg").textContent = e.message; $("waitMsg").hidden = false; }
+});
+// Form drafts survive a visit to the privacy policy (and a reload): kept for this session only.
+const DRAFT_KEY = "evailability-ask-draft";
+for (const id of ["askEmail", "askName", "askNote"]) $(id).addEventListener("input", () => {
+  try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ e: $("askEmail").value, n: $("askName").value, o: $("askNote").value })); } catch (_) {}
+});
+try { const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null"); if (d) { $("askEmail").value = d.e || ""; $("askName").value = d.n || ""; $("askNote").value = d.o || ""; } } catch (_) {}
+
 // Trial banner on the start screen and the welcome after a trial starts.
 const UPGRADE_ASKED = "evailability-upgrade-asked"; // a full-access request is waiting
 function trialNow() { try { return accessToken() ? JSON.parse(localStorage.getItem(TRIAL_KEY) || "null") : null; } catch (_) { return null; } }
@@ -5221,6 +5369,7 @@ function renderAccount() {
   $("logoutBtn").hidden = !tok;
   $("logoutBtn").textContent = "Log out"; $("logoutBtn").classList.remove("sure");
   $("accDebug").hidden = !tok || !debugAllowed();
+  $("accPrivacy").hidden = !tok || !tok.startsWith("u1.");
   let trial = null; try { trial = JSON.parse(localStorage.getItem(TRIAL_KEY) || "null"); } catch (_) {}
   $("accTrial").hidden = !tok || !trial;
   if (trial) {
@@ -5415,6 +5564,14 @@ function boot() {
 $("lockBtn").addEventListener("click", unlock);
 $("lockCode").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock(); });
 if (accessToken()) boot(); else showLock();
+// Back from the privacy policy: #request opens the request form again, #help opens Help.
+if (location.hash === "#request" || location.hash === "#help") {
+  const h = location.hash;
+  history.replaceState(null, "", location.pathname + location.search);
+  if (h === "#help" && accessToken()) setTimeout(() => openHelp(), 300);
+  else if (h === "#request" && trialNow()) openUpgrade(); // a trial user asking for full access
+  else if (h === "#request" && !$("lock").hidden && !askPending()) { lockView("form"); refreshAsk(); }
+}
 </script>
 </body>
 </html>

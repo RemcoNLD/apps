@@ -35,6 +35,9 @@
 //   GET  /request/status?id=&t= public: the asking device's pickup: {status} and {token} once approved,
 //                               or {status:"declined", reply} with Remco's note
 //   POST /trial/extend          a trial key (X-Access) extends itself once: +1 day and +5 routes
+//   POST /contact               {kind: "note"|"delete", text} from a key (X-Access) or a waiting request ({id, t}):
+//                               a message for Remco on the Users page (text encrypted like emails)
+//   POST /request/withdraw      {id, t}: the asking device withdraws its waiting request; it's deleted at once
 //                               create/regenerate answer the new key once; only its hash is kept
 //   POST /admin/settings        {settings:{key: value}} saves them (one KV write); empty value = default
 //   GET  /debug/ndw?lat=&lon=   raw Dutch (NDW) data around a point, to tune the parser
@@ -58,7 +61,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-17.120";
+const WORKER_VERSION = "2026-11-17.121";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -376,7 +379,8 @@ async function handleUsage(request, env) {
     }
     period = { from, to, calls: sums };
   }
-  const openRequests = (await loadRequests(env)).filter((r) => r.status === "pending").length;
+  const openRequests = (await loadRequests(env)).filter((r) => r.status === "pending").length
+    + (await loadMessages(env)).filter((m) => !m.done).length; // requests and messages waiting for Remco
   return json(request, {
     stored: !!env.USAGE,
     openRequests, // badge on the "Users & keys" link
@@ -2650,7 +2654,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/self-service", "/request", "/request/status", "/trial/extend", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -2788,6 +2792,13 @@ async function handleUsers(request, env) {
       }
       await saveRequests(env, reqs);
       return json(request, { ok: true, key, user: user && publicUser(user) });
+    } else if (body.action === "message-done" || body.action === "message-delete") {
+      let msgs = await loadMessages(env);
+      const m = msgs.find((x) => x.id === body.id);
+      if (!m) throw new HttpError(404, "No such message");
+      if (body.action === "message-delete") msgs = msgs.filter((x) => x !== m); else m.done = now;
+      await saveMessages(env, msgs);
+      return json(request, { ok: true });
     } else if (body.action === "crypt") {
       // The Users page's email key: public half (JWK) plus the private half locked with the admin password.
       if (!body.pub || !body.wrapped) throw new HttpError(400, "pub and wrapped needed");
@@ -2826,6 +2837,8 @@ async function handleUsers(request, env) {
     legacyCode: !!setting(env, "legacyCode"),
     selfService: selfServiceMode(env),
     crypt: crypt ? { wrapped: crypt.wrapped, at: crypt.at } : null,
+    messages: (await loadMessages(env)).slice().reverse().map((m) => ({ id: m.id, at: m.at, kind: m.kind, name: m.name, userId: m.userId || null,
+      reqId: m.reqId || null, text: m.text || null, enc: m.enc || null, done: m.done || null })),
     requests: reqs.slice().reverse().map((r) => ({ id: r.id, at: r.at, kind: r.kind, status: r.status, name: r.name, note: r.note, reply: r.reply || null,
       emailEnc: r.emailEnc || null, userId: r.userId || null, done: r.done || null })),
     users: list.map((u) => {
@@ -2961,6 +2974,71 @@ async function handleRequest(request, env) {
   await saveRequests(env, list);
   return json(request, { pending: true, id: r.id, pickup, trialUsed: mode === "trial", upgrade: !!trialUser });
 }
+// ---------------------------------------------------------------- messages to Remco (privacy, notes)
+// From Help › Privacy (a key) or the waiting screen (a request): a note, or a request to delete my data.
+// Kept in KV "messages"; the text is encrypted like emails (AES-GCM, its key locked with the Users
+// page's RSA key), so only the Users page can read it.
+async function loadMessages(env) { try { return JSON.parse((await kvGet(env, "messages")) || "[]"); } catch (_) { return []; } }
+async function saveMessages(env, list) {
+  const cut = Date.now() - 90 * 86400000;
+  list = list.filter((m) => !m.done || Date.parse(m.at) > cut).slice(-200);
+  await env.USAGE.put("messages", JSON.stringify(list));
+  countCall("KV writes");
+}
+async function encryptText(env, text) {
+  const crypt = JSON.parse((await kvGet(env, "crypt")) || "null");
+  if (!crypt?.pub) return { text }; // encryption not set up yet
+  const aes = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const d = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, aes, new TextEncoder().encode(text));
+  const rsa = await crypto.subtle.importKey("jwk", crypt.pub, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+  const k = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, rsa, await crypto.subtle.exportKey("raw", aes));
+  const b = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  return { enc: { k: b(k), iv: b(iv), d: b(d) } };
+}
+// Who is writing: a key holder (token) or a waiting request (id + pickup). Null if neither.
+async function senderOf(request, env, body) {
+  const given = request.headers.get("X-Access") || "";
+  if (given.startsWith("u1.")) {
+    const [, id, gen, sig] = given.split(".");
+    if (id && sig && sameText(sig, await userSig(env, id, gen))) {
+      const u = (await loadUsers(env, true)).find((x) => x.id === id);
+      if (u) return { userId: u.id, name: u.label };
+    }
+  }
+  if (body.id && body.t) {
+    const r = (await loadRequests(env)).find((x) => x.id === body.id);
+    if (r && sameText(r.pickup || "", await hmac(env, `pickup:${body.t}`))) return { reqId: r.id, name: r.name || "" };
+  }
+  return null;
+}
+async function handleContact(request, env) {
+  const ip = request.headers.get("CF-Connecting-IP") || "?";
+  const rk = `contact:${ip}`;
+  if ((memoGet(rk) || 0) >= 5) throw new HttpError(429, "Too many messages from here. Try again in an hour.");
+  memoSet(rk, (memoGet(rk) || 0) + 1, 60 * 60 * 1000);
+  const body = await request.json().catch(() => ({}));
+  const from = await senderOf(request, env, body);
+  if (!from) throw new HttpError(401, "Messages can only be sent from the app with a key or a waiting request.");
+  const kind = body.kind === "delete" ? "delete" : "note";
+  const text = String(body.text || "").trim().slice(0, 1000);
+  if (kind === "note" && !text) throw new HttpError(400, "Write a message first.");
+  const list = await loadMessages(env);
+  if (list.filter((m) => !m.done).length >= 100) throw new HttpError(429, "Too many open messages at the moment. Try again later.");
+  list.push({ id: userId(), at: new Date().toISOString(), kind, ...from, ...(text ? await encryptText(env, text) : {}) });
+  await saveMessages(env, list);
+  return json(request, { ok: true });
+}
+async function handleWithdraw(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const list = await loadRequests(env);
+  const r = list.find((x) => x.id === body.id);
+  if (!r || !body.t || !sameText(r.pickup || "", await hmac(env, `pickup:${body.t}`))) throw new HttpError(404, "No such request.");
+  if (r.status === "approved") throw new HttpError(400, "This request was already approved.");
+  await saveRequests(env, list.filter((x) => x !== r)); // gone, email and all
+  memo.delete(`reqst:${r.id}`);
+  return json(request, { ok: true });
+}
 async function handleRequestStatus(request, env, url) {
   const id = url.searchParams.get("id") || "", t = url.searchParams.get("t") || "";
   const k = `reqst:${id}`;
@@ -3056,6 +3134,8 @@ async function route(request, env) {
   if (path === "/request" && request.method === "POST") return handleRequest(request, env);
   if (path === "/request/status" && request.method === "GET") return handleRequestStatus(request, env, url);
   if (path === "/trial/extend" && request.method === "POST") return handleTrialExtend(request, env);
+  if (path === "/contact" && request.method === "POST") return handleContact(request, env);
+  if (path === "/request/withdraw" && request.method === "POST") return handleWithdraw(request, env);
   let who = null;
   if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/")) {
     who = await whoIs(request, env, url);

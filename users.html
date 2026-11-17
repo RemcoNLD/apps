@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.7"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-17.8"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -110,6 +110,10 @@
   .req .who2 { font-weight: 700; }
   .req .mail { font-size: .95rem; word-break: break-all; }
   .req .note { font-size: .92rem; margin: 6px 0 0; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .msg.delete { border-left: 4px solid var(--bad); }
+  .msg .txt { margin: 8px 0 0; white-space: pre-wrap; font-size: .95rem; }
+  .msg .btns3 { display: flex; gap: 8px; margin-top: 12px; }
+  .msg .btns3 button { flex: 1; padding: 10px 8px; }
   .req .declinebox { margin-top: 12px; }
   .req .declinebox textarea { width: 100%; min-height: 70px; padding: 10px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; resize: vertical; }
   .req .declinebox .row { margin-top: 8px; }
@@ -151,6 +155,7 @@
     <button type="submit" id="createBtn">Make key</button>
   </form>
   <div id="newKey"></div>
+  <div id="messages"></div>
   <div id="requests"></div>
   <h2 id="listTitle">Keys</h2>
   <div class="filters" id="filters" role="group" aria-label="Show"></div>
@@ -197,8 +202,8 @@ async function load() {
   try {
     data = await api("/admin/users");
     $("login").hidden = true; $("app").hidden = false;
-    await decryptAll();
-    render(); renderRequests(); renderSelfService();
+    await decryptAll(); await decryptMessages();
+    render(); renderMessages(); renderRequests(); renderSelfService();
   } catch (e) { showError(e); }
 }
 
@@ -301,6 +306,39 @@ async function openPrivate(password = token()) {
   return privKey;
 }
 const emails = new Map(); // emailEnc → plain text, this page only
+const texts = new Map(); // message id → decrypted text
+async function decryptMessages() {
+  if (!data.crypt) return;
+  for (const m of data.messages || []) {
+    if (!m.enc || texts.has(m.id)) continue;
+    try {
+      await openPrivate();
+      const raw = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, privKey, unb64(m.enc.k));
+      const aes = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
+      texts.set(m.id, new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(m.enc.iv) }, aes, unb64(m.enc.d))));
+    } catch (_) { texts.set(m.id, "🔒 locked"); }
+  }
+}
+function renderMessages() {
+  const list = data.messages || [];
+  const open = list.filter((m) => !m.done), done = list.filter((m) => m.done);
+  const when2 = (iso) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const card = (m) => {
+    const user = m.userId && data.users.find((u) => u.id === m.userId);
+    const text = m.enc ? texts.get(m.id) : m.text;
+    return `<div class="card req msg${m.kind === "delete" ? " delete" : ""}" data-msg="${m.id}">
+      <div class="top"><span class="who2">${esc(m.name || "No name")} <span class="tchip">${m.kind === "delete" ? "Delete my data" : "Note"}</span></span><span class="small muted">${when2(m.at)}</span></div>
+      <div class="small muted">${m.userId ? (user ? "Has a key" : "Key already deleted") : "Waiting request"}</div>
+      ${text ? `<div class="txt">${esc(text)}</div>` : ""}
+      ${m.done ? `<div class="small muted" style="margin-top:8px">Done · <button type="button" class="link" data-mact="message-delete">Delete</button></div>`
+        : `<div class="btns3">${m.kind === "delete" && user ? `<button type="button" class="danger" data-mact="delete-user">Delete their key and email</button>` : ""}
+            <button type="button" class="plain" data-mact="message-done">Done</button></div>`}
+    </div>`;
+  };
+  $("messages").innerHTML = !list.length ? "" : `<h2>Messages${open.length ? `<span class="badge">${open.length}</span>` : ""}</h2>`
+    + open.map(card).join("") + (open.length ? "" : `<p class="small muted">No open messages.</p>`)
+    + (done.length ? `<details class="hist"><summary>Done (${done.length})</summary>${done.map(card).join("")}</details>` : "");
+}
 async function decryptAll() {
   const encs = [...data.requests.map((r) => r.emailEnc), ...data.users.map((u) => u.emailEnc)].filter((e) => e && !emails.has(e));
   if (!encs.length || !data.crypt) return;
@@ -472,6 +510,21 @@ $("requests").addEventListener("click", async (e) => {
     if (b.dataset.ract === "approve" && out.upgraded) {
       $("newKey").innerHTML = `<div class="card newkey" role="status"><b>${esc(out.user.label)}</b> now has full access. Same key, their app keeps working; the trial limits are gone within a minute or two. <button type="button" class="link" onclick="this.closest('.card').remove()">OK</button></div>`;
     } else if (b.dataset.ract === "approve") showKey(out.user.label, out.key, true, emails.get(r.emailEnc) || "");
+    await load();
+  } catch (err) { showError(err); b.disabled = false; }
+});
+$("messages").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-mact]");
+  if (!b) return;
+  const id = e.target.closest("[data-msg]").dataset.msg;
+  const m = data.messages.find((x) => x.id === id);
+  if (b.dataset.mact === "delete-user" && !b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Tap again: delete key and email"; return; }
+  b.disabled = true;
+  try {
+    if (b.dataset.mact === "delete-user") {
+      await api("/admin/users", { action: "delete", id: m.userId });
+      await api("/admin/users", { action: "message-done", id });
+    } else await api("/admin/users", { action: b.dataset.mact, id });
     await load();
   } catch (err) { showError(err); b.disabled = false; }
 });

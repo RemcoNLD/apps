@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.138"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.139"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -769,7 +769,7 @@
   .lock .secondary { display: block; width: 100%; margin-top: 10px; padding: 14px; font-size: 1.05rem; font-weight: 800;
     background: transparent; color: var(--line); border: 2px solid rgba(127,127,127,.35); border-radius: 12px; }
   .lock .error { margin: 12px 0 0; text-align: center; }
-  .lock #lockRetry { display: block; margin: 10px auto 0; font-size: 1rem; }
+  .lock #lockRetry, .lock #lockClear { display: block; margin: 10px auto 0; font-size: 1rem; }
   .lock .or { display: flex; align-items: center; gap: 12px; margin: 24px 0 4px; color: var(--muted); font-size: .9rem; }
   .lock .or::before, .lock .or::after { content: ""; flex: 1; height: 1px; background: rgba(127,127,127,.3); }
   .lock .back { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 12px; padding: 4px 0; background: none; border: 0;
@@ -1262,13 +1262,14 @@
       <div class="lock-card">
         <label class="lbl" for="lockCode">Your access key</label>
         <input id="lockCode" class="input" type="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX">
-        <p class="hint">Only needed once on this device.<span id="pasteWrap" hidden> · <button type="button" class="link" id="lockPaste">Paste</button></span></p>
+        <p class="hint">Only needed once on this device.<span id="pasteWrap" hidden>&nbsp;·&nbsp;<button type="button" class="link" id="lockPaste">Paste</button></span></p>
         <button type="button" class="primary" id="lockBtn">Open</button>
         <p class="error" id="lockError" hidden></p>
         <button type="button" class="link" id="lockRetry" hidden>Check again</button>
+        <button type="button" class="link" id="lockClear" hidden>Enter a different key</button>
       </div>
       <div id="lockAsk" hidden>
-        <div class="or">No key yet?</div>
+        <div class="or" id="lockAskLine">No key yet?</div>
         <button type="button" class="secondary" id="askOpen">Request a key</button>
       </div>
     </div>
@@ -1647,7 +1648,7 @@ function showLock(why, paused = false) {
   // switch to its compact typing layout with no keyboard. Tapping the field does both.
 }
 function hideLock() {
-  $("lock").hidden = true; $("lockError").hidden = true; $("lockRetry").hidden = true;
+  $("lock").hidden = true; $("lockError").hidden = true; $("lockRetry").hidden = true; $("lockClear").hidden = true;
   if (!booted) boot();
 }
 $("lockRetry").addEventListener("click", async () => {
@@ -1669,11 +1670,10 @@ function keyLooksRight(k) {
 async function unlock() {
   const code = $("lockCode").value.toUpperCase().replace(/[\s\-.]/g, "");
   if (!keyLooksRight(code)) {
-    $("lockError").textContent = /[01ILO]/.test(code) ? "Keys have no 0, 1, I, L or O. Check the letters." : "That key isn’t complete or has a typo.";
-    $("lockError").hidden = false;
+    keyError(/[01ILO]/.test(code) ? "Keys have no 0, 1, I, L or O. Check the letters." : "That key isn’t complete or has a typo.");
     return;
   }
-  $("lockError").hidden = true;
+  $("lockError").hidden = true; $("lockClear").hidden = true;
   $("lockBtn").disabled = true;
   try {
     const res = await fetch(`${WORKER}/unlock`, {
@@ -1689,12 +1689,28 @@ async function unlock() {
     $("lockCode").value = "";
     hideLock();
   } catch (e) {
-    $("lockError").textContent = /fetch|load failed|network/i.test(e.message) ? "Couldn’t reach the server. Try again." : e.message;
-    $("lockError").hidden = false;
+    const net = /fetch|load failed|network/i.test(e.message);
+    keyError(net ? "Couldn’t reach the server. Try again." : e.message, !net);
   } finally {
     $("lockBtn").disabled = false;
   }
 }
+// A key that doesn't work: say why, and always offer the ways on: a different key (clears the field)
+// and, below, requesting one (when self-service is on) or whom to ask (when it's off).
+function keyError(text, wrong = true) {
+  const askOff = askMode === "off";
+  $("lockError").textContent = wrong && askOff ? `${text} Ask the person who gave it to you for a new one.` : text;
+  $("lockError").hidden = false;
+  $("lockClear").hidden = !wrong || !$("lockCode").value;
+  if (wrong) $("lockAskLine").textContent = "Need a new key?";
+  loadAskMode(); // make sure "No key yet? Request a key" shows when it can
+}
+$("lockClear").addEventListener("click", () => {
+  $("lockAskLine").textContent = "No key yet?";
+  $("lockCode").value = ""; $("lockError").hidden = true; $("lockClear").hidden = true;
+  $("lock").classList.add("kbd"); $("lockCode").focus();
+});
+$("lockCode").addEventListener("input", () => { $("lockClear").hidden = true; });
 
 // Keyboard: iOS keeps a fixed layer full height and lays the keyboard over it, so the lock screen is
 // sized to the visible part (visualViewport) and gets a mini header while the keyboard is up.
@@ -1730,7 +1746,8 @@ const askPending = () => { try { return JSON.parse(localStorage.getItem(ASK_KEY)
 function lockView(view) { // "key" | "form" | "wait" | "trialEnd"
   for (const [id, v] of [["lvKey", "key"], ["askForm", "form"], ["askWait", "wait"], ["trialEnd", "trialEnd"], ["trialWelcome", "trialWelcome"]]) $(id).hidden = view !== v;
   $("lockAsk").hidden = askMode === "off";
-  if (view !== "key") { $("lockError").hidden = true; $("lockRetry").hidden = true; }
+  if (view === "key") loadAskMode();
+  if (view !== "key") { $("lockError").hidden = true; $("lockRetry").hidden = true; $("lockClear").hidden = true; }
   $("lock").classList.toggle("compact", view === "form"); // small header: room for the keyboard
   for (const id of ["lvKey", "askForm", "askWait", "trialEnd", "trialWelcome"]) $(id).scrollTop = 0;
 }
@@ -1756,10 +1773,23 @@ function showWait(state, reply = "") {
   $("askReply").hidden = !reply; $("askReply").textContent = reply;
   $("askAgain").hidden = !(declined || gone) || askMode === "off";
 }
+// The self-service setting decides whether "No key yet? Request a key / Try it free" shows. Asked
+// whenever the key screen shows (at most once a minute), so it's there however the screen was reached.
+let askModeAt = 0, askModeP = null;
+function loadAskMode() {
+  if (askModeP || Date.now() - askModeAt < 60000) return askModeP || Promise.resolve();
+  askModeP = fetch(`${WORKER}/self-service`, { cache: "no-store" }).then((r) => r.json()).then((d) => {
+    askMode = d.mode || "off"; askModeAt = Date.now();
+    const trial = askMode === "trial";
+    $("askOpen").textContent = trial ? "Try it free" : "Request a key";
+    $("lockAsk").hidden = askMode === "off";
+  }).catch(() => {}).finally(() => { askModeP = null; });
+  return askModeP;
+}
 async function refreshAsk() {
   // A waiting request: straight to the waiting screen (no flash of the key screen while asking the server)
   if (askPending() && !askFromTrial) { showWait("pending"); checkAsk(); }
-  try { askMode = (await (await fetch(`${WORKER}/self-service`, { cache: "no-store" })).json()).mode || "off"; } catch (_) {}
+  askModeAt = 0; await loadAskMode();
   const trial = askMode === "trial" && !askFromTrial;
   $("askOpen").textContent = trial ? "Try it free" : "Request a key";
   $("askTitle").textContent = askFromTrial ? "Ask for a full key" : trial ? "Try EVailability" : "Request a key";

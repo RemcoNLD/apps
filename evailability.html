@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.140"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.141"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1677,7 +1677,8 @@ async function unlock() {
     keyError(/[01ILO]/.test(code) ? "Keys have no 0, 1, I, L or O. Check the letters." : "That key isn’t complete or has a typo.");
     return;
   }
-  closeKeyError(); $("lockCode").value = code.length === 12 ? `${code.slice(0, 4)}-${code.slice(4, 8)}-${code.slice(8)}` : code;
+  $("lvKey").classList.remove("keyerr"); $("lockError").hidden = true; $("lockClear").hidden = true;
+  $("lockCode").value = code.length === 12 ? `${code.slice(0, 4)}-${code.slice(4, 8)}-${code.slice(8)}` : code;
   $("lockBtn").disabled = true;
   try {
     const res = await fetch(`${WORKER}/unlock`, {
@@ -1713,6 +1714,7 @@ function keyError(text, wrong = true) {
 }
 function closeKeyError() {
   $("lvKey").classList.remove("keyerr");
+  try { sessionStorage.removeItem("evailability-link-key"); } catch (_) {}
   $("lockCode").value = ""; $("lockError").hidden = true; $("lockClear").hidden = true;
 }
 $("lockClear").addEventListener("click", closeKeyError);
@@ -5275,7 +5277,7 @@ async function checkForUpdate(manual) {
     if (latest && latest !== APP_VERSION) {
       if (sessionStorage.getItem("evailability-reloaded-for") === latest) return; // don't loop on a stale cache
       sessionStorage.setItem("evailability-reloaded-for", latest);
-      location.replace(location.pathname + "?v=" + encodeURIComponent(latest));
+      location.replace(location.pathname + "?v=" + encodeURIComponent(latest) + location.hash); // keep a #key= link
     } else if (manual) {
       $("checkUpdate").textContent = "Up to date";
     }
@@ -5690,16 +5692,23 @@ $("lockCode").addEventListener("keydown", (e) => { if (e.key === "Enter") unlock
 if (accessToken()) boot(); else showLock();
 // The link in the key email: evailability.html#key=XXXX-XXXX-XXXX signs in by itself. The # part never
 // reaches a server; it's taken off the address right away.
+const LINK_KEY = "evailability-link-key";
 {
+  // Kept in this tab's session until it worked or its error was closed: if the app reloads itself for
+  // an update meanwhile (which drops the address's #), the key is tried again and the result still shows.
   const m = /^#key=([A-Za-z0-9-]{12,20})$/.exec(location.hash);
   if (m) {
     history.replaceState(null, "", location.pathname + location.search);
-    const k = m[1].toUpperCase().replace(/-/g, "");
+    try { sessionStorage.setItem(LINK_KEY, m[1]); } catch (_) {}
+  }
+  let pending = null; try { pending = sessionStorage.getItem(LINK_KEY); } catch (_) {}
+  if (pending) {
+    const k = pending.toUpperCase().replace(/-/g, "");
     $("lockCode").value = `${k.slice(0, 4)}-${k.slice(4, 8)}-${k.slice(8)}`;
     try { localStorage.removeItem(ASK_KEY); } catch (_) {} // a request that led to this key is done
     if ($("lock").hidden) $("lock").hidden = false;
     lockView("key");
-    unlock();
+    unlock().then(() => { if ($("lock").hidden) try { sessionStorage.removeItem(LINK_KEY); } catch (_) {} });
   }
 }
 // Back from the privacy policy: #request opens the request form again, #help opens Help.

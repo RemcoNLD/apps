@@ -65,7 +65,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.2.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.2.1"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1603,15 +1603,33 @@ function ptSitesNear(index, brand, lat, lon, km) {
   return out.sort((a, b) => a.d - b.d);
 }
 
-let ptSnapState = null;
+let ptSnapState = null, ptSnapLast = null; // ptSnapLast: { sha, data } of the last snapshot read
+// raw.githubusercontent.com caches a branch URL for up to 5 minutes and ignores query strings (measured
+// 17 Nov: a new snapshot stayed invisible for minutes). A URL with the commit id is new for every push,
+// so it is always fresh: read the branch's commit id from git's own ref list (~0.5 kB, never cached,
+// no API rate limit), then the file at that commit, and only when the commit changed.
+const PT_REFS_URL = "https://github.com/RemcoNLD/apps.git/info/refs?service=git-upload-pack";
+const PT_RAW_AT = (sha) => `https://raw.githubusercontent.com/RemcoNLD/apps/${sha}/pt-status.json`;
+async function ptLiveSha() {
+  const res = await fetch(PT_REFS_URL, { headers: { "User-Agent": "EVailability-Worker" } });
+  if (!res.ok) throw new Error(`refs HTTP ${res.status}`);
+  const m = (await res.text()).match(/([0-9a-f]{40}) refs\/heads\/live\b/);
+  if (!m) throw new Error("no live branch");
+  return m[1];
+}
 async function ptSnapshot() {
   if (ptSnapState && Date.now() - ptSnapState.at < PT_SNAPSHOT_MS) return ptSnapState.promise;
   const promise = (async () => {
     countCall("PT live");
-    // The minute in the query keeps raw.githubusercontent.com's 5-minute cache from serving an old copy.
-    const res = await fetch(`${PT_LIVE_URL}?m=${Math.floor(Date.now() / 60000)}`, { cf: { cacheTtl: 60 } });
+    let sha = null;
+    try { sha = await ptLiveSha(); } catch (e) { console.log("Portugal refs failed", e.message); }
+    if (sha && ptSnapLast?.sha === sha) return ptSnapLast.data; // nothing new since the last read
+    const url = sha ? PT_RAW_AT(sha) : PT_LIVE_URL; // without the commit id: the (maybe older) branch copy
+    const res = await fetch(url, { cf: { cacheTtl: sha ? 3600 : 60 } });
     if (!res.ok) throw new HttpError(502, `Portugal live: HTTP ${res.status}`);
-    return res.json();
+    const data = await res.json();
+    if (sha) ptSnapLast = { sha, data };
+    return data;
   })();
   ptSnapState = { at: Date.now(), promise };
   promise.catch(() => { if (ptSnapState?.promise === promise) ptSnapState = null; });

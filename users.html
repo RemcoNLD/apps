@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.11"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-17.12"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -409,7 +409,8 @@ function renderSelfService() {
 
 // The mail / share text: first the link that signs in by itself (the key rides in the #, which never
 // reaches a server), then the key on its own lines for typing or pasting. A mail link can only carry
-// plain text, so no bigger font: the key stands alone, with space around it, and is in the subject.
+// plain text, so no bigger font: the key stands alone, with space around it. Not in the subject, which
+// shows on lock screens and in previews.
 const APP_URL = "https://remconld.github.io/apps/evailability.html";
 function keyMailText(label, key) {
   // Order: 1. reopen the app (the device that asked picks up its sign-in by itself, in Safari or from
@@ -427,6 +428,7 @@ Your access to EVailability is ready.
 3. Still no luck? Tap this link. It opens the app in your browser and signs you in there:
 ${APP_URL}#key=${key}
 
+May every ring be green!
 Remco`;
 }
 function showKey(label, key, isNew, email = "") {
@@ -437,7 +439,7 @@ function showKey(label, key, isNew, email = "") {
       <button type="button" id="copyBtn">Copy key</button>
       ${navigator.share ? `<button type="button" class="plain" id="shareBtn">Share…</button>` : ""}
     </div>
-    ${email ? `<a class="plain mailbtn" id="mailBtn" href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(`Your EVailability key: ${key}`)}&body=${encodeURIComponent(keyMailText(label, key))}">Email key to ${esc(email)}</a>` : ""}
+    ${email ? `<a class="plain mailbtn" id="mailBtn" href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent("Your EVailability access is ready")}&body=${encodeURIComponent(keyMailText(label, key))}">Email key to ${esc(email)}</a>` : ""}
     <p class="small muted" style="margin:10px 0 0">Only shown now. Copy it before you leave this page.
       <button type="button" class="link" id="doneBtn">Done</button></p>
   </div>`;

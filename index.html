@@ -182,7 +182,8 @@ a.app.dragging { transition:box-shadow .18s ease; z-index:2; box-shadow:0 12px 2
   let seen = {};
   try { seen = JSON.parse(localStorage.getItem(SEEN) || "{}"); } catch (e) {}
   const tiles = [...document.querySelectorAll("a.app")].filter((a) => !/^https?:/.test(a.getAttribute("href")));
-  const short = (v) => { const m = /\d{4}-(\d\d)-(\d\d)\.(\d+)/.exec(v); return m ? "v" + m[3] : v; };
+  // 0.x.y versions show as v0.x.y; old date versions (2026-11-17.158) as v158.
+  const short = (v) => { if (/^\d+\.\d+\.\d+$/.test(v)) return "v" + v; const m = /\d{4}-(\d\d)-(\d\d)\.(\d+)/.exec(v); return m ? "v" + m[3] : v; };
   async function check(a) {
     const base = a.dataset.base || (a.dataset.base = a.getAttribute("href"));
     let tag = a.querySelector(".ver");

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.158"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="0.1.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -887,6 +887,18 @@
   #help .cupd .v { color: var(--muted); line-height: 1.45; font-size: 1.02rem; }
   #help .cupd .v b { color: var(--line); }
   #help svg.flag { width: 22px; height: 15px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(127,127,127,.35); vertical-align: -2px; }
+  /* Version links and What's new */
+  .start-top .ver-link { background: none; border: 0; padding: 4px 2px; margin: 4px 0 0 -4px; color: var(--muted); font: 600 .78rem/1 system-ui, sans-serif; cursor: pointer; align-self: center; }
+  .splash .foot .sp-ver { background: none; border: 0; color: #93a0a8; font-size: .82rem; padding: 4px 10px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  #changelog .cl-rel { margin: 18px 0 0; }
+  #changelog .cl-rel h3 { font-size: 1.15rem; margin: 0 0 2px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  #changelog .cl-rel h3 .cl-v { color: var(--line); }
+  #changelog .cl-rel h3 small { color: var(--muted); font-weight: 500; font-size: .85rem; }
+  #changelog .cl-rel .cl-title { color: var(--muted); margin: 0 0 6px; font-size: .95rem; }
+  #changelog ul { padding-left: 1.1em; margin: 6px 0; }
+  #changelog li { color: var(--muted); line-height: 1.5; font-size: 1.02rem; margin: 0 0 4px; }
+  #changelog li b { color: var(--line); }
+  #changelog .cl-now { font-size: .72rem; font-weight: 700; color: var(--free); text-transform: uppercase; letter-spacing: .04em; }
   /* Help sections fold: the topic is a tappable header, the content opens below it. */
   #help details.hsec { border-bottom: 1px solid rgba(127,127,127,.2); }
   #help details.hsec > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 2px; -webkit-tap-highlight-color: transparent; }
@@ -1115,6 +1127,7 @@
   <div class="foot">
     <label><input type="checkbox" id="splashOff"> Don’t show again</label>
     <small>Tap to continue</small>
+    <button type="button" class="sp-ver" id="spVer"></button>
   </div>
 </div>
 <script>
@@ -1175,6 +1188,10 @@
   const drive = matchMedia("(prefers-reduced-motion: reduce)").matches ? null : setInterval(step, 1400);
   let timer = setTimeout(close, 5200);
   function close() { clearTimeout(timer); clearInterval(drive); el.classList.add("gone"); setTimeout(() => el.remove(), 500); }
+  // Version, tappable: closes the splash and opens What's new.
+  const ver = document.getElementById("spVer");
+  ver.textContent = "v" + (document.querySelector('meta[name="app-version"]')?.content || "?");
+  ver.addEventListener("click", (e) => { e.stopPropagation(); close(); window.openChangelog?.(); });
   const box = document.getElementById("splashOff");
   box.addEventListener("click", (e) => e.stopPropagation());
   box.closest("label").addEventListener("click", (e) => e.stopPropagation());
@@ -1192,6 +1209,7 @@
     <a class="apps-back" id="appsBack" href="./" aria-label="Back to apps" hidden>‹</a>
     <button type="button" class="start-back" id="backToRoute" aria-label="Back to the route" hidden>‹ Route</button>
     <h1>EVailability</h1>
+    <button type="button" class="ver-link" id="verStart" aria-label="What’s new"></button>
     <button type="button" class="start-clear" id="clearStart" hidden>Clear</button>
     <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
   </div>
@@ -1223,7 +1241,7 @@
   </div>
   <ul id="fromResults" class="results"></ul>
 
-  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT, FR (tap)</span></div>
+  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT · FR, BE (tap)</span></div>
   <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
   <div class="brands-head" style="margin-top:14px"><span>Charging power</span><span class="hint">Change any time</span></div>
   <div class="power" role="group" aria-label="Minimum charging power" data-power>
@@ -1306,7 +1324,15 @@
     </div>
   </div>
   <div id="helpBody"></div>
-  <p class="hint version">Version <span id="version"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
+  <p class="hint version">Version <button type="button" class="link" id="version"></button> · <span id="runsAs"></span> <button type="button" id="checkUpdate" class="link">Check for update</button></p>
+</div>
+
+<div class="sheet" id="changelog" hidden role="dialog" aria-modal="true" aria-labelledby="clTitle">
+  <div class="sheet-head">
+    <h2 id="clTitle">What’s new</h2>
+    <button type="button" class="link" id="clClose">Close</button>
+  </div>
+  <div id="clBody"></div>
 </div>
 
 <div class="intro" id="intro" hidden role="dialog" aria-modal="true" aria-label="Introduction">
@@ -1580,7 +1606,7 @@ const I18N_TEXT = {
 "Remove via point": "Viapunt verwijderen",
 "Clear": "Wissen",
 "Chargers": "Laders",
-"Live: NL, DE, AT, FR (tap)": "Live: NL, DE, AT, FR (tik)",
+"Live: NL, DE, AT · FR, BE (tap)": "Live: NL, DE, AT · FR, BE (tik)",
 "Charging power": "Laadvermogen",
 "Change any time": "Altijd te wijzigen",
 "Minimum charging power": "Minimaal laadvermogen",
@@ -1693,6 +1719,10 @@ const I18N_TEXT = {
 "Check for update": "Controleren op update",
 "Show the introduction again": "Introductie opnieuw tonen",
 "Show the splash screen at start": "Startscherm tonen bij openen",
+"What’s new": "Wat is er nieuw",
+"This version": "Deze versie",
+"home-screen app": "app op beginscherm",
+"browser tab": "browsertabblad",
 "Netherlands": "Nederland",
 "Germany": "Duitsland",
 "Austria": "Oostenrijk",
@@ -1850,7 +1880,7 @@ const I18N_TEXT = {
 "Remove via point": "Remover ponto intermédio",
 "Clear": "Limpar",
 "Chargers": "Carregadores",
-"Live: NL, DE, AT, FR (tap)": "Em direto: NL, DE, AT, FR (toque)",
+"Live: NL, DE, AT · FR, BE (tap)": "Em direto: NL, DE, AT · FR, BE (toque)",
 "Charging power": "Potência de carregamento",
 "Change any time": "Pode mudar a qualquer momento",
 "Minimum charging power": "Potência mínima de carregamento",
@@ -1966,6 +1996,10 @@ const I18N_TEXT = {
 "Check for update": "Procurar atualização",
 "Show the introduction again": "Mostrar novamente a introdução",
 "Show the splash screen at start": "Mostrar o ecrã inicial ao abrir",
+"What’s new": "Novidades",
+"This version": "Esta versão",
+"home-screen app": "app no ecrã principal",
+"browser tab": "separador do navegador",
 "Netherlands": "Países Baixos",
 "Germany": "Alemanha",
 "Austria": "Áustria",
@@ -6348,7 +6382,8 @@ async function checkForUpdate(manual) {
 // Each home-screen icon on iPhone keeps its own storage, apart from Safari: the access code and
 // settings saved in one don't exist in another. The Help line says which one this is.
 const RUNS_AS = matchMedia("(display-mode: standalone)").matches || navigator.standalone ? "home-screen app" : "browser tab";
-$("version").textContent = `${APP_VERSION} · ${RUNS_AS}`;
+$("version").textContent = APP_VERSION;
+$("runsAs").textContent = RUNS_AS;
 try { navigator.storage?.persist?.(); } catch (_) {}
 $("checkUpdate").addEventListener("click", () => checkForUpdate(true));
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(false); });
@@ -6454,6 +6489,60 @@ $("introNext").addEventListener("click", () => {
   const el = $("slides");
   el.scrollTo({ left: (i + 1) * el.clientWidth, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 });
+
+// ------------------------------------------------------------- What's new
+// One entry per feature version (0.x), newest first; fixes made while working on it (0.x.y) go into
+// the same entry. Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
+const CHANGELOG = [
+  { v: "0.1", date: "2026-11-17",
+    title: { en: "First numbered version", nl: "Eerste genummerde versie", pt: "Primeira versão numerada" },
+    items: {
+      en: ["<b>Help</b> is shorter and written for the drive: topics fold open, and flags show how each country updates.",
+           "<b>Change route</b> keeps your route: fix the destination or a via point and plan again, or go back unchanged. <b>Clear</b> empties all fields.",
+           "The app speaks <b>English, Dutch and Portuguese</b>, following your phone (switch in Help).",
+           "A <b>version number</b> on the start screen and the splash, with this list of changes."],
+      nl: ["<b>Help</b> is korter en geschreven voor onderweg: onderwerpen klappen open, en vlaggen laten zien hoe elk land wordt bijgewerkt.",
+           "<b>Route wijzigen</b> bewaart je route: pas de bestemming of een viapunt aan en plan opnieuw, of ga ongewijzigd terug. <b>Wissen</b> maakt alle velden leeg.",
+           "De app is er in het <b>Engels, Nederlands en Portugees</b> en volgt je telefoon (wisselen in Help).",
+           "Een <b>versienummer</b> op het startscherm en het openingsscherm, met dit overzicht van wijzigingen."],
+      pt: ["A <b>Ajuda</b> é mais curta e pensada para a estrada: os temas abrem-se ao tocar e as bandeiras mostram como cada país é atualizado.",
+           "<b>Alterar percurso</b> mantém o seu percurso: corrija o destino ou um ponto intermédio e volte a planear, ou regresse sem alterações. <b>Limpar</b> apaga todos os campos.",
+           "A app está em <b>inglês, neerlandês e português</b> e segue o seu telemóvel (pode mudar na Ajuda).",
+           "Um <b>número de versão</b> no ecrã inicial e no ecrã de abertura, com esta lista de alterações."] } },
+  { v: "", date: "",
+    title: { en: "Before version numbers", nl: "Vóór de versienummers", pt: "Antes dos números de versão" },
+    items: {
+      en: ["Fast chargers along your route with <b>live free counts</b> in the Netherlands, Germany and Austria, France and Belgium on tap.",
+           "<b>Detour minutes</b> per charger and <b>Easy to reach</b>; 11 brands and a charging power filter.",
+           "<b>Route options</b> and via points; <b>turn by turn</b> with exit countdowns; <b>road closures</b> with Avoid.",
+           "Personal access keys, and a free trial."],
+      nl: ["Snelladers langs je route met <b>live vrije plekken</b> in Nederland, Duitsland en Oostenrijk, Frankrijk en België met een tik.",
+           "<b>Omrijdminuten</b> per lader en <b>Makkelijk bereikbaar</b>; 11 merken en een filter op laadvermogen.",
+           "<b>Routekeuze</b> en viapunten; <b>afslag voor afslag</b> met aftellen tot de afrit; <b>wegafsluitingen</b> met Vermijden.",
+           "Persoonlijke toegangssleutels, en een gratis proefperiode."],
+      pt: ["Carregadores rápidos no seu percurso com <b>lugares livres em direto</b> nos Países Baixos, Alemanha e Áustria, França e Bélgica ao tocar.",
+           "<b>Minutos de desvio</b> por carregador e <b>Fácil acesso</b>; 11 marcas e um filtro de potência.",
+           "<b>Percursos à escolha</b> e pontos intermédios; <b>indicações passo a passo</b> com contagem até à saída; <b>cortes de estrada</b> com Evitar.",
+           "Chaves de acesso pessoais e um período experimental gratuito."] } },
+];
+function changelogHtml() {
+  const lang = CHANGELOG[0].items[LANG] ? LANG : "en";
+  const day = (d) => d ? new Date(d + "T12:00:00").toLocaleDateString(LANG === "pt" ? "pt-PT" : LANG === "nl" ? "nl-NL" : "en-GB", { day: "numeric", month: "long", year: "numeric" }) : "";
+  const cur = APP_VERSION.split(".").slice(0, 2).join(".");
+  return CHANGELOG.map((r) => `<section class="cl-rel">
+    <h3>${r.v ? `<span class="cl-v">${r.v === cur ? esc(APP_VERSION) : r.v}</span>` : ""}<span>${r.title[lang]}</span>${r.date ? `<small>${day(r.date)}</small>` : ""}${r.v === cur ? `<span class="cl-now">${esc(T("This version"))}</span>` : ""}</h3>
+    <ul>${r.items[lang].map((t) => `<li>${t}</li>`).join("")}</ul></section>`).join("");
+}
+function openChangelog() {
+  $("clBody").innerHTML = changelogHtml();
+  $("changelog").hidden = false;
+  $("changelog").scrollTop = 0;
+}
+window.openChangelog = openChangelog;
+$("clClose").addEventListener("click", () => { $("changelog").hidden = true; });
+$("verStart").textContent = "v" + APP_VERSION;
+$("verStart").addEventListener("click", openChangelog);
+$("version").addEventListener("click", () => { $("help").hidden = true; openChangelog(); });
 
 // Help: small country flags (inline SVG tricolours, so they look the same on every device).
 const FLAG_BANDS = { NL: ["h", "#AE1C28", "#FFFFFF", "#21468B"], DE: ["h", "#000000", "#DD0000", "#FFCE00"], AT: ["h", "#C8102E", "#FFFFFF", "#C8102E"],

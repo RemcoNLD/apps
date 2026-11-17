@@ -146,7 +146,7 @@ EXACT = {
 "Remove via point": ("Viapunt verwijderen", "Remover ponto intermédio"),
 "Clear": ("Wissen", "Limpar"),
 "Chargers": ("Laders", "Carregadores"),
-"Live: NL, DE, AT, FR (tap)": ("Live: NL, DE, AT, FR (tik)", "Em direto: NL, DE, AT, FR (toque)"),
+"Live: NL, DE, AT · FR, BE (tap)": ("Live: NL, DE, AT · FR, BE (tik)", "Em direto: NL, DE, AT · FR, BE (toque)"),
 "Charging power": ("Laadvermogen", "Potência de carregamento"),
 "Change any time": ("Altijd te wijzigen", "Pode mudar a qualquer momento"),
 "Minimum charging power": ("Minimaal laadvermogen", "Potência mínima de carregamento"),
@@ -273,6 +273,11 @@ EXACT = {
 "Check for update": ("Controleren op update", "Procurar atualização"),
 "Show the introduction again": ("Introductie opnieuw tonen", "Mostrar novamente a introdução"),
 "Show the splash screen at start": ("Startscherm tonen bij openen", "Mostrar o ecrã inicial ao abrir"),
+# ---- what's new
+"What’s new": ("Wat is er nieuw", "Novidades"),
+"This version": ("Deze versie", "Esta versão"),
+"home-screen app": ("app op beginscherm", "app no ecrã principal"),
+"browser tab": ("browsertabblad", "separador do navegador"),
 # ---- help: country flags (aria labels)
 "Netherlands": ("Nederland", "Países Baixos"),
 "Germany": ("Duitsland", "Alemanha"),

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.151"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.152"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -186,6 +186,12 @@
   /* While driving the page itself never scrolls (only the list does): pinned to the screen. iOS can leave
      a home-screen app scrolled, with a gap at the bottom, after the keyboard closes; this rules that out. */
   body:has(#drive:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
+  /* Bottom gap (.152): a home-screen app on iOS can get a viewport that ends short of the screen (about
+     the status bar's height), so everything fixed to "bottom: 0" stopped above an empty strip. fitScreen()
+     measures the gap and sets --app-h (the full screen height) and --app-under (the gap); not set = no change. */
+  #drive, .sheet, .intro, .splash, .backdrop { height: var(--app-h, auto); }
+  html .navsheet { bottom: calc(0px - var(--app-under, 0px)); }
+  html .toast { margin-bottom: calc(0px - var(--app-under, 0px)); }
   .bar {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 10px 12px; color: var(--muted); font-size: .95rem;
@@ -2327,6 +2333,33 @@ function loadBrands() {
 }
 
 const $ = (id) => document.getElementById(id);
+
+// Bottom gap (.152). In a home-screen app iOS can lay the page out in a viewport shorter than the screen
+// (seen on an iPhone 15 Pro: about the status bar's height missing at the bottom), even with a fresh
+// icon, so the fixed driving screen stopped above an empty strip. Measure it against the screen and
+// stretch the full-screen layers to the real height. Only in the home-screen app, only for a small gap
+// (< 140 px), never while a text field has focus (the keyboard is not a gap).
+const VP = { inner: 0, full: 0, fixed: false };
+function fitScreen() {
+  const root = document.documentElement;
+  const standalone = matchMedia("(display-mode: standalone)").matches || !!navigator.standalone;
+  const a = document.activeElement;
+  const typing = !!a && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(checkbox|radio|button|submit)$/.test(a.type)));
+  const sw = screen.width || 0, sh = screen.height || 0;
+  const full = innerWidth > innerHeight ? Math.min(sw, sh) : Math.max(sw, sh);
+  const gap = full - innerHeight;
+  VP.inner = innerHeight; VP.full = full;
+  VP.fixed = standalone && !typing && full > 0 && gap > 0 && gap < 140;
+  if (VP.fixed) { root.style.setProperty("--app-h", full + "px"); root.style.setProperty("--app-under", gap + "px"); }
+  else if (!typing) { root.style.removeProperty("--app-h"); root.style.removeProperty("--app-under"); }
+  if (typeof renderDebug === "function") try { renderDebug(); } catch (_) {}
+}
+fitScreen();
+addEventListener("resize", fitScreen);
+addEventListener("orientationchange", () => setTimeout(fitScreen, 300));
+addEventListener("pageshow", fitScreen);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) fitScreen(); });
+document.addEventListener("focusout", () => setTimeout(fitScreen, 400));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const state = {
@@ -3142,7 +3175,9 @@ function renderDebug() {
   const pAt = state.route?.plannedAt || state.plannedAt;
   const planned = pAt ? ` P${hm(pAt)}` : "";
   const rid = r?.debugId ? ` #${r.debugId}` : r ? " #-" : "";
-  el.innerHTML = `${app} ${w} ${roads}${planned}${rid}`;
+  // V852/790+  viewport check: screen height / page height, + = stretched to the screen (.152)
+  const vp = ` V${VP.full}/${VP.inner}${VP.fixed ? "+" : ""}`;
+  el.innerHTML = `${app} ${w} ${roads}${planned}${rid}${vp}`;
 }
 $("debugToggle").checked = debugOn();
 // Who this key is and whether it may debug: at start, when Help opens and every 10 minutes.

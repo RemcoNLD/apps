@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.135"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.136"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1643,7 +1643,8 @@ function showLock(why, paused = false) {
   if (wasHidden && !paused) refreshAsk(); else lockView("key");
   if (why) { $("lockError").textContent = paused ? `${why} It opens again once it’s switched back on.` : why; $("lockError").hidden = false; }
   $("lockRetry").hidden = !paused;
-  if (wasHidden && !paused) setTimeout(() => $("lockCode").focus(), 50); // paused: no keyboard over the message
+  // No automatic focus: on iPhone it doesn't raise the keyboard (only a tap does), and the screen would
+  // switch to its compact typing layout with no keyboard. Tapping the field does both.
 }
 function hideLock() {
   $("lock").hidden = true; $("lockError").hidden = true; $("lockRetry").hidden = true;
@@ -1698,17 +1699,15 @@ async function unlock() {
 // Keyboard: iOS keeps a fixed layer full height and lays the keyboard over it, so the lock screen is
 // sized to the visible part (visualViewport) and gets a mini header while the keyboard is up.
 function fitLock() {
-  const vv = window.visualViewport, l = $("lock");
+  const l = $("lock");
   if (l.hidden) return;
-  // Typing = a text field on the lock screen has focus (iPhone then shows the keyboard). Measured from
-  // focus rather than from the window size, which iOS also shrinks with the keyboard.
+  // Typing = a text field on the lock screen has focus (the keyboard is up). Only the layout changes
+  // (mini header top left, content from the top); the layer itself stays full screen, so nothing of the
+  // app behind it shows between the content and the keyboard.
   const a = document.activeElement;
   const typing = !!a && l.contains(a) && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(checkbox|radio|button|submit)$/.test(a.type)));
   l.classList.toggle("kbd", typing);
-  if (vv) { // size the layer to what's visible above the keyboard (the layout viewport doesn't shrink)
-    const base = document.documentElement.clientHeight, short = vv.height < base - 60;
-    l.style.top = `${short ? vv.offsetTop : 0}px`; l.style.bottom = "auto"; l.style.height = `${short ? vv.height : base}px`;
-  }
+  l.style.top = l.style.bottom = l.style.height = ""; // (sizing to visualViewport, before .136, let the app show through)
 }
 if (window.visualViewport) { visualViewport.addEventListener("resize", fitLock); visualViewport.addEventListener("scroll", fitLock); }
 document.addEventListener("focusin", () => setTimeout(fitLock, 50));

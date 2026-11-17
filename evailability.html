@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.133"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.134"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -731,6 +731,25 @@
   .lock.compact .lock-box > h2 { font-size: 1.4rem; }
   .lock.compact .lock-tag { display: none; }
   .lock.compact .lv { flex: 1 1 auto; margin-top: 12px; }
+  /* Keyboard up (visualViewport smaller): the lock screen is sized to what's left above it, with a
+     mini header, so the field and button stay in view. */
+  .lock.kbd .lock-box { justify-content: flex-start; padding-top: 8px; }
+  .lock.kbd .lock-hero { margin: 0; }
+  .lock.kbd .lock-hero svg { width: 44px; height: 44px; }
+  .lock.kbd .lock-box > h2 { font-size: 1.15rem; }
+  .lock.kbd .lock-tag { display: none; }
+  .lock.kbd .lv { flex: 1 1 auto; margin-top: 8px; }
+  .lock.kbd #lockAsk { display: none; }
+  .lock.kbd .hint { display: none; }
+  /* The request form, tighter so it fits above the keyboard */
+  #askForm .lock-card { padding: 16px 16px 14px; }
+  #askForm .lock-card h3 { font-size: 1.15rem; margin: 0 0 2px; }
+  #askForm .lock-card > p { font-size: .9rem; margin: 0 0 6px; line-height: 1.35; }
+  #askForm .lbl { margin: 10px 0 4px; }
+  #askForm .input { padding: 10px 13px; font-size: 1rem; }
+  #askForm .primary { margin-top: 12px; padding: 13px; font-size: 1.1rem; }
+  #askForm .back { margin: 0 0 6px; padding: 2px 0; }
+  .lock.kbd #askForm .lock-card > p { display: none; }
   .lock-box h2 { font-size: 2rem; margin: 0; text-align: center; letter-spacing: -.02em; }
   .lock-tag { text-align: center; color: var(--muted); margin: 6px 0 26px; line-height: 1.4; }
   .lock-card { background: var(--asphalt-raised); border-radius: 16px; padding: 20px 18px;
@@ -834,6 +853,11 @@
   .switch input:checked + span::after { transform: translateX(22px); }
   .switch input:focus-visible + span { outline: 2px solid var(--sign-blue); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { .switch span, .switch span::after { transition: none; } }
+  .credits { margin-top: 30px; padding-top: 14px; border-top: 1px solid rgba(127,127,127,.25); }
+  #help .credits h3 { font-size: .95rem; margin: 0 0 6px; }
+  #help .credits p { font-size: .82rem; line-height: 1.45; margin: 0 0 6px; }
+  #help .credits b { color: var(--line); font-weight: 600; }
+  #help .credits a { color: var(--line); }
   .help-actions { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
   .empty { color: var(--muted); padding: 12px 0 12px 62px; font-size: 1.1rem; line-height: 1.4; }
   /* Splash screen on a fresh start (not when the app comes back from the background).
@@ -1668,6 +1692,19 @@ async function unlock() {
     $("lockBtn").disabled = false;
   }
 }
+
+// Keyboard: iOS keeps a fixed layer full height and lays the keyboard over it, so the lock screen is
+// sized to the visible part (visualViewport) and gets a mini header while the keyboard is up.
+function fitLock() {
+  const vv = window.visualViewport, l = $("lock");
+  if (!vv || l.hidden) return;
+  const kbd = vv.height < window.innerHeight * 0.8;
+  l.style.top = `${vv.offsetTop}px`; l.style.bottom = "auto"; l.style.height = `${vv.height}px`;
+  l.classList.toggle("kbd", kbd);
+}
+if (window.visualViewport) { visualViewport.addEventListener("resize", fitLock); visualViewport.addEventListener("scroll", fitLock); }
+document.addEventListener("focusin", () => setTimeout(fitLock, 50));
+document.addEventListener("focusout", () => setTimeout(fitLock, 150));
 
 // ------------------------------------------------------------- self-service (no key yet)
 // The lock screen has four views: key, form (request a key / start a trial), wait (request sent, or
@@ -5357,6 +5394,14 @@ function helpHtml() {
   <div class="help-actions">
     <button type="button" class="link" id="replayIntro">Show the introduction again</button>
     <button type="button" class="link" id="splashToggle">${splashOff() ? "Show the splash screen at start" : "Don’t show the splash screen at start"}</button>
+  </div>
+
+  <div class="credits">
+    <h3>Data and credits</h3>
+    <p>Routes and places: <b>openrouteservice</b> by HeiGIT. Map data © <b>OpenStreetMap</b> contributors (ODbL).</p>
+    <p>Chargers: <b>Open Charge Map</b> (CC BY 4.0). Live status: <b>NDW</b> (Netherlands), <b>MobiData BW</b> (Germany), <b>E-Control</b> (Austria), <b>transport.data.gouv.fr</b> (France, Licence Ouverte 2.0), <b>Eco-Movement</b> via the Belgian access point (Belgium).</p>
+    <p>Road closures: <b>NDW</b> and <b>Die Autobahn GmbH des Bundes</b>.</p>
+    <p>Brand names and logos belong to their owners. EVailability is independent and not affiliated with any charging network or data provider. <a href="privacy.html?back=help">Privacy policy</a></p>
   </div>`;
 }
 const SPLASH_OFF_KEY = "evailability-splash-off";

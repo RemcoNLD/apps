@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.150"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.151"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -825,6 +825,10 @@
   .acc-privacy .priv-links .link, .acc-privacy .priv-links a { font-size: inherit; color: var(--line); }
   .acc-privacy .priv-form { margin-top: 8px; }
   #help .account .priv-done { color: var(--free); margin: 6px 0 0; }
+  .lock .lang-pick { display: flex; justify-content: center; gap: 4px; margin: 18px 0 calc(env(safe-area-inset-bottom, 0px) + 6px); flex: none; }
+  .lock .lang-pick button { background: none; border: 0; padding: 6px 10px; border-radius: 8px; color: var(--muted); font: inherit; font-size: .9rem; cursor: pointer; }
+  .lock .lang-pick button[aria-pressed="true"] { color: var(--line); font-weight: 800; background: var(--asphalt-raised); }
+  .lock.kbd .lang-pick { display: none; }
   .lock .textlink { display: block; margin: 16px auto 0; background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: .95rem; cursor: pointer; }
   .account .trial-line { color: var(--muted); font-size: .85rem; padding: 0 0 10px; margin-top: -4px; }
   /* Availability history in the press-and-hold sheet */
@@ -862,6 +866,8 @@
   .legend .dot { width: 22px; height: 22px; border-radius: 50%; }
   .legend .dot.ring { border: 4px solid var(--muted); }
   .legend .kv { font-weight: 800; font-size: 1.15rem; }
+  .lang-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 10px; color: var(--muted); font-size: .95rem; }
+  .lang-row select { font: inherit; color: var(--line); background: var(--asphalt-raised); border: 1px solid rgba(127,127,127,.3); border-radius: 10px; padding: 8px 10px; }
   .account { margin: 4px 0 18px; padding: 4px 14px; border-radius: 12px; background: var(--asphalt-raised); }
   .account .acc-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; }
   .account #accountWho { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
@@ -1228,6 +1234,10 @@
     <h2 id="helpTitle">How it works</h2>
     <button type="button" class="link" id="helpClose">Close</button>
   </div>
+  <div class="lang-row"><label for="langSelect">Language</label>
+    <select id="langSelect">
+      <option value="">Automatic</option><option value="en" data-no-tr>English</option><option value="nl" data-no-tr>Nederlands</option><option value="pt" data-no-tr>Português</option>
+    </select></div>
   <div class="account" id="account">
     <div class="acc-row">
       <span id="accountWho"></span>
@@ -1363,6 +1373,10 @@
       </div>
       <button type="button" class="textlink" id="trialKey">I have a key</button>
     </div>
+    <!-- Language: also before signing in -->
+    <div class="lang-pick" id="langPick" role="group" aria-label="Language" data-no-tr>
+      <button type="button" data-lang="en">English</button><button type="button" data-lang="nl">Nederlands</button><button type="button" data-lang="pt">Português</button>
+    </div>
   </div>
 </div>
 
@@ -1397,6 +1411,802 @@
 </section>
 
 <script>
+// ---- languages: English (default), Dutch, Portuguese (pt-PT). Generated from i18n_data.py.
+const I18N_TEXT = {
+"nl": {
+"Free fast chargers along your route, live.": "Vrije snelladers langs je route, live.",
+"Your access key": "Je toegangssleutel",
+"Only needed once on this device.": "Maar één keer nodig op dit apparaat.",
+"Paste": "Plakken",
+"Open": "Openen",
+"Close": "Sluiten",
+"Check again": "Opnieuw controleren",
+"No key yet?": "Nog geen sleutel?",
+"Need a new key?": "Nieuwe sleutel nodig?",
+"Request a key": "Sleutel aanvragen",
+"Try it free": "Gratis proberen",
+"Try EVailability": "Probeer EVailability",
+"Ask for a full key": "Volledige sleutel aanvragen",
+"‹ Back": "‹ Terug",
+"Email": "E-mail",
+"Name": "Naam",
+"Note": "Notitie",
+"(optional)": "(optioneel)",
+"Optional": "Optioneel",
+"Your name": "Je naam",
+"How did you hear about it?": "Hoe heb je erover gehoord?",
+"you@example.com": "jij@voorbeeld.nl",
+"Optional: we have it from your trial": "Optioneel: we hebben het al van je proefperiode",
+"Send request": "Aanvraag versturen",
+"Start trial": "Proefperiode starten",
+"Send": "Versturen",
+"Privacy policy": "Privacybeleid",
+"Your email is stored encrypted and only used to contact you about your access. It is never used for anything else or shared.": "Je e-mailadres wordt versleuteld opgeslagen en alleen gebruikt om contact met je op te nemen over je toegang. Het wordt nooit voor iets anders gebruikt of gedeeld.",
+"Leave your email and you’ll hear back. Once approved, this screen opens by itself.": "Laat je e-mailadres achter, dan hoor je van ons. Na goedkeuring opent dit scherm vanzelf.",
+"Leave your email and you’ll hear back. Once approved, this app opens again by itself.": "Laat je e-mailadres achter, dan hoor je van ons. Na goedkeuring opent de app vanzelf weer.",
+"Start straight away: live status in the Netherlands, for a few days and routes.": "Begin meteen: live status in Nederland, voor een paar dagen en routes.",
+"Request sent": "Aanvraag verstuurd",
+"Not approved": "Niet goedgekeurd",
+"Request not found": "Aanvraag niet gevonden",
+"Sorry, your request wasn’t approved this time.": "Sorry, je aanvraag is deze keer niet goedgekeurd.",
+"Sorry, your request wasn’t approved this time. A note for you:": "Sorry, je aanvraag is deze keer niet goedgekeurd. Een bericht voor je:",
+"This request is no longer known. You can send a new one.": "Deze aanvraag is niet meer bekend. Je kunt een nieuwe sturen.",
+"Thanks! This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.": "Bedankt! Dit scherm opent vanzelf zodra je aanvraag is goedgekeurd. Je kunt de app intussen sluiten; hij kijkt opnieuw als je terugkomt.",
+"A trial was already used on this device or with this email, or today’s trials are gone, so this became a request. This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.": "Op dit apparaat of met dit e-mailadres is al een proefperiode gebruikt, of de proefperiodes van vandaag zijn op, dus dit is een aanvraag geworden. Dit scherm opent vanzelf zodra je aanvraag is goedgekeurd. Je kunt de app intussen sluiten; hij kijkt opnieuw als je terugkomt.",
+"Thanks! Keep using your trial meanwhile. Once approved, the trial limits go away by themselves.": "Bedankt! Gebruik je proefperiode intussen gewoon verder. Na goedkeuring verdwijnen de beperkingen vanzelf.",
+"Thanks! This screen opens by itself once your request is approved.": "Bedankt! Dit scherm opent vanzelf zodra je aanvraag is goedgekeurd.",
+"Send a new request": "Nieuwe aanvraag sturen",
+"I have a key": "Ik heb een sleutel",
+"Back to the app": "Terug naar de app",
+"Send a note to the developer": "Stuur de ontwikkelaar een bericht",
+"Withdraw my request": "Mijn aanvraag intrekken",
+"Tap again to withdraw and delete it": "Tik nogmaals om in te trekken en te verwijderen",
+"Your request and email were deleted.": "Je aanvraag en e-mailadres zijn verwijderd.",
+"Your message to the developer": "Je bericht aan de ontwikkelaar",
+"Your message": "Je bericht",
+"Cancel": "Annuleren",
+"Sent ✓ Thanks!": "Verstuurd ✓ Bedankt!",
+"Your trial has started": "Je proefperiode is begonnen",
+"Welcome! Here’s what the trial includes:": "Welkom! Dit zit er in de proefperiode:",
+"Let’s go": "Aan de slag",
+"Your trial has ended": "Je proefperiode is afgelopen",
+"Your trial routes are used up": "Je proefroutes zijn op",
+"One more day, 5 more routes": "Nog een dag, 5 routes extra",
+"Thanks for trying EVailability! For more, ask for a full key; this app opens again by itself once you have one.": "Bedankt voor het proberen van EVailability! Wil je meer, vraag dan een volledige sleutel aan; de app opent vanzelf weer zodra je die hebt.",
+"Keys have no 0, 1, I, L or O. Check the letters.": "Sleutels hebben geen 0, 1, I, L of O. Controleer de letters.",
+"That key isn’t complete or has a typo.": "Die sleutel is niet compleet of bevat een typefout.",
+"That key isn’t right.": "Die sleutel klopt niet.",
+"That code isn’t right.": "Die code klopt niet.",
+"Couldn’t reach the server. Try again.": "Kon de server niet bereiken. Probeer het opnieuw.",
+"Couldn’t reach the server. Please try again in a moment.": "Kon de server niet bereiken. Probeer het zo opnieuw.",
+"No key found on the clipboard. Copy the key from the email first.": "Geen sleutel op het klembord gevonden. Kopieer eerst de sleutel uit de e-mail.",
+"Too many tries. Wait 10 minutes.": "Te vaak geprobeerd. Wacht 10 minuten.",
+"This access key is switched off for now.": "Deze toegangssleutel staat voorlopig uit.",
+"This access key is switched off for now. It opens again once it’s switched back on.": "Deze toegangssleutel staat voorlopig uit. De app opent weer zodra hij weer aan staat.",
+"This access key was replaced. Enter the new one.": "Deze toegangssleutel is vervangen. Voer de nieuwe in.",
+"This access key no longer exists. Ask for a new one.": "Deze toegangssleutel bestaat niet meer. Vraag een nieuwe aan.",
+"The old access code no longer works. Enter your personal key.": "De oude toegangscode werkt niet meer. Voer je persoonlijke sleutel in.",
+"Access key needed": "Toegangssleutel nodig",
+"Your trial has ended.": "Je proefperiode is afgelopen.",
+"Your trial’s routes are used up.": "Je proefroutes zijn op.",
+"Live status outside the Netherlands is for full keys.": "Live status buiten Nederland is er alleen met een volledige sleutel.",
+"That email address doesn’t look right.": "Dat e-mailadres lijkt niet te kloppen.",
+"Too many requests from here. Try again in an hour.": "Te veel aanvragen vanaf hier. Probeer het over een uur opnieuw.",
+"Requests are closed at the moment.": "Aanvragen zijn op dit moment gesloten.",
+"Too many open requests at the moment. Try again later.": "Er staan nu te veel aanvragen open. Probeer het later opnieuw.",
+"No room for new keys at the moment.": "Er is op dit moment geen ruimte voor nieuwe sleutels.",
+"Write a message first.": "Schrijf eerst een bericht.",
+"Too many messages from here. Try again in an hour.": "Te veel berichten vanaf hier. Probeer het over een uur opnieuw.",
+"Messages can only be sent from the app with a key or a waiting request.": "Berichten kunnen alleen vanuit de app worden gestuurd, met een sleutel of een openstaande aanvraag.",
+"The trial was already extended once.": "De proefperiode is al een keer verlengd.",
+"Your trial is still running.": "Je proefperiode loopt nog.",
+"No such request.": "Deze aanvraag bestaat niet.",
+"This request was already approved.": "Deze aanvraag is al goedgekeurd.",
+"Enter a different key": "Andere sleutel invoeren",
+"Log out": "Uitloggen",
+"Tap again to log out": "Tik nogmaals om uit te loggen",
+"Not signed in": "Niet ingelogd",
+"Signed in with a personal key": "Ingelogd met een persoonlijke sleutel",
+"Signed in with the old shared code": "Ingelogd met de oude gedeelde code",
+"Debug mode": "Debugmodus",
+"Versions, data sources, route id and coordinates while driving": "Versies, databronnen, route-id en coördinaten tijdens het rijden",
+"Copy route data": "Routegegevens kopiëren",
+"road numbers and the routing service’s step names, to paste in a chat": "wegnummers en de stapnamen van de routeservice, om in een chat te plakken",
+"Your email is encrypted and only used about your access.": "Je e-mailadres is versleuteld en wordt alleen gebruikt voor je toegang.",
+"Delete my data": "Mijn gegevens verwijderen",
+"Deletion requested ·": "Verwijdering aangevraagd ·",
+"Cancel the request": "Aanvraag annuleren",
+"Request deletion": "Verwijdering aanvragen",
+"This asks the developer to delete your email and your key. Your access stops once it’s done. Anything to add? (optional)": "Hiermee vraag je de ontwikkelaar je e-mailadres en sleutel te verwijderen. Je toegang stopt zodra dat gebeurd is. Nog iets toe te voegen? (optioneel)",
+"Your message goes to the developer only, encrypted.": "Je bericht gaat alleen naar de ontwikkelaar, versleuteld.",
+"Deletion requested ✓ The developer will handle it soon.": "Verwijdering aangevraagd ✓ De ontwikkelaar handelt het snel af.",
+"Deletion request cancelled ✓": "Verwijderverzoek geannuleerd ✓",
+"Get full access": "Volledige toegang",
+"Requested ✓": "Aangevraagd ✓",
+"Trial": "Proef",
+"Language": "Taal",
+"Automatic": "Automatisch",
+"To": "Naar",
+"From": "Van",
+"Destination": "Bestemming",
+"Your location": "Je locatie",
+"Pass a town or address": "Via een plaats of adres",
+"Add a via point": "Viapunt toevoegen",
+"First via point": "Eerste viapunt",
+"Second via point": "Tweede viapunt",
+"Remove via point": "Viapunt verwijderen",
+"Clear": "Wissen",
+"Chargers": "Laders",
+"Live: NL, DE, AT, FR (tap)": "Live: NL, DE, AT, FR (tik)",
+"Charging power": "Laadvermogen",
+"Change any time": "Altijd te wijzigen",
+"Minimum charging power": "Minimaal laadvermogen",
+"Fast": "Snel",
+"Extra fast": "Extra snel",
+"Simulate the drive": "Rit simuleren",
+"Plan route": "Route plannen",
+"Planning…": "Plannen…",
+"Help and manual": "Hulp en handleiding",
+"Back to apps": "Terug naar apps",
+"Asking for your location…": "Je locatie opvragen…",
+"Location access was refused. Allow it in your browser settings, or fill in a start.": "Toegang tot je locatie is geweigerd. Sta het toe in je browserinstellingen, of vul een vertrekpunt in.",
+"No location found. Fill in a start instead.": "Geen locatie gevonden. Vul een vertrekpunt in.",
+"This browser can’t share your location. Fill in a start instead.": "Deze browser kan je locatie niet delen. Vul een vertrekpunt in.",
+"Location is blocked. Settings → Privacy → Location Services → Safari Websites (or the app) → While Using": "Locatie is geblokkeerd. Instellingen → Privacy → Locatievoorzieningen → Safari-websites (of de app) → Bij gebruik van app",
+"Choose a route": "Kies een route",
+"Routes from here": "Routes vanaf hier",
+"Finding routes…": "Routes zoeken…",
+"Looking for other routes… this takes a few seconds.": "Andere routes zoeken… dit duurt een paar seconden.",
+"Tap the route you want to drive.": "Tik op de route die je wilt rijden.",
+"Your current route is outlined. Tap another to switch.": "Je huidige route is omlijnd. Tik op een andere om te wisselen.",
+"Only one sensible route here, so no choice this time.": "Er is hier maar één zinnige route, dus deze keer geen keuze.",
+"No other sensible route found from here.": "Geen andere zinnige route gevonden vanaf hier.",
+"Fastest": "Snelste",
+"Current": "Huidige",
+"Chosen route": "Gekozen route",
+"New route planned": "Nieuwe route gepland",
+"No route planned": "Geen route gepland",
+"You’ve left the route. New route planned.": "Je bent van de route af. Nieuwe route gepland.",
+"You’ve left the route. Rerouting…": "Je bent van de route af. Nieuwe route berekenen…",
+"Try again": "Opnieuw proberen",
+"New route": "Nieuwe route",
+"Easy to reach": "Makkelijk bereikbaar",
+"Choose which brands to show": "Kies welke merken je ziet",
+"Status of the chargers, tap to update": "Status van de laders, tik om bij te werken",
+"now": "nu",
+"Back to the next chargers": "Terug naar de volgende laders",
+"Your location, tap to update": "Je locatie, tik om bij te werken",
+"No internet connection. Chargers show their last known status and update when you're back online.": "Geen internetverbinding. Laders tonen hun laatst bekende status en worden bijgewerkt zodra je weer online bent.",
+"Arrived": "Aangekomen",
+"You’ve arrived": "Je bent er",
+"straight on": "rechtdoor",
+"turn around": "keren",
+"your destination": "je bestemming",
+"Tap to update this charger": "Tik om deze lader bij te werken",
+"Avoid": "Vermijden",
+"Avoid all": "Alles vermijden",
+"Road rows hidden · tap a road badge to show them again": "Wegrijen verborgen · tik op een wegnummer om ze weer te tonen",
+"Every main road on the line · tap a road row to hide them": "Elke hoofdweg op de lijn · tik op een wegrij om ze te verbergen",
+"Road closures couldn’t be loaded: closed roads won’t show.": "Wegafsluitingen konden niet worden geladen: afgesloten wegen worden niet getoond.",
+"No more chargers within 5 km of your route.": "Geen laders meer binnen 5 km van je route.",
+"On your side of the road": "Aan jouw kant van de weg",
+"On the other side of the road": "Aan de overkant van de weg",
+"Via an exit: leave and rejoin in the same direction": "Via een afrit: eraf en in dezelfde richting weer op",
+"Round trip: turn around and come back": "Heen en terug: keren en terugkomen",
+"Waiting for your location… tap to retry": "Wachten op je locatie… tik om opnieuw te proberen",
+"No location yet, trying again": "Nog geen locatie, opnieuw proberen",
+"Location blocked · tap here": "Locatie geblokkeerd · tik hier",
+"Screen stays on (wake lock).": "Scherm blijft aan (wake lock).",
+"Screen stays on (video).": "Scherm blijft aan (video).",
+"Screen stays on (wake lock and video).": "Scherm blijft aan (wake lock en video).",
+"Coordinates copied": "Coördinaten gekopieerd",
+"Coordinates copied: paste them in Flitsmeister": "Coördinaten gekopieerd: plak ze in Flitsmeister",
+"Couldn’t copy": "Kopiëren mislukt",
+"Copies coordinates": "Kopieert coördinaten",
+"Copy coordinates": "Coördinaten kopiëren",
+"Share…": "Delen…",
+"Route data copied": "Routegegevens gekopieerd",
+"Tap when read": "Tik als gelezen",
+"Clear all errors": "Alle fouten wissen",
+"Free": "Vrij",
+"All in use": "Alles bezet",
+"Out of order": "Buiten gebruik",
+"Other side": "Overkant",
+"Status unknown": "Status onbekend",
+"Checked, no live status": "Gecontroleerd, geen live status",
+"Couldn’t check, try again later": "Controleren mislukt, probeer het later opnieuw",
+"Tap to check": "Tik om te controleren",
+"No live data": "Geen live gegevens",
+"No live data for this Belgian site": "Geen live gegevens voor deze Belgische locatie",
+"Eco-Movement gave no live status for this site": "Eco-Movement gaf geen live status voor deze locatie",
+"Belgium couldn’t be updated": "België kon niet worden bijgewerkt",
+"Belgium is busy, try again in a minute": "België is bezig, probeer het over een minuut opnieuw",
+"Belgium: finding this site’s stalls · tap again in a moment": "België: laadpalen van deze locatie zoeken · tik zo opnieuw",
+"France is being updated": "Frankrijk wordt bijgewerkt",
+"France live is switched off on the server": "Frankrijk live staat uit op de server",
+"Up to date": "Bijgewerkt",
+"Probably not live.": "Waarschijnlijk niet live.",
+"In use for a while: a charger often frees up soon.": "Al een tijdje bezet: vaak komt er snel een lader vrij.",
+"Your route as one road:": "Je route als één weg:",
+"Screen may turn off. Tap the screen once while driving.": "Het scherm kan uitgaan. Tik tijdens het rijden één keer op het scherm.",
+"less than a minute": "minder dan een minuut",
+"just now": "zojuist",
+"Brands": "Merken",
+"Done": "Klaar",
+"Main roads on the line": "Hoofdwegen op de lijn",
+"Every road": "Elke weg",
+"own row, also without chargers": "eigen rij, ook zonder laders",
+"Changes only": "Alleen wisselingen",
+"badge between chargers": "wegnummer tussen laders",
+"On this route: tap to show or hide": "Op deze route: tik om te tonen of te verbergen",
+"Add to this route (plans again from where you are)": "Toevoegen aan deze route (plant opnieuw vanaf waar je bent)",
+"Add and replan": "Toevoegen en opnieuw plannen",
+"Replanning…": "Opnieuw plannen…",
+"Apple Maps": "Apple Kaarten",
+"How it works": "Zo werkt het",
+"Version": "Versie",
+"Check for update": "Controleren op update",
+"Show the introduction again": "Introductie opnieuw tonen",
+"Show the splash screen at start": "Startscherm tonen bij openen",
+"Don’t show the splash screen at start": "Startscherm niet tonen bij openen",
+"Introduction": "Introductie",
+"Skip": "Overslaan",
+"Next": "Volgende",
+"Get started": "Beginnen",
+"Tap to continue": "Tik om verder te gaan",
+"The fast chargers coming up,": "De snelladers die eraan komen,",
+"right beside your navigation.": "direct naast je navigatie.",
+"free now": "nu vrij",
+"min detour": "min omrijden",
+"in route order": "in routevolgorde",
+"Your navigation": "Je navigatie",
+"Don’t show again": "Niet meer tonen",
+"Every fast charger ahead": "Elke snellader vooruit",
+"Free right now": "Nu vrij",
+"Worth the detour?": "Het omrijden waard?",
+"Your brands": "Jouw merken",
+"On the road": "Onderweg",
+"We’re experiencing issues with the route service (openrouteservice), beyond our influence, that may affect your experience: planning a route can fail or take longer. It clears by itself once the service works again.": "We ondervinden problemen met de routeservice (openrouteservice), buiten onze invloed, die je ervaring kunnen beïnvloeden: een route plannen kan mislukken of langer duren. Deze melding verdwijnt vanzelf zodra de service weer werkt.",
+"Routing returned no route": "De routeservice gaf geen route terug",
+"Charger": "Lader",
+"Status now": "Status nu",
+"failed": "mislukt",
+"You": "Jij",
+"Destination · 108 km": "Bestemming · 108 km"
+},
+"pt": {
+"Free fast chargers along your route, live.": "Carregadores rápidos livres no seu percurso, em direto.",
+"Your access key": "A sua chave de acesso",
+"Only needed once on this device.": "Só é necessário uma vez neste dispositivo.",
+"Paste": "Colar",
+"Open": "Abrir",
+"Close": "Fechar",
+"Check again": "Verificar novamente",
+"No key yet?": "Ainda não tem chave?",
+"Need a new key?": "Precisa de uma nova chave?",
+"Request a key": "Pedir uma chave",
+"Try it free": "Experimentar grátis",
+"Try EVailability": "Experimente o EVailability",
+"Ask for a full key": "Pedir uma chave completa",
+"‹ Back": "‹ Voltar",
+"Email": "E-mail",
+"Name": "Nome",
+"Note": "Nota",
+"(optional)": "(opcional)",
+"Optional": "Opcional",
+"Your name": "O seu nome",
+"How did you hear about it?": "Como soube da app?",
+"you@example.com": "voce@exemplo.pt",
+"Optional: we have it from your trial": "Opcional: já o temos do seu período de experiência",
+"Send request": "Enviar pedido",
+"Start trial": "Iniciar experiência",
+"Send": "Enviar",
+"Privacy policy": "Política de privacidade",
+"Your email is stored encrypted and only used to contact you about your access. It is never used for anything else or shared.": "O seu e-mail é guardado encriptado e só é usado para o contactar sobre o seu acesso. Nunca é usado para mais nada nem partilhado.",
+"Leave your email and you’ll hear back. Once approved, this screen opens by itself.": "Deixe o seu e-mail e receberá resposta. Depois de aprovado, este ecrã abre sozinho.",
+"Leave your email and you’ll hear back. Once approved, this app opens again by itself.": "Deixe o seu e-mail e receberá resposta. Depois de aprovado, a app volta a abrir sozinha.",
+"Start straight away: live status in the Netherlands, for a few days and routes.": "Comece já: estado em direto nos Países Baixos, durante alguns dias e percursos.",
+"Request sent": "Pedido enviado",
+"Not approved": "Não aprovado",
+"Request not found": "Pedido não encontrado",
+"Sorry, your request wasn’t approved this time.": "Lamentamos, o seu pedido não foi aprovado desta vez.",
+"Sorry, your request wasn’t approved this time. A note for you:": "Lamentamos, o seu pedido não foi aprovado desta vez. Uma nota para si:",
+"This request is no longer known. You can send a new one.": "Este pedido já não é conhecido. Pode enviar um novo.",
+"Thanks! This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.": "Obrigado! Este ecrã abre sozinho quando o seu pedido for aprovado. Pode fechar a app entretanto; volta a verificar quando regressar.",
+"A trial was already used on this device or with this email, or today’s trials are gone, so this became a request. This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.": "Já foi usado um período de experiência neste dispositivo ou com este e-mail, ou os de hoje esgotaram, por isso isto passou a ser um pedido. Este ecrã abre sozinho quando o seu pedido for aprovado. Pode fechar a app entretanto; volta a verificar quando regressar.",
+"Thanks! Keep using your trial meanwhile. Once approved, the trial limits go away by themselves.": "Obrigado! Continue a usar o período de experiência entretanto. Depois de aprovado, os limites desaparecem sozinhos.",
+"Thanks! This screen opens by itself once your request is approved.": "Obrigado! Este ecrã abre sozinho quando o seu pedido for aprovado.",
+"Send a new request": "Enviar um novo pedido",
+"I have a key": "Tenho uma chave",
+"Back to the app": "Voltar à app",
+"Send a note to the developer": "Enviar uma nota ao programador",
+"Withdraw my request": "Retirar o meu pedido",
+"Tap again to withdraw and delete it": "Toque novamente para retirar e apagar",
+"Your request and email were deleted.": "O seu pedido e e-mail foram apagados.",
+"Your message to the developer": "A sua mensagem ao programador",
+"Your message": "A sua mensagem",
+"Cancel": "Cancelar",
+"Sent ✓ Thanks!": "Enviado ✓ Obrigado!",
+"Your trial has started": "O seu período de experiência começou",
+"Welcome! Here’s what the trial includes:": "Bem-vindo! O período de experiência inclui:",
+"Let’s go": "Vamos lá",
+"Your trial has ended": "O seu período de experiência terminou",
+"Your trial routes are used up": "Os seus percursos de experiência esgotaram-se",
+"One more day, 5 more routes": "Mais um dia, mais 5 percursos",
+"Thanks for trying EVailability! For more, ask for a full key; this app opens again by itself once you have one.": "Obrigado por experimentar o EVailability! Para continuar, peça uma chave completa; a app volta a abrir sozinha quando a tiver.",
+"Keys have no 0, 1, I, L or O. Check the letters.": "As chaves não têm 0, 1, I, L nem O. Verifique as letras.",
+"That key isn’t complete or has a typo.": "Essa chave está incompleta ou tem um erro.",
+"That key isn’t right.": "Essa chave não está correta.",
+"That code isn’t right.": "Esse código não está correto.",
+"Couldn’t reach the server. Try again.": "Não foi possível contactar o servidor. Tente novamente.",
+"Couldn’t reach the server. Please try again in a moment.": "Não foi possível contactar o servidor. Tente daqui a pouco.",
+"No key found on the clipboard. Copy the key from the email first.": "Nenhuma chave encontrada na área de transferência. Copie primeiro a chave do e-mail.",
+"Too many tries. Wait 10 minutes.": "Demasiadas tentativas. Aguarde 10 minutos.",
+"This access key is switched off for now.": "Esta chave de acesso está desativada por agora.",
+"This access key is switched off for now. It opens again once it’s switched back on.": "Esta chave de acesso está desativada por agora. A app volta a abrir quando for reativada.",
+"This access key was replaced. Enter the new one.": "Esta chave de acesso foi substituída. Introduza a nova.",
+"This access key no longer exists. Ask for a new one.": "Esta chave de acesso já não existe. Peça uma nova.",
+"The old access code no longer works. Enter your personal key.": "O código de acesso antigo já não funciona. Introduza a sua chave pessoal.",
+"Access key needed": "É necessária uma chave de acesso",
+"Your trial has ended.": "O seu período de experiência terminou.",
+"Your trial’s routes are used up.": "Os seus percursos de experiência esgotaram-se.",
+"Live status outside the Netherlands is for full keys.": "O estado em direto fora dos Países Baixos é só para chaves completas.",
+"That email address doesn’t look right.": "Esse endereço de e-mail não parece correto.",
+"Too many requests from here. Try again in an hour.": "Demasiados pedidos a partir daqui. Tente dentro de uma hora.",
+"Requests are closed at the moment.": "Os pedidos estão fechados de momento.",
+"Too many open requests at the moment. Try again later.": "Há demasiados pedidos em aberto de momento. Tente mais tarde.",
+"No room for new keys at the moment.": "Não há espaço para novas chaves de momento.",
+"Write a message first.": "Escreva primeiro uma mensagem.",
+"Too many messages from here. Try again in an hour.": "Demasiadas mensagens a partir daqui. Tente dentro de uma hora.",
+"Messages can only be sent from the app with a key or a waiting request.": "As mensagens só podem ser enviadas a partir da app, com uma chave ou um pedido pendente.",
+"The trial was already extended once.": "O período de experiência já foi prolongado uma vez.",
+"Your trial is still running.": "O seu período de experiência ainda está a decorrer.",
+"No such request.": "Esse pedido não existe.",
+"This request was already approved.": "Este pedido já foi aprovado.",
+"Enter a different key": "Introduzir outra chave",
+"Log out": "Terminar sessão",
+"Tap again to log out": "Toque novamente para terminar sessão",
+"Not signed in": "Sessão não iniciada",
+"Signed in with a personal key": "Sessão iniciada com uma chave pessoal",
+"Signed in with the old shared code": "Sessão iniciada com o código partilhado antigo",
+"Debug mode": "Modo de depuração",
+"Versions, data sources, route id and coordinates while driving": "Versões, fontes de dados, id do percurso e coordenadas durante a condução",
+"Copy route data": "Copiar dados do percurso",
+"road numbers and the routing service’s step names, to paste in a chat": "números de estrada e nomes dos passos do serviço de rotas, para colar num chat",
+"Privacy": "Privacidade",
+"Your email is encrypted and only used about your access.": "O seu e-mail é encriptado e só é usado para o seu acesso.",
+"Delete my data": "Apagar os meus dados",
+"Deletion requested ·": "Eliminação pedida ·",
+"Cancel the request": "Cancelar o pedido",
+"Request deletion": "Pedir eliminação",
+"This asks the developer to delete your email and your key. Your access stops once it’s done. Anything to add? (optional)": "Isto pede ao programador que apague o seu e-mail e a sua chave. O seu acesso termina quando isso for feito. Algo a acrescentar? (opcional)",
+"Your message goes to the developer only, encrypted.": "A sua mensagem vai só para o programador, encriptada.",
+"Deletion requested ✓ The developer will handle it soon.": "Eliminação pedida ✓ O programador tratará disso em breve.",
+"Deletion request cancelled ✓": "Pedido de eliminação cancelado ✓",
+"Get full access": "Acesso completo",
+"Requested ✓": "Pedido ✓",
+"Trial": "Experiência",
+"Language": "Idioma",
+"Automatic": "Automático",
+"To": "Para",
+"From": "De",
+"Via": "Por",
+"Destination": "Destino",
+"Your location": "A sua localização",
+"Pass a town or address": "Passar por uma localidade ou morada",
+"Add a via point": "Adicionar ponto intermédio",
+"First via point": "Primeiro ponto intermédio",
+"Second via point": "Segundo ponto intermédio",
+"Remove via point": "Remover ponto intermédio",
+"Clear": "Limpar",
+"Chargers": "Carregadores",
+"Live: NL, DE, AT, FR (tap)": "Em direto: NL, DE, AT, FR (toque)",
+"Charging power": "Potência de carregamento",
+"Change any time": "Pode mudar a qualquer momento",
+"Minimum charging power": "Potência mínima de carregamento",
+"Fast": "Rápido",
+"Extra fast": "Extra rápido",
+"Simulate the drive": "Simular a viagem",
+"Plan route": "Planear percurso",
+"Planning…": "A planear…",
+"Help and manual": "Ajuda e manual",
+"Back to apps": "Voltar às apps",
+"Asking for your location…": "A pedir a sua localização…",
+"Location access was refused. Allow it in your browser settings, or fill in a start.": "O acesso à localização foi recusado. Permita-o nas definições do browser ou indique um ponto de partida.",
+"No location found. Fill in a start instead.": "Localização não encontrada. Indique antes um ponto de partida.",
+"This browser can’t share your location. Fill in a start instead.": "Este browser não consegue partilhar a sua localização. Indique antes um ponto de partida.",
+"Location is blocked. Settings → Privacy → Location Services → Safari Websites (or the app) → While Using": "A localização está bloqueada. Definições → Privacidade → Serviços de localização → Sites do Safari (ou a app) → Durante a utilização",
+"Choose a route": "Escolha um percurso",
+"Routes from here": "Percursos a partir daqui",
+"Finding routes…": "A procurar percursos…",
+"Looking for other routes… this takes a few seconds.": "A procurar outros percursos… demora alguns segundos.",
+"Tap the route you want to drive.": "Toque no percurso que quer fazer.",
+"Your current route is outlined. Tap another to switch.": "O seu percurso atual está contornado. Toque noutro para mudar.",
+"Only one sensible route here, so no choice this time.": "Só há um percurso sensato aqui, por isso desta vez não há escolha.",
+"No other sensible route found from here.": "Nenhum outro percurso sensato encontrado a partir daqui.",
+"Fastest": "Mais rápido",
+"Current": "Atual",
+"Chosen route": "Percurso escolhido",
+"New route planned": "Novo percurso planeado",
+"No route planned": "Nenhum percurso planeado",
+"You’ve left the route. New route planned.": "Saiu do percurso. Novo percurso planeado.",
+"You’ve left the route. Rerouting…": "Saiu do percurso. A recalcular…",
+"Try again": "Tentar novamente",
+"New route": "Novo percurso",
+"Help": "Ajuda",
+"Easy to reach": "Fácil acesso",
+"Choose which brands to show": "Escolha que marcas mostrar",
+"Status of the chargers, tap to update": "Estado dos carregadores, toque para atualizar",
+"Status": "Estado",
+"now": "agora",
+"Back to the next chargers": "Voltar aos próximos carregadores",
+"Your location, tap to update": "A sua localização, toque para atualizar",
+"No internet connection. Chargers show their last known status and update when you're back online.": "Sem ligação à internet. Os carregadores mostram o último estado conhecido e atualizam quando voltar a estar online.",
+"Arrived": "Chegou",
+"You’ve arrived": "Chegou ao destino",
+"straight on": "em frente",
+"turn around": "inverter a marcha",
+"your destination": "o seu destino",
+"Tap to update this charger": "Toque para atualizar este carregador",
+"Avoid": "Evitar",
+"Avoid all": "Evitar todos",
+"Road rows hidden · tap a road badge to show them again": "Linhas de estradas ocultas · toque num número de estrada para as mostrar",
+"Every main road on the line · tap a road row to hide them": "Todas as estradas principais na linha · toque numa linha de estrada para as ocultar",
+"Road closures couldn’t be loaded: closed roads won’t show.": "Não foi possível carregar os cortes de estrada: as estradas cortadas não serão mostradas.",
+"No more chargers within 5 km of your route.": "Não há mais carregadores a menos de 5 km do seu percurso.",
+"On your side of the road": "Do seu lado da estrada",
+"On the other side of the road": "Do outro lado da estrada",
+"Via an exit: leave and rejoin in the same direction": "Por uma saída: sair e voltar a entrar no mesmo sentido",
+"Round trip: turn around and come back": "Ida e volta: inverter a marcha e regressar",
+"Waiting for your location… tap to retry": "À espera da sua localização… toque para tentar novamente",
+"No location yet, trying again": "Ainda sem localização, a tentar novamente",
+"Location blocked · tap here": "Localização bloqueada · toque aqui",
+"Screen stays on (wake lock).": "O ecrã mantém-se ligado (wake lock).",
+"Screen stays on (video).": "O ecrã mantém-se ligado (vídeo).",
+"Screen stays on (wake lock and video).": "O ecrã mantém-se ligado (wake lock e vídeo).",
+"Coordinates copied": "Coordenadas copiadas",
+"Coordinates copied: paste them in Flitsmeister": "Coordenadas copiadas: cole-as no Flitsmeister",
+"Couldn’t copy": "Não foi possível copiar",
+"Copies coordinates": "Copia as coordenadas",
+"Copy coordinates": "Copiar coordenadas",
+"Share…": "Partilhar…",
+"Route data copied": "Dados do percurso copiados",
+"Tap when read": "Toque depois de ler",
+"Clear all errors": "Limpar todos os erros",
+"Free": "Livre",
+"All in use": "Tudo ocupado",
+"Out of order": "Avariado",
+"Other side": "Outro lado",
+"Status unknown": "Estado desconhecido",
+"Checked, no live status": "Verificado, sem estado em direto",
+"Couldn’t check, try again later": "Não foi possível verificar, tente mais tarde",
+"Tap to check": "Toque para verificar",
+"No live data": "Sem dados em direto",
+"No live data for this Belgian site": "Sem dados em direto para este local belga",
+"Eco-Movement gave no live status for this site": "A Eco-Movement não deu estado em direto para este local",
+"Belgium couldn’t be updated": "Não foi possível atualizar a Bélgica",
+"Belgium is busy, try again in a minute": "A Bélgica está ocupada, tente daqui a um minuto",
+"Belgium: finding this site’s stalls · tap again in a moment": "Bélgica: a procurar os postos deste local · toque novamente daqui a pouco",
+"France is being updated": "A França está a ser atualizada",
+"France live is switched off on the server": "A França em direto está desativada no servidor",
+"Up to date": "Atualizado",
+"Probably not live.": "Provavelmente não está em direto.",
+"In use for a while: a charger often frees up soon.": "Ocupado há algum tempo: muitas vezes um carregador fica livre em breve.",
+"Your route as one road:": "O seu percurso como uma só estrada:",
+"Screen may turn off. Tap the screen once while driving.": "O ecrã pode desligar-se. Toque uma vez no ecrã durante a condução.",
+"less than a minute": "menos de um minuto",
+"just now": "agora mesmo",
+"Brands": "Marcas",
+"Done": "Concluído",
+"Main roads on the line": "Estradas principais na linha",
+"Every road": "Todas as estradas",
+"own row, also without chargers": "linha própria, também sem carregadores",
+"Changes only": "Só mudanças",
+"badge between chargers": "número entre carregadores",
+"On this route: tap to show or hide": "Neste percurso: toque para mostrar ou ocultar",
+"Add to this route (plans again from where you are)": "Adicionar a este percurso (volta a planear a partir de onde está)",
+"Add and replan": "Adicionar e voltar a planear",
+"Replanning…": "A voltar a planear…",
+"Apple Maps": "Mapas da Apple",
+"How it works": "Como funciona",
+"Version": "Versão",
+"Check for update": "Procurar atualização",
+"Show the introduction again": "Mostrar novamente a introdução",
+"Show the splash screen at start": "Mostrar o ecrã inicial ao abrir",
+"Don’t show the splash screen at start": "Não mostrar o ecrã inicial ao abrir",
+"Introduction": "Introdução",
+"Skip": "Saltar",
+"Next": "Seguinte",
+"Get started": "Começar",
+"Start": "Início",
+"Tap to continue": "Toque para continuar",
+"The fast chargers coming up,": "Os carregadores rápidos que aí vêm,",
+"right beside your navigation.": "mesmo ao lado da sua navegação.",
+"free now": "livres agora",
+"min detour": "min de desvio",
+"in route order": "pela ordem do percurso",
+"Your navigation": "A sua navegação",
+"Don’t show again": "Não mostrar novamente",
+"Every fast charger ahead": "Todos os carregadores rápidos à frente",
+"Free right now": "Livres agora",
+"Worth the detour?": "Vale o desvio?",
+"Your brands": "As suas marcas",
+"On the road": "Na estrada",
+"We’re experiencing issues with the route service (openrouteservice), beyond our influence, that may affect your experience: planning a route can fail or take longer. It clears by itself once the service works again.": "Estamos a ter problemas com o serviço de rotas (openrouteservice), alheios ao nosso controlo, que podem afetar a sua experiência: planear um percurso pode falhar ou demorar mais. Este aviso desaparece sozinho quando o serviço voltar a funcionar.",
+"Routing returned no route": "O serviço de rotas não devolveu nenhum percurso",
+"Charger": "Carregador",
+"Status now": "Estado agora",
+"failed": "falhou",
+"You": "Você",
+"Destination · 108 km": "Destino · 108 km"
+}
+};
+const I18N_PATTERNS = [["^Arrive (.+)$", "Aankomst $1", "Chegada $1"], ["^Signed in as (.+)$", "Ingelogd als $1", "Sessão iniciada como $1"], ["^(\\d+) of (\\d+) free\\.$", "$1 van $2 vrij.", "$1 de $2 livres."], ["^(\\d+) of (\\d+) free$", "$1 van $2 vrij", "$1 de $2 livres"], ["^(\\d+) in use, (\\d+) out of order\\.$", "$1 in gebruik, $2 buiten gebruik.", "$1 em uso, $2 avariados."], ["^(\\d+) in use\\.$", "$1 in gebruik.", "$1 em uso."], ["^(\\d+) out of order\\.$", "$1 buiten gebruik.", "$1 avariados."], ["^(\\d+) in use$", "$1 in gebruik", "$1 em uso"], ["^(\\d+) out of order$", "$1 buiten gebruik", "$1 avariados"], ["^Last change at the site: (.+) \\((.+)\\)$", "Laatste wijziging op de locatie: $1 ({t:$2})", "Última alteração no local: $1 ({t:$2})"], ["^(\\d+) min ago$", "$1 min geleden", "há $1 min"], ["^(\\d+) h (\\d+) min ago$", "$1 u $2 min geleden", "há $1 h $2 min"], ["^(\\d+) h ago$", "$1 u geleden", "há $1 h"], ["^All in use since (.+)$", "Alles bezet sinds $1", "Tudo ocupado desde $1"], ["^\\((.+)\\)$", "({t:$1})", "({t:$1})"], ["^, no change since (.+) \\((.+)\\)$", ", geen wijziging sinds $1 ({t:$2})", ", sem alterações desde $1 ({t:$2})"], ["^Last full at (.+) \\((.+)\\)\\.$", "Laatst vol om $1 ({t:$2}).", "Esteve cheio pela última vez às $1 ({t:$2})."], ["^Checked (\\d+) s ago · next update in (.+)$", "$1 s geleden gecontroleerd · volgende update over $2", "Verificado há $1 s · próxima atualização daqui a $2"], ["^Checked (.+) ago · next update in (.+)$", "$1 geleden gecontroleerd · volgende update over $2", "Verificado há $1 · próxima atualização daqui a $2"], ["^Updated less than a minute ago · next in (.+)$", "Minder dan een minuut geleden bijgewerkt · volgende over $1", "Atualizado há menos de um minuto · próxima daqui a $1"], ["^France checked (.+) ago · next update in (.+)$", "Frankrijk {t:$1} geleden gecontroleerd · volgende update over $2", "França verificada há {t:$1} · próxima atualização daqui a $2"], ["^France paused after an error · next update in (.+)$", "Frankrijk gepauzeerd na een fout · volgende update over $1", "França em pausa após um erro · próxima atualização daqui a $1"], ["^France couldn’t be updated; paused for (\\d+) min$", "Frankrijk kon niet worden bijgewerkt; $1 min gepauzeerd", "Não foi possível atualizar a França; em pausa durante $1 min"], ["^Belgium: still checking (.+) · one site at a time$", "België: nog bezig met $1 · één locatie tegelijk", "Bélgica: ainda a verificar $1 · um local de cada vez"], ["^Belgium: checking (\\d+) stalls? · about (.+)$", "België: $1 laadpunt(en) controleren · ongeveer $2", "Bélgica: a verificar $1 posto(s) · cerca de $2"], ["^(\\d+) fast stalls · tap to check$", "$1 snellaadpunten · tik om te controleren", "$1 postos rápidos · toque para verificar"], ["^(\\d+) of (\\d+) stalls without live status$", "$1 van $2 laadpunten zonder live status", "$1 de $2 postos sem estado em direto"], ["^(\\d+) not checked$", "$1 niet gecontroleerd", "$1 não verificados"], ["^(\\d+) without live status$", "$1 zonder live status", "$1 sem estado em direto"], ["^(\\d+)(st|nd|rd|th) exit$", "$1e afslag", "$1.ª saída"], ["^(\\d+) min$", "$1 min", "$1 min"], ["^(\\d+) min old · tap to retry$", "$1 min oud · tik om opnieuw te proberen", "$1 min de idade · toque para tentar novamente"], ["^(.+) km off route$", "$1 km van de route", "$1 km fora do percurso"], ["^Trial: (\\d+) days? and (\\d+) routes? left · live status in the Netherlands only$", "Proef: nog $1 dag(en) en $2 route(s) · live status alleen in Nederland", "Experiência: faltam $1 dia(s) e $2 percurso(s) · estado em direto só nos Países Baixos"], ["^· (\\d+) days? · (\\d+) routes? left$", "· nog $1 dag(en) · $2 route(s)", "· faltam $1 dia(s) · $2 percurso(s)"], ["^· (\\d+) days? and (\\d+) routes? left$", "· nog $1 dag(en) en $2 route(s)", "· faltam $1 dia(s) e $2 percurso(s)"], ["^Live status in the Netherlands · full access via the start screen$", "Live status in Nederland · volledige toegang via het startscherm", "Estado em direto nos Países Baixos · acesso completo no ecrã inicial"], ["^Thanks for trying EVailability! You can extend it once by (\\d+) days? and (\\d+) routes, or ask for a full key\\.$", "Bedankt voor het proberen van EVailability! Je kunt de proefperiode één keer verlengen met $1 dag en $2 routes, of een volledige sleutel aanvragen.", "Obrigado por experimentar o EVailability! Pode prolongá-lo uma vez por $1 dia e $2 percursos, ou pedir uma chave completa."], ["^(.+) Your request for full access is waiting; this app opens again by itself once it’s approved\\.$", "{t:$1} Je aanvraag voor volledige toegang staat open; de app opent vanzelf weer zodra die is goedgekeurd.", "{t:$1} O seu pedido de acesso completo está pendente; a app volta a abrir sozinha quando for aprovado."], ["^(.+) Ask the person who gave it to you for a new one\\.$", "{t:$1} Vraag degene die hem je gaf om een nieuwe.", "{t:$1} Peça uma nova a quem lha deu."], ["^Couldn’t compare routes \\((.+)\\)\\. Planned the fastest\\.$", "Routes vergelijken mislukt ({t:$1}). De snelste is gepland.", "Não foi possível comparar percursos ({t:$1}). Foi planeado o mais rápido."], ["^Couldn’t replan: (.+)$", "Opnieuw plannen mislukt: {t:$1}", "Não foi possível voltar a planear: {t:$1}"], ["^Couldn’t reroute: (.+)$", "Nieuwe route mislukt: {t:$1}", "Não foi possível recalcular: {t:$1}"], ["^New route around (.+)\\.$", "Nieuwe route om {t:$1} heen.", "Novo percurso a contornar {t:$1}."], ["^Planning a route around (.+)…$", "Route om {t:$1} heen plannen…", "A planear um percurso a contornar {t:$1}…"], ["^No way around (.+) found\\. The route still goes through\\.$", "Geen weg om {t:$1} heen gevonden. De route gaat er nog doorheen.", "Não foi encontrada alternativa a {t:$1}. O percurso continua a passar por lá."], ["^Couldn’t plan a route around (.+)\\. Try again in a moment\\.$", "Kon geen route om {t:$1} heen plannen. Probeer het zo opnieuw.", "Não foi possível planear um percurso a contornar {t:$1}. Tente daqui a pouco."], ["^this closure$", "deze afsluiting", "este corte"], ["^these closures$", "deze afsluitingen", "estes cortes"], ["^the closure$", "de afsluiting", "o corte"], ["^(\\d+) closures$", "$1 afsluitingen", "$1 cortes"], ["^(.+) closed$", "$1 afgesloten", "$1 cortada"], ["^until (.+)$", "tot $1", "até $1"], ["^from (.+) to (.+)$", "van $1 tot $2", "de $1 até $2"], ["^Add (\\d+) and replan$", "$1 toevoegen en opnieuw plannen", "Adicionar $1 e voltar a planear"], ["^No more easy-to-reach chargers\\. (\\d+) that needs? a longer detour (?:is|are) hidden\\.$", "Geen makkelijk bereikbare laders meer. $1 met langer omrijden verborgen.", "Não há mais carregadores de fácil acesso. $1 com desvio maior ocultos."], ["^(\\d+) Ionity sites? along the way$", "$1 Ionity-locatie(s) onderweg", "$1 local(is) Ionity pelo caminho"], ["^Via (.+) \\(your via point\\)$", "Via $1 (jouw viapunt)", "Por $1 (o seu ponto intermédio)"], ["^The route service \\(openrouteservice\\) isn’t answering properly right now \\((\\d+)\\)\\. It’s usually back within a few minutes; try again then\\.$", "De routeservice (openrouteservice) reageert nu niet goed ($1). Meestal werkt het binnen een paar minuten weer; probeer het dan opnieuw.", "O serviço de rotas (openrouteservice) não está a responder bem neste momento ($1). Normalmente volta dentro de alguns minutos; tente nessa altura."], ["^Probably not live: no change at the site for (\\d+) h\\. Last reported (\\d+) of (\\d+) free$", "Waarschijnlijk niet live: $1 u geen wijziging op de locatie. Laatst gemeld $2 van $3 vrij", "Provavelmente não está em direto: sem alterações no local há $1 h. Último registo: $2 de $3 livres"], ["^The source last reported (\\d+) of (\\d+) free, but nothing has changed at the site since (.+) \\((.+)\\)\\. The real state is unknown\\.$", "De bron meldde laatst $1 van $2 vrij, maar er is sinds $3 ({t:$4}) niets veranderd op de locatie. De werkelijke stand is onbekend.", "A fonte registou por último $1 de $2 livres, mas nada mudou no local desde $3 ({t:$4}). O estado real é desconhecido."], ["^(.+)\\. Tap to update$", "$1. Tik om bij te werken", "$1. Toque para atualizar"], ["^Beyond an exit, on the (left|right)$", "Na een afrit, aan de {t:$1}", "Depois de uma saída, à {t:$1}"], ["^left$", "linkerkant", "esquerda"], ["^right$", "rechterkant", "direita"], ["^\\+(\\d+) min detour(.*)$", "+$1 min omrijden$2", "+$1 min de desvio$2"], ["^(\\d+) minutes extra to get there and back$", "$1 minuten extra heen en terug", "$1 minutos extra para ir e voltar"], ["^Detours: (.+)$", "Omrijden: $1", "Desvios: $1"], ["^(\\d+) of (\\d+)$", "$1 van $2", "$1 de $2"]];
+// Help manual and intro texts in Dutch and Portuguese (pt-PT). Same structure as the English ones;
+// the ${…} bits (rings, marks, settings) are filled in the same way.
+const HELP_I18N = {
+  nl: (dot) => `
+  <p>Snelladers langs je route, met hoeveel er vrij zijn en hoeveel je voor elk moet omrijden.</p>
+
+  <h3>Een route plannen</h3>
+  <ul>
+    <li><b>Naar</b>: een plaats of adres. <b>Van</b> leeg laten betekent: waar je nu bent. Het <b>×</b> maakt een veld leeg.</li>
+    <li>Tik op een veld voor de <b>plaatsen die je eerder gebruikte</b> (als vertrek, via of bestemming), de laatste tien; typ om ze te filteren. Het × ernaast vergeet er een.</li>
+    <li><b>+</b> naast Naar voegt een <b>viapunt</b> toe (maximaal twee), om je eigen weg te kiezen, bijvoorbeeld via Luxemburg in plaats van Brussel. Het × op een viapunt haalt het weg. Het scherm leest van onder naar boven, zoals je rit (Van, viapunten, Naar): een nieuw viapunt komt direct onder Naar, dus voer ze in de volgorde in waarin je ze passeert. Een <b>plaats</b> als viapunt wordt gepasseerd over de hoofdweg die er het dichtst bij ligt (via Dordrecht = de N3/A16 bij Dordrecht, niet het centrum); naar een <b>straatadres</b> wordt precies gereden.</li>
+    <li>Zonder viapunt krijg je <b>routes om uit te kiezen</b>, met hun hoofdwegen en de steden onderweg.</li>
+    <li><b>Laders</b>: de merken om naar te zoeken. Alleen snelladers (50 kW en meer) worden getoond. Live vrije plekken in Nederland, Duitsland en Oostenrijk; elders alleen locatie en omrijden.</li>
+    <li><b>Rit simuleren</b>: rijdt de route voor je, versneld, om de app thuis uit te proberen.</li>
+  </ul>
+
+  <h3>Het scherm tijdens het rijden</h3>
+  <p>Je bestemming staat bovenaan, jij onderaan, en de laders daartussen in routevolgorde. Elke rij toont de afstand en rijtijd van waar je bent tot de lader zelf (bij een lader na een afrit of aan de overkant inclusief het stuk erheen en het keren), en het maximale vermogen van de lader (<span class="kw">${BOLT}</span>).</p>
+  <p>Elke hoofdweg tot je bestemming staat op de lijn, in de stijl van de borden in dat land, ook stukken zonder lader: elk toont hoe ver vooruit hij begint en hoe lang hij is (↕). De weg waarop je rijdt staat direct boven je. Wil je deze rijen niet? Zet in de merkenknop (linksboven) <b>Hoofdwegen op de lijn</b> op <b>Alleen wisselingen</b>, of tik gewoon op een wegrij (tik op een wegnummer op de lijn om ze terug te halen): dan staat er alleen een wegnummer op de lijn waar de weg tussen laders verandert. Bovenaan staan de weg waarop je rijdt en de volgende twee; een weg verdwijnt als je zijn einde passeert.</p>
+  <p>Het <b>☰ menu</b> linksboven bevat Nieuwe route en Help. Rechtsboven staat de <b>statustijd</b> van de laders (nu, of hoeveel minuten oud; tik erop om bij te werken, hoogstens één keer per minuut, maar na een mislukte update één keer meteen).</p>
+  <p>Jouw eigen rij toont de <b>volgende afslag</b>: een grote pijl op de plek van je positiepijl, de aftellende afstand en de weg die je op gaat. Een rotonde wordt getekend met de afslag waar de weg echt vertrekt en het afslagnummer in het midden ("2e afslag", of "rechtdoor"). In de laatste 500 m pulseert de hele rij: een witte band veegt erover in de richting van je afslag (van links naar rechts voor rechts, van rechts naar links voor links), en bij rechtdoor faadt de hele rij tussen zwart en wit. Hij veegt ongeveer één keer per seconde terwijl je rijdt en twee keer zo snel in de laatste 50 m; als je stilstaat (een verkeerslicht) veegt hij nog drie keer en blijft dan wit staan tot je wegrijdt. Een "links/rechts aanhouden" waarbij je gewoon op dezelfde snelweg blijft, wordt niet getoond. Op een snelweg telt rechts de <b>volgende afrit</b> aan jouw kant af, met nummer en naam; ga je bij die afrit eraf, dan komt het nummer bij de afslag te staan. De onderste regel van het scherm toont een kompas (in je rijrichting), de tijd van de laatste locatie-update en het wegnummer met de eerstvolgende afrit of plaats (A17 Zevenbergen), of op kleinere wegen de plaats en straat. Met de debugregel aan zie je in plaats daarvan je coördinaten, richting en GPS-nauwkeurigheid, en elke geplande route wordt 30 dagen bewaard onder het id na # op de debugregel. Op een hoofdweg wordt hij bij elke GPS-meting bijgewerkt; op kleinere wegen na een afslag (60° of meer binnen een minuut), elke 2 km en als je op je rij tikt.</p>
+
+  <h3>Wegafsluitingen</h3>
+  <p>Geplande afsluitingen in Nederland en Duitsland staan als rode rij op de lijn (<b>A1 afgesloten · Dortmund/Unna – Kamener Kreuz</b>), alleen als ze op je route liggen, in jouw richting, en gelden rond het moment dat je er bent: met de afstand en tot wanneer hij dicht is. Afsluitingen in de andere richting, rijstrookafsluitingen en afsluitingen alleen voor vrachtwagens worden niet getoond. <b>Vermijden</b> plant een nieuwe route eromheen; met meer dan één afsluiting vooruit heet de knop <b>Alles vermijden</b> en gaat hij om allemaal tegelijk heen (maximaal 10). Dat blijft zo voor deze rit (ook als je een nieuwe route krijgt) tot je een nieuwe route plant. De routeplanner zelf kent deze afsluitingen niet: zonder Vermijden gaat de route er nog steeds doorheen. De afsluitingen worden elke paar uur bijgewerkt. Straten in de bebouwde kom zitten er niet bij. Konden de afsluitingen niet worden geladen, of zijn ze langer niet bijgewerkt dan zou moeten, dan meldt een bericht dat na het plannen.</p>
+
+  <h3>Vrij of niet</h3>
+  <div class="legend">
+    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 vrij.</b> De ring toont alle laders op de locatie, één segment per lader: <b style="color:var(--free)">groen</b> vrij, <b style="color:var(--danger)">rood</b> in gebruik, een grijze omlijning buiten gebruik: hij is er, maar werkt niet (hier 3 vrij, 4 in gebruik, 1 kapot van de 8). Houd ingedrukt voor de aantallen.</div>
+    <div class="k">${demoRing(0, 4)}</div><div class="v">Alles bezet.</div>
+    <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Uit</b>: gemeld als buiten gebruik, of er is al uren niets veranderd.</div>
+    <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grijs met ?</b>: waarschijnlijk niet live. De bron heeft op deze locatie al meer dan een dag niets veranderd (3 dagen bij kleine locaties), dus het getal is de laatste melding en kan fout zijn. De stip op de lijn is hol.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> nog niet gecontroleerd, tik om te controleren. Een vervaagde ring en grijs getal zijn meer dan 3 minuten oud; een grijze ring en omlijnd getal meer dan 5 minuten. De stip op de lijn houdt zijn kleur. Frankrijk wordt alleen bijgewerkt als je op een Franse lader tikt: dan worden alle Franse laders op de route bijgewerkt, hoogstens eens per paar minuten (5, of 2 als de server op het betaalde plan van Cloudflare draait, en dan werkt Frankrijk zichzelf ook bij). België wordt per locatie bijgewerkt als je erop tikt: de snellaadpunten worden één voor één gecontroleerd, elk ongeveer 10 seconden, en de ring vult zich terwijl ze binnenkomen (gestreepte segmenten zijn nog niet gecontroleerd, vaag omlijnde gaven geen bruikbare status); hoogstens eens per minuut per locatie. Een draaiende veeg in de stip betekent dat hij bijwerkt, en een getal dat verandert springt even op.</div>
+    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">Geen live gegevens voor deze lader (voorlopig België en Frankrijk).</div>
+  </div>
+  <p>De locaties van laders komen uit Open Charge Map, en in Nederland ook uit de nationale open data (NDW), zodat locaties die in Open Charge Map ontbreken kort na het plannen verschijnen. Live status komt uit de nationale open data in Nederland, Duitsland en Oostenrijk. De laders op het scherm worden elke minuut bijgewerkt; <b>tik op een lader</b> om hem nu bij te werken. Rechtsonder staat hoe oud de status is, of een draaiende ring tijdens het bijwerken.</p>
+  <p>Een lader die nu vrij is, is geen garantie dat hij nog vrij is als je aankomt.</p>
+
+  <h3>Geen verbinding en fouten</h3>
+  <p>Zonder internet (vliegtuigmodus, geen bereik) meldt een grijs bericht boven je locatie dat, en rechtsboven staat <b>Status offline</b>. De laders houden hun laatst bekende status, je positie en de route blijven werken, en alles wordt vanzelf bijgewerkt zodra je weer online bent.</p>
+  <p>Met de debugregel aan (hieronder) worden ook fouten getoond (een opzoeking die mislukte, geen GPS-meting): er verschijnt een rood bericht <b>onder je positie</b>. Nieuwe sluiten erachter aan (de rode <b>+N</b> toont hoeveel er wachten); dezelfde fout nog eens telt alleen op (×3). <b>Tik op het bericht</b> als je het gelezen hebt om het volgende te zien, of op <b>×</b> om ze allemaal te wissen.</p>
+
+  <h3>Omrijden</h3>
+  <div class="legend">
+    <div class="k"><span class="dmin">+7</span></div><div class="v">7 minuten extra om er te komen en terug op je route.</div>
+    <div class="k" style="color:var(--muted)">${reachMark("exit", "right")}</div><div class="v">Via een afrit: eraf en in dezelfde richting weer op.</div>
+    <div class="k">${reachMark("roundtrip", "left")}</div><div class="v">Heen en terug: je moet keren en terugkomen (omrijden in het rood).</div>
+  </div>
+  <p>Een lader direct aan de snelweg aan jouw kant heeft geen markering: je rijdt er gewoon in. Omrijdtijden verschijnen kort nadat een lader op het scherm komt.</p>
+  <p><b>Makkelijk bereikbaar</b> verbergt de heen-en-terugritten en houdt de laders aan jouw kant plus die met kort omrijden.</p>
+
+  <h3>Laadvermogen</h3>
+  <p>Kies <b>Snel</b> (50 kW en meer), <b>Extra snel</b> (150 kW en meer) of <b>HPC</b> (300 kW en meer) op het startscherm of onder de merklogo's; Extra snel tot je iets anders kiest. Het filtert meteen, zonder opnieuw te plannen. Meldt de live data een lager maximum dan de vermelding van de lader, dan telt de live waarde. Staat het hoger dan Snel, dan toont de merkenknop het minimum (bijv. <b>150+</b>).</p>
+  <p>Op een verzorgingsplaats komen de laders aan jouw kant eerst; die aan de overkant volgen, met de afstand inclusief het keren.</p>
+
+  <h3>Merken</h3>
+  <p>Locaties met meerdere merken delen één rij, met rechts een ring per merk. Tik bovenaan op de <b>logo's</b> om de merken op je route meteen te verbergen of te tonen. Voeg je een merk toe dat niet op de route stond, dan wordt de route opnieuw gepland vanaf waar je bent.</p>
+
+  <h3>Onderweg</h3>
+  <ul>
+    <li><b>Scroll omhoog</b> voor laders verder vooruit. De blauwe pijl brengt je terug naar de volgende.</li>
+    <li><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent.</li>
+    <li><b>Tik op een lader</b> om zijn status bij te werken (hoogstens eens per minuut; een lader zonder bruikbare status kan één keer meteen opnieuw). <b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps of Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
+    <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
+    <li>Het scherm blijft aan tijdens het rijden. ${esc(T(awakeText()))} Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
+    <li>Als je aankomt, is er een klein feestje, en daarna mag het scherm weer uit.</li>
+    <li><b>Nieuwe route</b> brengt je terug naar het startscherm.</li>
+  </ul>
+
+  <div class="help-actions">
+    <button type="button" class="link" id="replayIntro">Introductie opnieuw tonen</button>
+    <button type="button" class="link" id="splashToggle">${splashOff() ? "Startscherm tonen bij openen" : "Startscherm niet tonen bij openen"}</button>
+  </div>
+
+  <div class="credits">
+    <h3>Gegevens en bronnen</h3>
+    <p>Routes en plaatsen: <b>openrouteservice</b> van HeiGIT. Kaartgegevens © <b>OpenStreetMap</b>-bijdragers (ODbL).</p>
+    <p>Laders: <b>Open Charge Map</b> (CC BY 4.0). Live status: <b>NDW</b> (Nederland), <b>MobiData BW</b> (Duitsland), <b>E-Control</b> (Oostenrijk), <b>transport.data.gouv.fr</b> (Frankrijk, Licence Ouverte 2.0), <b>Eco-Movement</b> via het Belgische toegangspunt (België).</p>
+    <p>Wegafsluitingen: <b>NDW</b> en <b>Die Autobahn GmbH des Bundes</b>.</p>
+    <p>Merknamen en logo's zijn van hun eigenaren. EVailability is onafhankelijk en niet verbonden aan een laadnetwerk of gegevensleverancier. <a href="privacy.html?back=help">Privacybeleid</a></p>
+  </div>`,
+
+  pt: (dot) => `
+  <p>Carregadores rápidos no seu percurso, com quantos estão livres e quanto desvio exige cada um.</p>
+
+  <h3>Planear um percurso</h3>
+  <ul>
+    <li><b>Para</b>: uma localidade ou morada. <b>De</b> vazio significa onde está agora. O <b>×</b> limpa um campo.</li>
+    <li>Toque num campo para ver os <b>locais que usou antes</b> (como partida, ponto intermédio ou destino), os últimos dez; escreva para os filtrar. O × ao lado de um esquece-o.</li>
+    <li><b>+</b> ao lado de Para adiciona um <b>ponto intermédio</b> (até dois), para escolher o seu próprio caminho, por exemplo pelo Luxemburgo em vez de Bruxelas. O × num ponto intermédio remove-o. O ecrã lê-se de baixo para cima, como a sua viagem (De, pontos intermédios, Para): um novo ponto intermédio fica logo abaixo de Para, por isso introduza-os pela ordem em que vai passar por eles. Uma <b>localidade</b> como ponto intermédio é passada pela estrada principal mais próxima (por Dordrecht = a N3/A16 junto a Dordrecht, não o centro); a uma <b>morada</b> vai-se exatamente.</li>
+    <li>Sem ponto intermédio, recebe <b>percursos à escolha</b>, com as estradas principais e as cidades pelo caminho.</li>
+    <li><b>Carregadores</b>: as marcas a procurar. Só são mostrados carregadores rápidos (50 kW ou mais). Lugares livres em direto nos Países Baixos, Alemanha e Áustria; noutros países só localização e desvio.</li>
+    <li><b>Simular a viagem</b>: faz o percurso por si, acelerado, para experimentar a app em casa.</li>
+  </ul>
+
+  <h3>O ecrã durante a condução</h3>
+  <p>O seu destino está em cima, você em baixo, e os carregadores pelo meio, pela ordem do percurso. Cada linha mostra a distância e o tempo de condução desde onde está até ao próprio carregador (para um carregador depois de uma saída ou do outro lado da estrada, incluindo o caminho até lá e a inversão de marcha) e a potência máxima do carregador (<span class="kw">${BOLT}</span>).</p>
+  <p>Todas as estradas principais até ao destino estão na linha, com o estilo da sinalização de cada país, incluindo troços sem carregadores: cada uma mostra a que distância começa e quanto mede (↕). A estrada em que está fica logo acima de si. Não quer estas linhas? No botão das marcas (canto superior esquerdo), defina <b>Estradas principais na linha</b> como <b>Só mudanças</b>, ou toque simplesmente numa linha de estrada (toque num número de estrada na linha para as voltar a mostrar): fica então um número na linha apenas onde a estrada muda entre carregadores. Em cima aparece a estrada em que está e as duas seguintes; uma estrada desaparece quando passa o seu fim.</p>
+  <p>O <b>menu ☰</b> no canto superior esquerdo tem Novo percurso e Ajuda. No canto superior direito está a <b>hora do estado</b> dos carregadores (agora, ou há quantos minutos; toque para atualizar, no máximo uma vez por minuto, mas logo uma vez após uma atualização falhada).</p>
+  <p>A sua própria linha mostra a <b>próxima manobra</b>: uma seta grande no lugar da sua seta de posição, a distância a diminuir e a estrada para onde vira. Uma rotunda é desenhada com a saída onde a estrada realmente sai e o número da saída no meio ("2.ª saída", ou "em frente"). Nos últimos 500 m toda a linha pulsa: uma faixa branca passa por ela no sentido da manobra (da esquerda para a direita para a direita, da direita para a esquerda para a esquerda) e, em frente, toda a linha alterna suavemente entre preto e branco. Passa cerca de uma vez por segundo enquanto conduz e duas vezes mais depressa nos últimos 50 m; quando está parado (um semáforo), passa mais três vezes e depois fica branca até arrancar. Um "manter à esquerda/direita" em que simplesmente continua na mesma autoestrada não é mostrado. Numa autoestrada, a <b>próxima saída</b> do seu lado conta para trás à direita, com número e nome; se sair nessa saída, o número passa para a manobra. A linha de baixo do ecrã mostra uma bússola (no sentido em que conduz), a hora da última atualização de localização e o número da estrada com a saída ou localidade seguinte (A17 Zevenbergen), ou em estradas menores a localidade e a rua. Com a linha de depuração ligada, mostra em vez disso as coordenadas, a direção e a precisão do GPS, e cada percurso planeado fica guardado 30 dias com o id após # na linha de depuração. Numa estrada principal atualiza a cada posição GPS; em estradas menores após uma viragem (60° ou mais num minuto), a cada 2 km e quando toca na sua linha.</p>
+
+  <h3>Cortes de estrada</h3>
+  <p>Os cortes planeados nos Países Baixos e na Alemanha aparecem na linha como uma linha vermelha (<b>A1 cortada · Dortmund/Unna – Kamener Kreuz</b>), só quando estão no seu percurso, no seu sentido e em vigor por volta da hora a que lá chega: com a distância e até quando está cortada. Cortes no outro sentido, cortes de faixas e cortes só para camiões não são mostrados. <b>Evitar</b> planeia um novo percurso a contorná-lo; com mais de um corte à frente o botão diz <b>Evitar todos</b> e contorna-os todos de uma vez (até 10). Isso mantém-se nesta viagem (também quando o percurso é recalculado) até planear um novo percurso. O serviço de rotas não conhece estes cortes: sem Evitar, o percurso continua a passar por lá. Os cortes são atualizados de poucas em poucas horas. Ruas dentro das localidades não estão incluídas. Se os cortes não puderam ser carregados, ou não são atualizados há mais tempo do que deviam, uma nota avisa depois de planear.</p>
+
+  <h3>Livre ou não</h3>
+  <div class="legend">
+    <div class="k">${demoRing(3, 8, 1)}</div><div class="v"><b>3 livres.</b> O anel mostra todos os carregadores do local, um segmento cada: <b style="color:var(--free)">verde</b> livre, <b style="color:var(--danger)">vermelho</b> em uso, um contorno cinzento avariado: está lá, mas não funciona (aqui 3 livres, 4 em uso, 1 avariado de 8). Mantenha premido para ver os números.</div>
+    <div class="k">${demoRing(0, 4)}</div><div class="v">Tudo ocupado.</div>
+    <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Desligado</b>: indicado como avariado, ou nada mudou há horas.</div>
+    <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Cinzento com ?</b>: provavelmente não está em direto. A fonte não alterou nada neste local há mais de um dia (3 dias em locais pequenos), por isso o número é o último registo e pode estar errado. O ponto na linha fica oco.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> ainda não verificado, toque para verificar. Um anel esbatido e número cinzento têm mais de 3 minutos; um anel cinzento e número contornado mais de 5 minutos. O ponto na linha mantém a cor. A França só é atualizada quando toca num carregador francês: isso atualiza todos os carregadores franceses do percurso, no máximo de poucos em poucos minutos (5, ou 2 enquanto o servidor estiver no plano pago da Cloudflare, quando a França também se atualiza sozinha). A Bélgica é atualizada um local de cada vez quando toca nele: os postos rápidos são verificados um a um, cerca de 10 segundos cada, e o anel vai-se preenchendo (segmentos tracejados ainda não verificados, contornos ténues verificados mas sem estado utilizável); no máximo uma vez por minuto por local. Uma rotação no ponto significa que está a atualizar, e um número que muda salta brevemente.</div>
+    <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">Sem dados em direto para este carregador (Bélgica e França, por agora).</div>
+  </div>
+  <p>As localizações dos carregadores vêm do Open Charge Map e, nos Países Baixos, também dos dados abertos nacionais (NDW), por isso locais em falta no Open Charge Map aparecem pouco depois de planear. O estado em direto vem dos dados abertos nacionais nos Países Baixos, Alemanha e Áustria. Os carregadores no ecrã atualizam a cada minuto; <b>toque num carregador</b> para o atualizar já. No canto inferior direito vê a idade do estado, ou um anel a rodar enquanto atualiza.</p>
+  <p>Um carregador livre agora não garante que ainda esteja livre quando chegar.</p>
+
+  <h3>Sem ligação e erros</h3>
+  <p>Sem internet (modo de avião, sem rede) uma nota cinzenta acima da sua localização avisa, e no canto superior direito aparece <b>Estado offline</b>. Os carregadores mantêm o último estado conhecido, a sua posição e o percurso continuam a funcionar, e tudo se atualiza sozinho quando voltar a estar online.</p>
+  <p>Com a linha de depuração ligada (abaixo), os erros também são mostrados (uma consulta falhada, sem posição GPS): aparece uma mensagem vermelha <b>abaixo da sua posição</b>. As novas ficam em fila (o <b>+N</b> vermelho mostra quantas esperam); o mesmo erro outra vez só aumenta a contagem (×3). <b>Toque na mensagem</b> depois de a ler para ver a seguinte, ou em <b>×</b> para as limpar todas.</p>
+
+  <h3>Desvios</h3>
+  <div class="legend">
+    <div class="k"><span class="dmin">+7</span></div><div class="v">7 minutos extra para lá chegar e voltar ao percurso.</div>
+    <div class="k" style="color:var(--muted)">${reachMark("exit", "right")}</div><div class="v">Por uma saída: sair e voltar a entrar no mesmo sentido.</div>
+    <div class="k">${reachMark("roundtrip", "left")}</div><div class="v">Ida e volta: tem de inverter a marcha e regressar (desvio a vermelho).</div>
+  </div>
+  <p>Um carregador mesmo junto à autoestrada do seu lado não tem marca: basta entrar. Os desvios aparecem pouco depois de um carregador surgir no ecrã.</p>
+  <p><b>Fácil acesso</b> oculta as idas e voltas e mantém os carregadores do seu lado e os com desvio curto.</p>
+
+  <h3>Potência de carregamento</h3>
+  <p>Escolha <b>Rápido</b> (50 kW ou mais), <b>Extra rápido</b> (150 kW ou mais) ou <b>HPC</b> (300 kW ou mais) no ecrã inicial ou por baixo dos logótipos das marcas; Extra rápido até escolher outro. Filtra logo, sem voltar a planear. Quando os dados em direto indicam um máximo inferior ao anunciado pelo carregador, conta o valor em direto. Acima de Rápido, o botão das marcas mostra o mínimo (p. ex. <b>150+</b>).</p>
+  <p>Numa área de serviço, os carregadores do seu lado aparecem primeiro; os do outro lado vêm a seguir, com a distância incluindo a inversão de marcha.</p>
+
+  <h3>Marcas</h3>
+  <p>Locais com várias marcas partilham uma linha, com um anel por marca à direita. Toque nos <b>logótipos</b> em cima para ocultar ou mostrar já as marcas do seu percurso. Adicionar uma marca que não estava no percurso volta a planear a partir de onde está.</p>
+
+  <h3>Pelo caminho</h3>
+  <ul>
+    <li><b>Deslize para cima</b> para ver carregadores mais à frente. A seta azul leva-o de volta aos próximos.</li>
+    <li><b>Toque no destino</b> para comparar outros percursos a partir de onde está.</li>
+    <li><b>Toque num carregador</b> para atualizar o seu estado (no máximo uma vez por minuto; um carregador sem estado utilizável pode ser tocado novamente logo, uma vez). <b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou para copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
+    <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
+    <li>O ecrã mantém-se ligado enquanto conduz. ${esc(T(awakeText()))} Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
+    <li>Quando chega, há uma pequena celebração e o ecrã pode voltar a desligar-se.</li>
+    <li><b>Novo percurso</b> leva-o de volta ao ecrã inicial.</li>
+  </ul>
+
+  <div class="help-actions">
+    <button type="button" class="link" id="replayIntro">Mostrar novamente a introdução</button>
+    <button type="button" class="link" id="splashToggle">${splashOff() ? "Mostrar o ecrã inicial ao abrir" : "Não mostrar o ecrã inicial ao abrir"}</button>
+  </div>
+
+  <div class="credits">
+    <h3>Dados e créditos</h3>
+    <p>Percursos e locais: <b>openrouteservice</b> da HeiGIT. Dados do mapa © contribuidores do <b>OpenStreetMap</b> (ODbL).</p>
+    <p>Carregadores: <b>Open Charge Map</b> (CC BY 4.0). Estado em direto: <b>NDW</b> (Países Baixos), <b>MobiData BW</b> (Alemanha), <b>E-Control</b> (Áustria), <b>transport.data.gouv.fr</b> (França, Licence Ouverte 2.0), <b>Eco-Movement</b> através do ponto de acesso belga (Bélgica).</p>
+    <p>Cortes de estrada: <b>NDW</b> e <b>Die Autobahn GmbH des Bundes</b>.</p>
+    <p>Os nomes e logótipos das marcas pertencem aos respetivos proprietários. O EVailability é independente e não está associado a nenhuma rede de carregamento nem fornecedor de dados. <a href="privacy.html?back=help">Política de privacidade</a></p>
+  </div>`,
+};
+
+const SLIDES_I18N = {
+  nl: [
+    { text: `<p>Je route als één weg: <b>je bestemming bovenaan</b>, <b>jij onderaan</b>, en de laders daartussen in de volgorde waarin je ze tegenkomt.</p>
+      <p>De dichtstbijzijnde staat direct boven je, zodat je op elk moment kunt beslissen: nu laden, of doorrijden.</p>` },
+    { text: `<p><b>Groen</b>: laders die nu vrij zijn, van het totaal. <b>Oranje</b>: alles bezet. <b>Grijs</b>: waarschijnlijk buiten gebruik.</p>
+      <p>Live in Nederland, Duitsland en Oostenrijk, elke minuut bijgewerkt voor de laders op het scherm. Tik op een lader om hem meteen bij te werken.</p>` },
+    { text: `<p>Laders van de snelweg af tonen de <b>extra minuten</b> heen en terug, zoals <b>+7</b>.</p>
+      <p>Een grijze pijl betekent dat je bij een afrit eraf gaat en daarna in dezelfde richting verder rijdt. Een <b>rode</b> pijl betekent heen en terug: je moet keren.</p>
+      <p><b>Makkelijk bereikbaar</b> bovenaan verbergt de heen-en-terugritten.</p>` },
+    { text: `<p>Kies de merken die je wilt voordat je plant: Ionity, Fastned, Tesla en meer.</p>
+      <p>Tik tijdens het rijden bovenaan op de <b>logo's</b> om merken meteen te verbergen of te tonen, of om een ander merk aan je route toe te voegen.</p>` },
+    { text: `<p>De lijst volgt je GPS. Ga je van de route af, dan <b>plant hij vanzelf een nieuwe</b>.</p>
+      <p><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent. Scroll omhoog om verder vooruit te kijken; de blauwe knop brengt je terug.</p>
+      <p><b>Houd een lader ingedrukt</b> om hem in je kaart- of navigatie-app te zien, waar je de route kunt starten. Help zit altijd achter de <b>?</b> bovenaan.</p>` },
+  ],
+  pt: [
+    { text: `<p>O seu percurso como uma só estrada: <b>o destino em cima</b>, <b>você em baixo</b> e os carregadores pelo meio, pela ordem em que os encontra.</p>
+      <p>O mais próximo fica logo acima de si, para decidir a qualquer momento: carregar agora ou seguir viagem.</p>` },
+    { text: `<p><b>Verde</b>: carregadores livres agora, do total. <b>Laranja</b>: todos em uso. <b>Cinzento</b>: provavelmente avariado.</p>
+      <p>Em direto nos Países Baixos, Alemanha e Áustria, atualizado a cada minuto para os carregadores no ecrã. Toque num carregador para o atualizar já.</p>` },
+    { text: `<p>Carregadores fora da autoestrada mostram os <b>minutos extra</b> para ir e voltar, como <b>+7</b>.</p>
+      <p>Uma seta cinzenta significa que sai numa saída e continua no mesmo sentido. Uma seta <b>vermelha</b> significa ida e volta: tem de inverter a marcha.</p>
+      <p><b>Fácil acesso</b> em cima oculta as idas e voltas.</p>` },
+    { text: `<p>Escolha as marcas que quer antes de planear: Ionity, Fastned, Tesla e mais.</p>
+      <p>Durante a condução, toque nos <b>logótipos</b> em cima para ocultar ou mostrar marcas de imediato, ou para adicionar outra marca ao percurso.</p>` },
+    { text: `<p>A lista segue o seu GPS. Se sair do percurso, <b>planeia sozinha um novo</b>.</p>
+      <p><b>Toque no destino</b> para comparar outros percursos a partir de onde está. Deslize para cima para ver mais à frente; o botão azul leva-o de volta.</p>
+      <p><b>Mantenha premido</b> um carregador para o ver na sua app de mapas ou navegação, onde pode iniciar o percurso. A ajuda está sempre no <b>?</b> em cima.</p>` },
+  ],
+};
+
+// The language: a choice made in the app (Help, or the lock screen), else the phone's first language we
+// have (Dutch, Portuguese), else English. Texts are English in the code; T() and the observer below
+// put them in the chosen language. Changing the language reloads the app.
+const LANG_KEY = "evailability-lang";
+const LANG = (() => {
+  try { const o = localStorage.getItem(LANG_KEY); if (["en", "nl", "pt"].includes(o)) return o; } catch (_) {}
+  for (const l of navigator.languages || [navigator.language || "en"]) {
+    const b = String(l).slice(0, 2).toLowerCase();
+    if (b === "nl" || b === "pt" || b === "en") return b;
+  }
+  return "en";
+})();
+document.documentElement.lang = { en: "en", nl: "nl", pt: "pt-PT" }[LANG];
+const I18N_D = I18N_TEXT[LANG] || null;
+const I18N_P = LANG === "en" ? [] : I18N_PATTERNS.map(([rx, nl, pt]) => [new RegExp(rx), LANG === "nl" ? nl : pt]);
+function trCore(core, depth = 0) {
+  if (!I18N_D || depth > 3) return null;
+  if (I18N_D[core] != null) return I18N_D[core];
+  for (const [re, rep] of I18N_P) {
+    const m = core.match(re);
+    if (m) return rep.replace(/\{t:\$(\d)\}|\$(\d)/g, (_, a, b) => (a ? trCore(m[+a], depth + 1) ?? m[+a] : m[+b] ?? ""));
+  }
+  return null;
+}
+// T("English text"): the text in the app's language (unchanged when there's no translation).
+function T(text) {
+  if (!I18N_D || text == null) return text;
+  const m = String(text).match(/^(\s*)([\s\S]*?)(\s*)$/);
+  const out = m[2] ? trCore(m[2]) : null;
+  return out == null ? text : m[1] + out + m[3];
+}
+// Everything shown is translated as it appears: text nodes and placeholder / aria-label / title, for the
+// markup and for whatever the code renders later. Inputs' values, the debug line and code stay as they are.
+const I18N_SKIP = new Set(["SCRIPT", "STYLE", "TEXTAREA", "CODE", "PRE"]);
+function i18nNode(n) {
+  if (!I18N_D) return;
+  if (n.nodeType === 3) {
+    const p = n.parentElement;
+    if (!p || I18N_SKIP.has(p.tagName) || p.closest(".debugline, [data-no-tr]")) return;
+    const v = n.nodeValue, t = T(v);
+    if (t !== v) n.nodeValue = t;
+    return;
+  }
+  if (n.nodeType !== 1 || I18N_SKIP.has(n.tagName) || n.closest?.(".debugline, [data-no-tr]")) return;
+  for (const a of ["placeholder", "aria-label", "title"]) {
+    const v = n.getAttribute(a);
+    if (v) { const t = T(v); if (t !== v) n.setAttribute(a, t); }
+  }
+  for (const c of n.childNodes) i18nNode(c);
+}
+if (I18N_D) {
+  new MutationObserver((list) => {
+    for (const m of list) {
+      if (m.type === "characterData") i18nNode(m.target);
+      else if (m.type === "attributes") { const v = m.target.getAttribute(m.attributeName); const t = v && T(v); if (t && t !== v) m.target.setAttribute(m.attributeName, t); }
+      else for (const n of m.addedNodes) i18nNode(n);
+    }
+  }).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["placeholder", "aria-label", "title"] });
+  i18nNode(document.body);
+}
+function wireLangPickers() {
+  let chosen = ""; try { chosen = localStorage.getItem(LANG_KEY) || ""; } catch (_) {}
+  for (const b of document.querySelectorAll("#langPick [data-lang]")) {
+    b.setAttribute("aria-pressed", String(b.dataset.lang === LANG));
+    b.addEventListener("click", () => { if (b.dataset.lang !== LANG || !chosen) setLang(b.dataset.lang); });
+  }
+  const sel = document.getElementById("langSelect");
+  if (sel) { sel.value = chosen; sel.addEventListener("change", () => setLang(sel.value)); }
+}
+function setLang(l) {
+  try { l ? localStorage.setItem(LANG_KEY, l) : localStorage.removeItem(LANG_KEY); } catch (_) {}
+  location.reload();
+}
+
 // One place for the version: the meta tag at the top (also what the apps page shows), so the two can't drift apart.
 // Copies from before .121 look for the text below to see an update; it makes them reload once into
 // this code. Leave it as is: APP_VERSION = "2026-11-16.121"
@@ -1853,7 +2663,7 @@ async function sendAsk(e) {
   $("askBtn").disabled = true;
   try {
     const res = await fetch(`${WORKER}/request`, { method: "POST", headers: { "Content-Type": "application/json", ...(askFromTrial && accessToken() ? { "X-Access": accessToken() } : {}) },
-      body: JSON.stringify({ name: $("askName").value, email: $("askEmail").value, note: $("askNote").value, website: $("askWebsite").value, device: DEVICE_ID }) });
+      body: JSON.stringify({ name: $("askName").value, email: $("askEmail").value, note: $("askNote").value, website: $("askWebsite").value, device: DEVICE_ID, lang: LANG }) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
     if (data.token) return signedIn(data);
@@ -2017,12 +2827,15 @@ function renderTrialBanner() {
 }
 function showTrialWelcome(t) {
   const days = Math.max(1, Math.ceil((Date.parse(t.until) - Date.now()) / 86400000));
-  $("trialLimits").innerHTML = [
-    ["📅", `<b>${days} days</b> and <b>${t.routesLeft} routes</b>`],
-    ["🇳🇱", "Live charger status in the <b>Netherlands</b>; other countries show the chargers without live status"],
-    ["⏱", "Status updates at most every <b>3 minutes</b>"],
-    ["⭐", "Want more? Tap <b>Get full access</b> on the start screen any time"],
-  ].map(([i, t2]) => `<li><i aria-hidden="true">${i}</i><span>${t2}</span></li>`).join("");
+  const L = {
+    en: [`<b>${days} days</b> and <b>${t.routesLeft} routes</b>`, "Live charger status in the <b>Netherlands</b>; other countries show the chargers without live status",
+      "Status updates at most every <b>3 minutes</b>", "Want more? Tap <b>Get full access</b> on the start screen any time"],
+    nl: [`<b>${days} dagen</b> en <b>${t.routesLeft} routes</b>`, "Live status van laders in <b>Nederland</b>; andere landen tonen de laders zonder live status",
+      "Status wordt hoogstens elke <b>3 minuten</b> bijgewerkt", "Meer nodig? Tik op het startscherm op <b>Volledige toegang</b>, wanneer je maar wilt"],
+    pt: [`<b>${days} dias</b> e <b>${t.routesLeft} percursos</b>`, "Estado em direto dos carregadores nos <b>Países Baixos</b>; os outros países mostram os carregadores sem estado em direto",
+      "O estado atualiza no máximo a cada <b>3 minutos</b>", "Quer mais? Toque em <b>Acesso completo</b> no ecrã inicial a qualquer momento"],
+  }[LANG] || [];
+  $("trialLimits").innerHTML = [["📅", L[0]], ["🇳🇱", L[1]], ["⏱", L[2]], ["⭐", L[3]]].map(([i, t2]) => `<li><i aria-hidden="true">${i}</i><span>${t2}</span></li>`).join("");
   $("lock").hidden = false;
   lockView("trialWelcome");
 }
@@ -4567,7 +5380,7 @@ function reachOf(s) {
   return dm == null || dm <= SHOW_DETOUR_FROM ? "route" : short ? "exit" : "roundtrip";
 }
 
-function fmtKm(km) { return km < 10 ? Math.max(0, km).toFixed(1) : Math.round(km); }
+function fmtKm(km) { return km < 10 ? Math.max(0, km).toFixed(1).replace(".", LANG === "en" ? "." : ",") : Math.round(km); }
 function fmtMin(m) {
   m = Math.max(0, Math.round(m));
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
@@ -5453,6 +6266,8 @@ const SLIDES = [
 
 const INTRO_KEY = "evailability-intro-seen";
 function showIntro() {
+  const own = SLIDES_I18N[LANG];
+  if (own) SLIDES.forEach((sl, i) => { if (own[i]?.text) sl.text = own[i].text; sl.title = T(sl.title); });
   $("slides").innerHTML = SLIDES.map((sl, i) =>
     `<section class="slide" aria-label="${i + 1} of ${SLIDES.length}">${sl.top ? `<div>${sl.top()}</div>` : ""}${sl.demo() ? `<div class="demo">${sl.demo()}</div>` : ""}<div><h2>${sl.title}</h2>${sl.text}</div></section>`).join("");
   $("dots").innerHTML = SLIDES.map(() => "<span></span>").join("");
@@ -5484,6 +6299,7 @@ $("introNext").addEventListener("click", () => {
 
 function helpHtml() {
   const dot = (c) => `<span class="dot" style="background:var(--${c})"></span>`;
+  if (HELP_I18N[LANG]) return HELP_I18N[LANG](dot);
   return `
   <p>Fast chargers along your route, with how many are free and how much of a detour each one is.</p>
 
@@ -5809,6 +6625,7 @@ if (location.hash === "#request" || location.hash === "#help") {
   else if (h === "#request" && trialNow()) openUpgrade(); // a trial user asking for full access
   else if (h === "#request" && !$("lock").hidden && !askPending()) { lockView("form"); refreshAsk(); }
 }
+wireLangPickers();
 </script>
 </body>
 </html>

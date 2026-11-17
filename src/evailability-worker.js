@@ -64,7 +64,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-17.125";
+const WORKER_VERSION = "2026-11-17.126";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -2884,7 +2884,7 @@ async function handleUsers(request, env) {
     crypt: crypt ? { wrapped: crypt.wrapped, at: crypt.at } : null,
     messages: (await loadMessages(env)).slice().reverse().map((m) => ({ id: m.id, at: m.at, kind: m.kind, name: m.name, userId: m.userId || null,
       reqId: m.reqId || null, text: m.text || null, enc: m.enc || null, done: m.done || null })),
-    requests: reqs.slice().reverse().map((r) => ({ id: r.id, at: r.at, kind: r.kind, status: r.status, name: r.name, note: r.note, reply: r.reply || null,
+    requests: reqs.slice().reverse().map((r) => ({ id: r.id, at: r.at, kind: r.kind, status: r.status, name: r.name, note: r.note, reply: r.reply || null, lang: r.lang || "en",
       emailEnc: r.emailEnc || null, userId: r.userId || null, done: r.done || null })),
     users: list.map((u) => {
       const perDay = days.map((d) => d.users[u.id]?.n || 0).reverse(); // oldest first
@@ -3018,6 +3018,7 @@ async function handleRequest(request, env) {
   const name = String(body.name || "").trim().slice(0, 60);
   const note = String(body.note || "").trim().slice(0, 300);
   const device = String(body.device || "").replace(/[^a-z0-9]/g, "").slice(0, 12);
+  const lang = ["nl", "pt"].includes(body.lang) ? body.lang : "en"; // for the key email
   const hash = email ? await emailHash(env, email) : `user:${trialUser.id}`;
   const ipHash = (await hmac(env, `ip:${ip}`)).slice(0, 16);
   let list = await loadRequests(env);
@@ -3048,7 +3049,7 @@ async function handleRequest(request, env) {
     if (list.filter((x) => x.status === "pending").length >= 50) throw new HttpError(429, "Too many open requests at the moment. Try again later.");
     r = { id: userId(), at: now, kind: trialUser ? "upgrade" : "request", status: "pending", name: name || trialUser?.label || "",
       note, emailEnc: email ? await encryptEmail(env, email) : trialUser?.emailEnc || null,
-      emailHash: hash, device, ipHash, pickup: await hmac(env, `pickup:${pickup}`), ...(trialUser ? { trialUserId: trialUser.id } : {}) };
+      emailHash: hash, device, ipHash, lang, pickup: await hmac(env, `pickup:${pickup}`), ...(trialUser ? { trialUserId: trialUser.id } : {}) };
     list.push(r);
   }
   await saveRequests(env, list);

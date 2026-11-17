@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.12"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-17.13"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -376,7 +376,7 @@ function renderRequests() {
   const done = data.requests.filter((r) => r.status !== "pending");
   const when2 = (iso) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const card = (r) => `<div class="card req" data-req="${r.id}">
-      <div class="top"><span class="who2">${esc(r.name || "No name")}${r.kind === "trial" ? ' <span class="tchip">Trial</span>' : r.kind === "upgrade" ? ' <span class="tchip">Trial → full access</span>' : ""}</span><span class="small muted">${when2(r.at)}</span></div>
+      <div class="top"><span class="who2">${esc(r.name || "No name")}${r.lang && r.lang !== "en" ? ` <span class="tchip">${r.lang.toUpperCase()}</span>` : ""}${r.kind === "trial" ? ' <span class="tchip">Trial</span>' : r.kind === "upgrade" ? ' <span class="tchip">Trial → full access</span>' : ""}</span><span class="small muted">${when2(r.at)}</span></div>
       <div class="mail">${esc(emailOf(r.emailEnc) || "no email kept (encryption wasn’t set up)")}</div>
       ${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}
       ${r.reply ? `<div class="replyline">Your note: ${esc(r.reply)}</div>` : ""}
@@ -412,10 +412,9 @@ function renderSelfService() {
 // plain text, so no bigger font: the key stands alone, with space around it. Not in the subject, which
 // shows on lock screens and in previews.
 const APP_URL = "https://remconld.github.io/apps/evailability.html";
-function keyMailText(label, key) {
-  // Order: 1. reopen the app (the device that asked picks up its sign-in by itself, in Safari or from
-  // the home screen alike), 2. the key, 3. the link (always opens in the browser).
-  return `Hi ${label},
+// The key email in the language the request was made in (the app's language then).
+const MAIL = {
+  en: { subject: "Your EVailability access is ready", text: (label, key, spaced, url) => `Hi ${label},
 
 Your access to EVailability is ready.
 
@@ -423,15 +422,50 @@ Your access to EVailability is ready.
 
 2. Doesn't it? Enter this key in the app (or copy it and tap Paste):
 
-        ${key.split("").join(" ")}
+        ${spaced}
 
 3. Still no luck? Tap this link. It opens the app in your browser and signs you in there:
-${APP_URL}#key=${key}
+${url}
 
 May every ring be green!
-Remco`;
+Remco` },
+  nl: { subject: "Je toegang tot EVailability is klaar", text: (label, key, spaced, url) => `Hoi ${label},
+
+Je toegang tot EVailability is klaar.
+
+1. Open de app gewoon opnieuw, op de telefoon waarop je toegang hebt aangevraagd. Je wordt vanzelf ingelogd.
+
+2. Lukt dat niet? Voer deze sleutel in de app in (of kopieer hem en tik op Plakken):
+
+        ${spaced}
+
+3. Nog steeds niet? Tik op deze link. Die opent de app in je browser en logt je daar in:
+${url}
+
+Moge elke ring groen zijn!
+Remco` },
+  pt: { subject: "O seu acesso ao EVailability está pronto", text: (label, key, spaced, url) => `Olá ${label},
+
+O seu acesso ao EVailability está pronto.
+
+1. Basta abrir a app novamente, no telemóvel onde pediu acesso. A sessão é iniciada sozinha.
+
+2. Não funcionou? Introduza esta chave na app (ou copie-a e toque em Colar):
+
+        ${spaced}
+
+3. Continua sem funcionar? Toque nesta ligação. Abre a app no browser e inicia a sessão lá:
+${url}
+
+Que todos os anéis estejam verdes!
+Remco` },
+};
+function keyMailText(label, key, lang = "en") {
+  // Order: 1. reopen the app (the device that asked picks up its sign-in by itself), 2. the key,
+  // 3. the link (always opens in the browser).
+  return (MAIL[lang] || MAIL.en).text(label, key, key.split("").join(" "), `${APP_URL}#key=${key}`);
 }
-function showKey(label, key, isNew, email = "") {
+function showKey(label, key, isNew, email = "", lang = "en") {
   $("newKey").innerHTML = `<div class="card newkey" role="status">
     <div class="who">${isNew ? "Key for" : "New key for"} ${esc(label)}</div>
     <div class="key" id="keyText">${esc(key)}</div>
@@ -439,7 +473,7 @@ function showKey(label, key, isNew, email = "") {
       <button type="button" id="copyBtn">Copy key</button>
       ${navigator.share ? `<button type="button" class="plain" id="shareBtn">Share…</button>` : ""}
     </div>
-    ${email ? `<a class="plain mailbtn" id="mailBtn" href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent("Your EVailability access is ready")}&body=${encodeURIComponent(keyMailText(label, key))}">Email key to ${esc(email)}</a>` : ""}
+    ${email ? `<a class="plain mailbtn" id="mailBtn" href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent((MAIL[lang] || MAIL.en).subject)}&body=${encodeURIComponent(keyMailText(label, key, lang))}">Email key to ${esc(email)}</a>` : ""}
     <p class="small muted" style="margin:10px 0 0">Only shown now. Copy it before you leave this page.
       <button type="button" class="link" id="doneBtn">Done</button></p>
   </div>`;
@@ -453,7 +487,7 @@ function showKey(label, key, isNew, email = "") {
     setTimeout(() => { if ($("copyBtn")) { $("copyBtn").textContent = "Copy key"; $("copyBtn").classList.remove("copied"); } }, 2500);
   };
   if ($("shareBtn")) $("shareBtn").onclick = () => navigator.share({
-    text: keyMailText(label, key),
+    text: keyMailText(label, key, lang),
   }).catch(() => {});
   $("doneBtn").onclick = () => { $("newKey").innerHTML = ""; };
   $("newKey").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -534,7 +568,7 @@ $("requests").addEventListener("click", async (e) => {
     if (b.dataset.ract === "decline") declining = null;
     if (b.dataset.ract === "approve" && out.upgraded) {
       $("newKey").innerHTML = `<div class="card newkey" role="status"><b>${esc(out.user.label)}</b> now has full access. Same key, their app keeps working; the trial limits are gone within a minute or two. <button type="button" class="link" onclick="this.closest('.card').remove()">OK</button></div>`;
-    } else if (b.dataset.ract === "approve") showKey(out.user.label, out.key, true, emails.get(r.emailEnc) || "");
+    } else if (b.dataset.ract === "approve") showKey(out.user.label, out.key, true, emails.get(r.emailEnc) || "", r.lang || "en");
     await load();
   } catch (err) { showError(err); b.disabled = false; }
 });

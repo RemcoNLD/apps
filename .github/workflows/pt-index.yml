@@ -1,0 +1,33 @@
+# Portugal: rebuilds data/pt-fast-sites.json (fast sites with each point's id and power) from MOBI.E's
+# inventory on the National Access Point (DATEX II, ~180 MB, streamed). Weekly, by hand, or when the
+# builder changes. Source: MOBI.E / NAP Portugal (open access).
+name: Portugal index
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["tools/build-pt-index.py", "tools/pt_datex.py", ".github/workflows/pt-index.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: pt-index
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the index
+        run: python3 tools/build-pt-index.py
+      - name: Commit if changed
+        run: |
+          git add data/pt-fast-sites.json
+          if git diff --cached --quiet; then echo "Nothing changed"; exit 0; fi
+          git config user.name "pt-index-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "Portugal index update"
+          for i in 1 2 3; do git pull --rebase -q && git push -q && exit 0; sleep 5; done
+          exit 1

@@ -62,7 +62,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-17.122";
+const WORKER_VERSION = "2026-11-17.123";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -395,10 +395,22 @@ async function handleUsage(request, env) {
 }
 
 async function fetchJson(url, init = {}, label = "upstream") {
-  countCall(label);
-  const res = await fetch(url, init);
-  noteQuota(url, res);
-  const text = await res.text();
+  // The routing service (openrouteservice) sometimes answers 500/502/503/504 for a moment ("There was
+  // a problem proxying the request"): try again twice, after about 0.7 and 1.8 s, before giving up.
+  const retries = label === "Routing" ? [700, 1800] : [];
+  let res, text;
+  for (let attempt = 0; ; attempt++) {
+    countCall(label);
+    res = await fetch(url, init);
+    noteQuota(url, res);
+    text = await res.text();
+    if (res.ok || res.status < 500 || attempt >= retries.length) break;
+    countCall(`${label} retried`);
+    await sleep(retries[attempt]);
+  }
+  if (!res.ok && label === "Routing" && res.status >= 500) {
+    throw new HttpError(502, `The route service (openrouteservice) isn’t answering properly right now (${res.status}). It’s usually back within a few minutes; try again then.`);
+  }
   if (!res.ok) throw new HttpError(502, `${label} returned ${res.status}: ${text.slice(0, 300)}`);
   try { return JSON.parse(text); }
   catch { throw new HttpError(502, `${label} did not return JSON`); }

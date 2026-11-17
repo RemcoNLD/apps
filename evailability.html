@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.149"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.150"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1142,7 +1142,7 @@
 
 <section id="start">
   <div class="start-top">
-    <a class="apps-back" href="./" aria-label="Back to apps">‹</a>
+    <a class="apps-back" id="appsBack" href="./" aria-label="Back to apps" hidden>‹</a>
     <h1>EVailability</h1>
     <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
   </div>
@@ -1768,6 +1768,15 @@ document.addEventListener("focusout", () => setTimeout(() => {
   const a = document.activeElement;
   if (!a || !/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) window.scrollTo(0, 0);
 }, 150));
+
+// ‹ back to the apps page: only when the app was opened from there (Remco's launcher). Everyone else
+// opens it from its own icon or a link, and has no apps page to go back to. Remembered for this tab,
+// so an update reload (which loses the referrer) keeps it.
+try {
+  const ref = document.referrer || "";
+  if (/\/apps\/(index\.html)?(\?.*)?$/.test(ref) && !/evailability/.test(ref)) sessionStorage.setItem("evailability-from-apps", "1");
+  $("appsBack").hidden = sessionStorage.getItem("evailability-from-apps") !== "1";
+} catch (_) {}
 
 // ------------------------------------------------------------- self-service (no key yet)
 // The lock screen has four views: key, form (request a key / start a trial), wait (request sent, or

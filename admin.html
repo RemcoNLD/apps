@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-16.8"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="2026-11-17.9"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -128,6 +128,13 @@
   #routeView .hl { color: var(--warn); font-weight: 700; }
   .reqbadge { display: inline-block; min-width: 20px; height: 20px; margin-left: 6px; padding: 0 6px; border-radius: 10px;
     background: var(--bad, #e0574f); color: #fff; font-size: .78rem; font-weight: 800; line-height: 20px; text-align: center; text-decoration: none; vertical-align: 1px; }
+  .qos { padding: 10px 0; border-top: 1px solid var(--line); }
+  .qos:first-of-type { border-top: 0; }
+  .qos-h { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .qos-h .name { font-weight: 700; }
+  .qos-ok { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .qos-ok small { font-weight: 500; color: var(--muted); }
+  .qos-ok.good { color: var(--ok); } .qos-ok.warn { color: var(--warn); } .qos-ok.bad { color: var(--bad); }
 </style>
 </head>
 <body>
@@ -212,6 +219,58 @@ function ago(iso) {
   return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
 }
 
+
+// Service health: per outside service and per endpoint of the Worker, today and the last 7 days:
+// how often it worked, typical and slow times (from a histogram), the slowest, the last failure.
+const QOS_EDGES = [250, 500, 1000, 2000, 5000];
+const QOS_NAMES = {
+  "api:/plan": "Plan a route", "api:/alternatives": "Compare routes", "api:/status": "Live status (NL, DE, AT)",
+  "api:/fr-status": "Live status France", "api:/be-status": "Belgium: sites", "api:/be-evse": "Belgium: one stall",
+  "api:/geocode": "Address search", "api:/detours": "Detour minutes", "api:/places": "Place names", "api:/ndw-sites": "Extra NL chargers",
+  "api:/where": "Street and town", "svc:Routing": "openrouteservice: routes", "svc:Geocoder": "openrouteservice: addresses",
+  "svc:Matrix": "openrouteservice: detours",
+};
+function qosMerge(list) {
+  const out = {};
+  for (const q of list) for (const [k, v] of Object.entries(q || {})) {
+    const t = out[k] || (out[k] = { n: 0, fail: 0, ms: 0, max: 0, b: [0, 0, 0, 0, 0, 0] });
+    t.n += v.n; t.fail += v.fail; t.ms += v.ms; t.max = Math.max(t.max, v.max);
+    (v.b || []).forEach((x, i) => { t.b[i] += x; });
+    if (v.lastFail && (!t.lastFail || t.lastFail.at < v.lastFail.at)) t.lastFail = v.lastFail;
+  }
+  return out;
+}
+const qosPct = (q, p) => { // the bucket edge below which p of the calls finished ("under 1 s")
+  let acc = 0;
+  for (let i = 0; i < 6; i++) { acc += q.b[i]; if (acc >= p * q.n) return i < 5 ? QOS_EDGES[i] : null; }
+  return null;
+};
+const qosMs = (ms) => (ms == null ? "over 5 s" : ms >= 1000 ? `${ms / 1000} s` : `${ms} ms`);
+function qosHtml(d) {
+  const todayRec = d.days.find((x) => x.day === d.today) || {};
+  const today = qosMerge([todayRec.qos, d.unsaved.qos]);
+  const week = qosMerge([...d.days.map((x) => x.qos), d.unsaved.qos]);
+  const keys = Object.keys(week).sort((a, b) => (a.startsWith("api:") === b.startsWith("api:") ? week[b].n - week[a].n : a.startsWith("api:") ? -1 : 1));
+  const h = d.health?.ors;
+  const notice = h?.down && Date.now() - (h.lastFail || 0) < 15 * 60000
+    ? `<div class="card note small"><b>Route service notice is showing</b> in the app since ${new Date(h.since).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}; last failure ${new Date(h.lastFail).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}.</div>` : "";
+  if (!keys.length) return `<h2>Service health</h2>${notice}<div class="card small muted">No timings yet (collected from Worker .125 on).</div>`;
+  const rows = keys.map((k) => {
+    const t = today[k], w = week[k];
+    const ok = (q) => (q && q.n ? Math.round(((q.n - q.fail) / q.n) * 1000) / 10 : null);
+    const okT = ok(t), okW = ok(w);
+    const cls = (v) => (v == null ? "" : v < 95 ? " bad" : v < 99 ? " warn" : " good");
+    const lf = w.lastFail ? `last failure ${new Date(w.lastFail.at).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })} (${esc(String(w.lastFail.status))})` : "no failures";
+    return `<div class="qos">
+      <div class="qos-h"><span class="name">${esc(QOS_NAMES[k] || k.replace(/^\w+:/, ""))}</span>
+        <span class="qos-ok${cls(okT ?? okW)}">${okT != null ? `${okT}%` : "–"}<small> today</small></span></div>
+      <div class="small muted">${t ? `${fmt(t.n)} today, typical ${qosMs(qosPct(t, .5))}, 9 in 10 ${qosMs(qosPct(t, .9))}, slowest ${qosMs(t.max)}` : "none today"}</div>
+      <div class="small muted">7 days: ${fmt(w.n)}, ${okW}% worked, 9 in 10 ${qosMs(qosPct(w, .9))} · ${lf}</div>
+    </div>`;
+  }).join("");
+  return `<h2>Service health</h2>${notice}<div class="card group">${rows}
+    <div class="small muted" style="margin-top:8px">“Worked” = answered without a server error. Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.</div></div>`;
+}
 function render(d) {
   const todayRec = d.days.find((x) => x.day === d.today) || { calls: {}, ors: {} };
   // Today = saved + not yet saved.
@@ -336,6 +395,7 @@ function render(d) {
   }
   html += `<p class="small muted" style="margin-top:18px">Days run in UTC. Cloudflare can run several copies of the Worker;
     each saves its own count, so Worker and source counts are close, not exact. OpenRouteService figures come from ORS itself.</p>`;
+  html += qosHtml(d);
   $("out").innerHTML = html;
   // Tapping a bar shows that day's number under the row's bars; tapping it again hides it.
   $("out").onclick = (e) => {

@@ -64,7 +64,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-17.124";
+const WORKER_VERSION = "2026-11-17.125";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -170,7 +170,25 @@ class HttpError extends Error {
 // Counts calls per data source and keeps the quota OpenRouteService reports with each answer.
 // Saved to KV (binding USAGE) at most every 2 minutes, to stay well within KV's free write limit.
 const USAGE_FLUSH_MS = 2 * 60 * 1000;
-const usage = { pending: {}, users: {}, ors: {}, orsHeaders: {}, lastFlush: Date.now(), kvWrites: 0 };
+const usage = { pending: {}, users: {}, qos: {}, ors: {}, orsHeaders: {}, lastFlush: Date.now(), kvWrites: 0 };
+// Quality of service, per outside service and per endpoint of this Worker: calls, failures, total and
+// slowest time, a time histogram and the last failure. Saved with the counts (no extra writes); the
+// usage page shows it under "Service health".
+const QOS_BUCKETS = [250, 500, 1000, 2000, 5000]; // ms; one more bucket for slower
+function noteQos(key, ms, ok, status) {
+  const q = usage.qos[key] || (usage.qos[key] = { n: 0, fail: 0, ms: 0, max: 0, b: [0, 0, 0, 0, 0, 0] });
+  q.n++; q.ms += ms; q.max = Math.max(q.max, ms);
+  q.b[QOS_BUCKETS.findIndex((x) => ms < x) === -1 ? 5 : QOS_BUCKETS.findIndex((x) => ms < x)]++;
+  if (!ok) { q.fail++; q.lastFail = { at: Date.now(), status }; }
+}
+function mergeQos(into, q) {
+  for (const [k, v] of Object.entries(q)) {
+    const t = into[k] || (into[k] = { n: 0, fail: 0, ms: 0, max: 0, b: [0, 0, 0, 0, 0, 0] });
+    t.n += v.n; t.fail += v.fail; t.ms += v.ms; t.max = Math.max(t.max, v.max);
+    v.b.forEach((x, i) => { t.b[i] += x; });
+    if (v.lastFail && (!t.lastFail || t.lastFail.at < v.lastFail.at)) t.lastFail = v.lastFail;
+  }
+}
 // Requests per access key (user id), saved with the counts above, so no extra KV writes.
 // Per key also its devices: a random id the app makes once per install (?d=), with the kind of device
 // read from the browser (iPhone, iPad, Mac…). Shows on the Users page whether a key is passed around.
@@ -228,15 +246,17 @@ async function readUsageDay(env, day) {
 async function flushUsage(env, force = false) {
   if (!env.USAGE) return;
   if (!force && Date.now() - usage.lastFlush < USAGE_FLUSH_MS) return;
-  const pending = usage.pending, ors = usage.ors, users = usage.users;
-  if (!Object.keys(pending).length && !Object.keys(ors).length && !Object.keys(users).length) return;
-  usage.pending = {}; usage.users = {}; usage.lastFlush = Date.now();
+  const pending = usage.pending, ors = usage.ors, users = usage.users, qos = usage.qos;
+  if (!Object.keys(pending).length && !Object.keys(ors).length && !Object.keys(users).length && !Object.keys(qos).length) return;
+  usage.pending = {}; usage.users = {}; usage.qos = {}; usage.lastFlush = Date.now();
   const day = today();
   const rec = (await readUsageDay(env, day)) || { day, calls: {}, ors: {} };
   for (const [k, n] of Object.entries(pending)) rec.calls[k] = (rec.calls[k] || 0) + n;
   for (const [k, v] of Object.entries(ors)) if (!rec.ors[k] || rec.ors[k].at < v.at) rec.ors[k] = v;
   rec.users = rec.users || {};
   for (const [id, u] of Object.entries(users)) mergeUser(rec.users[id] || (rec.users[id] = { n: 0, last: 0 }), u);
+  rec.qos = rec.qos || {};
+  mergeQos(rec.qos, qos);
   rec.orsHeaders = { ...(rec.orsHeaders || {}), ...usage.orsHeaders };
   rec.calls["KV writes"] = (rec.calls["KV writes"] || 0) + 1;
   try {
@@ -245,6 +265,7 @@ async function flushUsage(env, force = false) {
     // Put the counts back so they're not lost.
     for (const [k, n] of Object.entries(pending)) countCall(k, n);
     for (const [id, u] of Object.entries(users)) mergeUser(usage.users[id] || (usage.users[id] = { n: 0, last: 0 }), u);
+    mergeQos(usage.qos, qos);
     console.log("Usage save failed", e.message);
   }
 }
@@ -393,7 +414,8 @@ async function handleUsage(request, env) {
     today: today(),
     days,
     // Not saved yet (or no KV): this copy of the Worker's own tally since it started.
-    unsaved: { calls: usage.pending, ors: usage.ors },
+    unsaved: { calls: usage.pending, ors: usage.ors, qos: usage.qos },
+    health: await loadHealth(env), // the route-service notice's state
     orsHeaders: { ...((days[0] && days[0].orsHeaders) || {}), ...usage.orsHeaders },
   });
 }
@@ -407,7 +429,10 @@ async function fetchJson(url, init = {}, label = "upstream") {
   let res, text;
   for (let attempt = 0; ; attempt++) {
     countCall(label);
-    res = await fetch(url, init);
+    const t0 = Date.now();
+    try { res = await fetch(url, init); }
+    catch (e) { noteQos(`svc:${label}`, Date.now() - t0, false, "network"); throw e; }
+    noteQos(`svc:${label}`, Date.now() - t0, res.ok, res.status);
     noteQuota(url, res);
     text = await res.text();
     if (res.ok || res.status < 500 || attempt >= retries.length) break;
@@ -3461,11 +3486,18 @@ export default {
     if (request.method !== "OPTIONS") countCall("Worker requests");
     // Save the tally after answering: straight away after planning (rare, many calls),
     // otherwise at most every 2 minutes. A new deploy discards anything not yet saved.
-    const urgent = /^\/(plan|alternatives)/.test(new URL(request.url).pathname);
+    const path0 = new URL(request.url).pathname;
+    const urgent = /^\/(plan|alternatives)/.test(path0);
+    // Time per endpoint that matters for the driver (QoS): from the request to the answer.
+    const timed = /^\/(plan|alternatives|status|fr-status|be-status|be-evse|geocode|detours|places|ndw-sites|where)$/.test(path0) && request.method !== "OPTIONS";
+    const t0 = Date.now();
     try {
-      return await route(request, env);
+      const res = await route(request, env);
+      if (timed) noteQos(`api:${path0}`, Date.now() - t0, res.status < 500, res.status);
+      return res;
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 500;
+      if (timed) noteQos(`api:${path0}`, Date.now() - t0, status < 500 && status !== 429 ? true : false, status);
       console.log("Error", status, e.message);
       return json(request, e.reason ? { error: e.message, reason: e.reason, ...(e.extra || {}) } : { error: e.message }, status);
     } finally {

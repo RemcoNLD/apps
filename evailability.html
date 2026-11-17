@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.147"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.148"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -177,7 +177,12 @@
   .error { color: var(--danger); margin-top: 14px; line-height: 1.45; }
 
   /* ---------- driving screen ---------- */
-  #drive { height: 100%; display: flex; flex-direction: column; }
+  /* The driving screen is pinned to the screen's edges: the bar and destination on top, your row and
+     the location line at the very bottom, and only the chargers between them scroll. (Measured from the
+     edges, not as 100% of the page, which iOS sometimes left shorter than the screen: a gap below.) */
+  #drive { position: fixed; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    background: var(--asphalt); }
   /* While driving the page itself never scrolls (only the list does): pinned to the screen. iOS can leave
      a home-screen app scrolled, with a gap at the bottom, after the keyboard closes; this rules that out. */
   body:has(#drive:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
@@ -5109,7 +5114,8 @@ function stationRow(site, change, after) {
   const base = members.map(statusInfo);
   const dot = CLS_ORDER.find((c) => base.some((i) => i.cls === c)) || "nodata";
   const scanning = members.some((m) => m.loadingAt && Date.now() - m.loadingAt < 20000);
-  const kw = Math.max(0, ...members.map((m) => m.status?.maxKw || m.maxKw || 0)) || null;
+  // A live source's maxKw under 11 is not a fast charger's power (seen: "4"); then the charger's own.
+  const kw = Math.max(0, ...members.map((m) => (m.status?.maxKw >= 11 ? m.status.maxKw : 0) || m.maxKw || 0)) || null;
   // The quickest one to reach decides the detour shown.
   const withDetour = members.filter((m) => detourOf(m) != null);
   const quick = withDetour.length ? withDetour.reduce((a, b) => (detourOf(b) < detourOf(a) ? b : a)) : s;

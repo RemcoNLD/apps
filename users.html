@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.6"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-17.7"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -337,7 +337,7 @@ function renderRequests() {
   const done = data.requests.filter((r) => r.status !== "pending");
   const when2 = (iso) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const card = (r) => `<div class="card req" data-req="${r.id}">
-      <div class="top"><span class="who2">${esc(r.name || "No name")}${r.kind === "trial" ? ' <span class="tchip">Trial</span>' : ""}</span><span class="small muted">${when2(r.at)}</span></div>
+      <div class="top"><span class="who2">${esc(r.name || "No name")}${r.kind === "trial" ? ' <span class="tchip">Trial</span>' : r.kind === "upgrade" ? ' <span class="tchip">Trial → full access</span>' : ""}</span><span class="small muted">${when2(r.at)}</span></div>
       <div class="mail">${esc(emailOf(r.emailEnc) || "no email kept (encryption wasn’t set up)")}</div>
       ${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}
       ${r.reply ? `<div class="replyline">Your note: ${esc(r.reply)}</div>` : ""}
@@ -346,7 +346,7 @@ function renderRequests() {
           <div class="row"><button type="button" class="plain" data-ract="cancel-decline">Cancel</button><button type="button" class="danger" data-ract="decline">Decline</button></div>
         </div>`
       : r.status === "pending" ? `<div class="btns2"><button type="button" data-ract="approve">Approve</button><button type="button" class="plain" data-ract="ask-decline">Decline…</button></div>`
-        : `<div class="small muted" style="margin-top:8px">${r.status === "approved" ? (r.kind === "trial" ? "Trial key given" : "Approved") : "Declined"}${r.done ? ` · ${when2(r.done)}` : ""}
+        : `<div class="small muted" style="margin-top:8px">${r.status === "approved" ? (r.kind === "trial" ? "Trial key given" : r.kind === "upgrade" ? "Full access given" : "Approved") : "Declined"}${r.done ? ` · ${when2(r.done)}` : ""}
             · <button type="button" class="link" data-ract="delete-request">Delete</button></div>`}
     </div>`;
   const setup = !data.crypt ? `<div class="card setup"><b>Set up email encryption</b>
@@ -469,7 +469,9 @@ $("requests").addEventListener("click", async (e) => {
     const note = b.dataset.ract === "decline" ? ($("declineNote")?.value || "") : undefined;
     const out = await api("/admin/users", { action: b.dataset.ract, id, note });
     if (b.dataset.ract === "decline") declining = null;
-    if (b.dataset.ract === "approve") showKey(out.user.label, out.key, true, emails.get(r.emailEnc) || "");
+    if (b.dataset.ract === "approve" && out.upgraded) {
+      $("newKey").innerHTML = `<div class="card newkey" role="status"><b>${esc(out.user.label)}</b> now has full access. Same key, their app keeps working; the trial limits are gone within a minute or two. <button type="button" class="link" onclick="this.closest('.card').remove()">OK</button></div>`;
+    } else if (b.dataset.ract === "approve") showKey(out.user.label, out.key, true, emails.get(r.emailEnc) || "");
     await load();
   } catch (err) { showError(err); b.disabled = false; }
 });

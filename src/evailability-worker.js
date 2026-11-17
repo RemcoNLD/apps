@@ -58,7 +58,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-17.119";
+const WORKER_VERSION = "2026-11-17.120";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -2770,6 +2770,15 @@ async function handleUsers(request, env) {
       }
       else {
         if (r.status !== "pending") throw new HttpError(400, "This request was already handled");
+        const trialU = r.trialUserId && list.find((x) => x.id === r.trialUserId);
+        if (trialU) { // full access for a trial user: same key, limits gone
+          delete trialU.trial;
+          if (!trialU.emailEnc && r.emailEnc) trialU.emailEnc = r.emailEnc;
+          r.status = "approved"; r.userId = trialU.id; r.done = now;
+          await saveUsers(env, list);
+          await saveRequests(env, reqs);
+          return json(request, { ok: true, key: null, upgraded: true, user: publicUser(trialU) });
+        }
         key = newKey();
         user = { id: userId(), label: String(body.label || r.name || "New user").trim().slice(0, 60), hash: await keyHash(env, key.replace(/-/g, "")),
           gen: 1, active: true, created: now, keyMade: now, emailEnc: r.emailEnc || null };
@@ -2890,8 +2899,19 @@ const emailHash = (env, email) => hmac(env, `email:${email.trim().toLowerCase()}
 const randomToken = () => [...crypto.getRandomValues(new Uint8Array(18))].map((b) => b.toString(16).padStart(2, "0")).join("");
 function tokenFor(env, u) { return userSig(env, u.id, u.gen || 1).then((sig) => `u1.${u.id}.${u.gen || 1}.${sig}`); }
 
+// A trial user asking for full access (their token in X-Access): a pending "upgrade" request linked to
+// their trial key, allowed whatever the self-service setting; approving it lifts the trial limits on
+// the same key, so their app keeps working. Email optional: the trial's email is reused.
+async function trialUserOf(request, env) {
+  const given = request.headers.get("X-Access") || "";
+  const [, id, gen, sig] = given.split(".");
+  if (!given.startsWith("u1.") || !id || !sig || !sameText(sig, await userSig(env, id, gen))) return null;
+  const u = (await loadUsers(env, true)).find((x) => x.id === id && String(x.gen || 1) === gen);
+  return u?.trial ? u : null;
+}
 async function handleRequest(request, env) {
-  const mode = selfServiceMode(env);
+  const trialUser = await trialUserOf(request, env);
+  const mode = trialUser ? "requests" : selfServiceMode(env);
   if (mode === "off") throw new HttpError(403, "Requests are closed at the moment.");
   if (!env.USAGE) throw new HttpError(503, "No KV store bound");
   const ip = request.headers.get("CF-Connecting-IP") || "?";
@@ -2901,11 +2921,11 @@ async function handleRequest(request, env) {
   const body = await request.json().catch(() => ({}));
   if (body.website) return json(request, { pending: true }); // honeypot: a bot filled the hidden field
   const email = String(body.email || "").trim().slice(0, 120);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new HttpError(400, "That email address doesn’t look right.");
+  if (!(trialUser && !email) && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new HttpError(400, "That email address doesn’t look right.");
   const name = String(body.name || "").trim().slice(0, 60);
   const note = String(body.note || "").trim().slice(0, 300);
   const device = String(body.device || "").replace(/[^a-z0-9]/g, "").slice(0, 12);
-  const hash = await emailHash(env, email);
+  const hash = email ? await emailHash(env, email) : `user:${trialUser.id}`;
   const ipHash = (await hmac(env, `ip:${ip}`)).slice(0, 16);
   let list = await loadRequests(env);
   const now = new Date().toISOString(), today = now.slice(0, 10);
@@ -2928,17 +2948,18 @@ async function handleRequest(request, env) {
     }
     // A second trial, or today's trials used up: a normal request instead.
   }
-  let r = list.find((x) => x.status === "pending" && x.emailHash === hash);
+  let r = list.find((x) => x.status === "pending" && (trialUser ? x.trialUserId === trialUser.id : x.emailHash === hash));
   const pickup = randomToken();
   if (r) { r.pickup = await hmac(env, `pickup:${pickup}`); r.device = device || r.device; if (note) r.note = note; if (name) r.name = name; }
   else {
     if (list.filter((x) => x.status === "pending").length >= 50) throw new HttpError(429, "Too many open requests at the moment. Try again later.");
-    r = { id: userId(), at: now, kind: "request", status: "pending", name, note, emailEnc: await encryptEmail(env, email),
-      emailHash: hash, device, ipHash, pickup: await hmac(env, `pickup:${pickup}`) };
+    r = { id: userId(), at: now, kind: trialUser ? "upgrade" : "request", status: "pending", name: name || trialUser?.label || "",
+      note, emailEnc: email ? await encryptEmail(env, email) : trialUser?.emailEnc || null,
+      emailHash: hash, device, ipHash, pickup: await hmac(env, `pickup:${pickup}`), ...(trialUser ? { trialUserId: trialUser.id } : {}) };
     list.push(r);
   }
   await saveRequests(env, list);
-  return json(request, { pending: true, id: r.id, pickup, trialUsed: mode === "trial" });
+  return json(request, { pending: true, id: r.id, pickup, trialUsed: mode === "trial", upgrade: !!trialUser });
 }
 async function handleRequestStatus(request, env, url) {
   const id = url.searchParams.get("id") || "", t = url.searchParams.get("t") || "";

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.130"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.131"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -639,6 +639,17 @@
   .intro-foot .primary { margin: 0; width: auto; padding: 14px 26px; }
 
   /* Lock screen: key, request / trial form, waiting, trial ended. One column, centred, calm. */
+  /* Trial banner on the start screen */
+  .trial-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 14px; padding: 10px 12px 10px 14px;
+    border-radius: 12px; background: color-mix(in srgb, var(--full) 13%, var(--asphalt-raised)); border: 1px solid color-mix(in srgb, var(--full) 35%, transparent); font-size: .95rem; }
+  .trial-banner b { color: var(--full); }
+  .trial-banner span { color: var(--line); }
+  .trial-banner button { flex: none; padding: 8px 12px; border-radius: 9px; border: 0; background: var(--full); color: #1d2429; font-weight: 800; font-size: .9rem; }
+  .trial-banner button:disabled { background: transparent; color: var(--muted); border: 1px solid rgba(127,127,127,.35); }
+  .lock .limits { list-style: none; margin: 4px 0 6px; padding: 0; text-align: left; }
+  .lock .limits li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid rgba(127,127,127,.18); font-size: .96rem; line-height: 1.35; }
+  .lock .limits li:first-child { border-top: 0; }
+  .lock .limits i { flex: none; width: 22px; text-align: center; font-style: normal; }
   .lock { z-index: 50; justify-content: center; overflow-y: auto;
     background: radial-gradient(120% 70% at 50% -10%, color-mix(in srgb, var(--sign-blue) 22%, transparent), transparent 60%), var(--asphalt); }
   .lock-box { width: 100%; max-width: 400px; margin: auto; padding: 28px 24px 32px; }
@@ -790,6 +801,10 @@
   .splash .foot label { display: inline-flex; align-items: center; gap: 10px; font-size: 1.05rem; color: #d7dde1; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.06); }
   .splash .foot input { width: 22px; height: 22px; accent-color: #43b96d; margin: 0; }
   .splash .foot small { color: #93a0a8; font-size: .9rem; }
+  .splash .sp-trial { margin-top: 18px; padding: 12px 16px; border-radius: 14px; background: rgba(240,164,58,.12); border: 1px solid rgba(240,164,58,.35);
+    color: #f3f1ea; text-align: center; font-size: .98rem; line-height: 1.4; animation: rise .6s .6s ease both; max-width: 340px; }
+  .splash .sp-trial b { color: #f0a43a; }
+  .splash .sp-trial small { display: block; color: #93a0a8; font-size: .82rem; margin-top: 2px; }
   @keyframes pop { from { opacity: 0; transform: scale(.85); } }
   @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
   @keyframes drive { to { stroke-dashoffset: 14; } }
@@ -917,6 +932,7 @@
     </div>
   </div>
   <div class="points"><span><b>4/6</b> free now</span><span><b>↰ +4</b> min detour</span><span>in route order</span></div>
+  <div class="sp-trial" id="spTrial" hidden></div>
   <div class="foot">
     <label><input type="checkbox" id="splashOff"> Don’t show again</label>
     <small>Tap to continue</small>
@@ -927,14 +943,24 @@
 // doesn't reload the page, and a reload in the same session (an update) keeps the session flag.
 (() => {
   const el = document.getElementById("splash");
-  let show = false;
+  let show = false, trial = null;
   try {
     const fresh = !sessionStorage.getItem("evailability-session");
     sessionStorage.setItem("evailability-session", "1");
     const seenIntro = localStorage.getItem("evailability-intro-seen") || localStorage.getItem("ionity-route-intro-seen");
-    show = fresh && !!seenIntro && !localStorage.getItem("evailability-splash-off");
+    // A trial key always gets the splash at a fresh start: it says how much of the trial is left.
+    trial = JSON.parse(localStorage.getItem("evailability-trial") || "null");
+    if (!localStorage.getItem("evailability-access")) trial = null;
+    show = fresh && !!seenIntro && (!!trial || !localStorage.getItem("evailability-splash-off"));
   } catch (_) { show = false; }
   if (!show) { el.remove(); return; }
+  if (trial) {
+    const days = Math.max(0, Math.ceil((Date.parse(trial.until) - Date.now()) / 86400000));
+    const sp = document.getElementById("spTrial");
+    sp.innerHTML = `<b>Trial</b> · ${days} day${days === 1 ? "" : "s"} and ${trial.routesLeft} route${trial.routesLeft === 1 ? "" : "s"} left<small>Live status in the Netherlands · full access via the start screen</small>`;
+    sp.hidden = false;
+    document.getElementById("splashOff").closest("label").hidden = true;
+  }
   // The timeline drives: the nearest charger passes and drops off, the next one appears at the top.
   const names = ["De Kroon", "Hoezaar", "Mastpolder", "Galder", "Hazeldonk", "Zonzeel", "Princeville", "Bavel"];
   const rows = document.getElementById("spRows");
@@ -987,6 +1013,10 @@
     <a class="apps-back" href="./" aria-label="Back to apps">‹</a>
     <h1>EVailability</h1>
     <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
+  </div>
+  <div class="trial-banner" id="trialBanner" hidden>
+    <div><b>Trial</b> <span id="trialBannerText"></span></div>
+    <button type="button" id="trialUpgrade">Get full access</button>
   </div>
 
   <div class="fld" id="toRow">
@@ -1158,7 +1188,19 @@
         <div class="reply" id="askReply" hidden></div>
         <button type="button" class="secondary" id="askAgain" hidden>Send a new request</button>
       </div>
+      <button type="button" class="primary" id="askWaitBack" hidden>Back to the app</button>
       <button type="button" class="textlink" id="askWaitKey">I have a key</button>
+    </div>
+
+    <!-- 5. Trial just started: what it includes -->
+    <div class="lv" id="trialWelcome" hidden>
+      <div class="lock-card center">
+        <div class="state-icon"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="16" fill="none" stroke="var(--free)" stroke-width="4"/><path d="M13 20.5l4.5 4.5L27 15.5" fill="none" stroke="var(--free)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <h3>Your trial has started</h3>
+        <p>Welcome! Here’s what the trial includes:</p>
+        <ul class="limits" id="trialLimits"></ul>
+        <button type="button" class="primary" id="trialGo">Let’s go</button>
+      </div>
     </div>
 
     <!-- 4. Trial over: extend once, or ask for a full key -->
@@ -1408,7 +1450,9 @@ async function api(path, body, timeoutMs, retry = true) {
     }
   } else if (res.status === 403 && data.reason === "trial-ended") { // routes used up
     showTrialEnded(data);
-  } else if (res.ok && !$("lock").hidden && accessToken()) hideLock(); // switched back on
+  } else if (res.ok && !$("lock").hidden && accessToken() && (!$("lvKey").hidden || !$("trialEnd").hidden)) {
+    hideLock(); // switched back on, or the trial was made full (not while the welcome or a form is open)
+  }
   if (!res.ok) throw new Error(data.error || `The server answered ${res.status}`);
   return data;
 }
@@ -1540,7 +1584,7 @@ const ASK_KEY = "evailability-request"; // {id, pickup} of this device's open re
 let askMode = "off", askTimer = null, askFromTrial = false;
 const askPending = () => { try { return JSON.parse(localStorage.getItem(ASK_KEY) || "null"); } catch (_) { return null; } };
 function lockView(view) { // "key" | "form" | "wait" | "trialEnd"
-  for (const [id, v] of [["lvKey", "key"], ["askForm", "form"], ["askWait", "wait"], ["trialEnd", "trialEnd"]]) $(id).hidden = view !== v;
+  for (const [id, v] of [["lvKey", "key"], ["askForm", "form"], ["askWait", "wait"], ["trialEnd", "trialEnd"], ["trialWelcome", "trialWelcome"]]) $(id).hidden = view !== v;
   $("lockAsk").hidden = askMode === "off";
   if (view !== "key") { $("lockError").hidden = true; $("lockRetry").hidden = true; }
   $("lock").scrollTop = 0;
@@ -1552,7 +1596,13 @@ function showWait(state, reply = "") {
   const declined = state === "declined", gone = state === "unknown";
   $("askWaitIcon").innerHTML = declined || gone ? ICON_NO : ICON_WAIT;
   $("askWaitTitle").textContent = declined ? "Not approved" : gone ? "Request not found" : "Request sent";
-  $("askWaitText").textContent = declined ? "Sorry, your request wasn’t approved this time." + (reply ? " A note for you:" : "")
+  const upgrade = state === "upgrade" || state === "upgradeEnded";
+  $("askWaitBack").hidden = state !== "upgrade";
+  $("askWaitKey").hidden = upgrade;
+  $("askWaitText").textContent = upgrade ? (state === "upgrade"
+      ? "Thanks! Keep using your trial meanwhile. Once approved, the trial limits go away by themselves."
+      : "Thanks! This screen opens by itself once your request is approved.")
+    : declined ? "Sorry, your request wasn’t approved this time." + (reply ? " A note for you:" : "")
     : gone ? "This request is no longer known. You can send a new one."
     : (state === "trialUsed" ? "A trial was already used on this device or with this email, or today’s trials are gone, so this became a request. " : "Thanks! ")
       + "This screen opens by itself once your request is approved. You can close the app meanwhile; it checks again when you come back.";
@@ -1568,6 +1618,9 @@ async function refreshAsk() {
     : trial ? "Start straight away: live status in the Netherlands, for a few days and routes."
     : "Leave your email and you’ll hear back. Once approved, this screen opens by itself.";
   $("askBtn").textContent = trial ? "Start trial" : "Send request";
+  $("askEmail").required = !askFromTrial;
+  $("askEmail").placeholder = askFromTrial ? "Optional: we have it from your trial" : "you@example.com";
+  if (askFromTrial) return;
   if (askPending()) { showWait("pending"); checkAsk(); }
   else if ($("askForm").hidden && $("trialEnd").hidden) lockView("key");
 }
@@ -1576,13 +1629,14 @@ async function sendAsk(e) {
   $("askError").hidden = true;
   $("askBtn").disabled = true;
   try {
-    const res = await fetch(`${WORKER}/request`, { method: "POST", headers: { "Content-Type": "application/json" },
+    const res = await fetch(`${WORKER}/request`, { method: "POST", headers: { "Content-Type": "application/json", ...(askFromTrial && accessToken() ? { "X-Access": accessToken() } : {}) },
       body: JSON.stringify({ name: $("askName").value, email: $("askEmail").value, note: $("askNote").value, website: $("askWebsite").value, device: DEVICE_ID }) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
     if (data.token) return signedIn(data);
     if (data.id) localStorage.setItem(ASK_KEY, JSON.stringify({ id: data.id, pickup: data.pickup }));
-    showWait(data.trialUsed && !askFromTrial ? "trialUsed" : "pending");
+    if (data.upgrade) { try { localStorage.setItem(UPGRADE_ASKED, "1"); } catch (_) {} renderTrialBanner(); }
+    showWait(data.upgrade ? (trialEndInfo ? "upgradeEnded" : "upgrade") : data.trialUsed && !askFromTrial ? "trialUsed" : "pending");
     clearInterval(askTimer); askTimer = setInterval(checkAsk, 60000);
   } catch (err) {
     $("askError").textContent = /fetch|load failed|network/i.test(err.message) ? "Couldn’t reach the server. Try again." : err.message;
@@ -1610,10 +1664,50 @@ function signedIn(data) {
     localStorage.removeItem(ASK_KEY);
   } catch (_) {}
   clearInterval(askTimer); askFromTrial = false;
+  try { localStorage.removeItem(UPGRADE_ASKED); } catch (_) {}
+  renderTrialBanner();
+  refreshMe();
+  if (data.trial && data.trial.routesLeft != null && !data.trial.extended && data.trial.canExtend !== false && !data.status) {
+    if (!booted) boot();
+    return showTrialWelcome(data.trial); // a new trial: say what it includes first
+  }
   lockView("key");
   hideLock();
-  refreshMe();
 }
+// Trial banner on the start screen and the welcome after a trial starts.
+const UPGRADE_ASKED = "evailability-upgrade-asked"; // a full-access request is waiting
+function trialNow() { try { return accessToken() ? JSON.parse(localStorage.getItem(TRIAL_KEY) || "null") : null; } catch (_) { return null; } }
+function renderTrialBanner() {
+  const t = trialNow();
+  $("trialBanner").hidden = !t;
+  if (!t) { try { localStorage.removeItem(UPGRADE_ASKED); } catch (_) {} return; }
+  const days = Math.max(0, Math.ceil((Date.parse(t.until) - Date.now()) / 86400000));
+  $("trialBannerText").textContent = `· ${days} day${days === 1 ? "" : "s"} · ${t.routesLeft} route${t.routesLeft === 1 ? "" : "s"} left`;
+  let asked = false; try { asked = !!localStorage.getItem(UPGRADE_ASKED); } catch (_) {}
+  $("trialUpgrade").textContent = asked ? "Requested ✓" : "Get full access";
+  $("trialUpgrade").disabled = asked;
+}
+function showTrialWelcome(t) {
+  const days = Math.max(1, Math.ceil((Date.parse(t.until) - Date.now()) / 86400000));
+  $("trialLimits").innerHTML = [
+    ["📅", `<b>${days} days</b> and <b>${t.routesLeft} routes</b>`],
+    ["🇳🇱", "Live charger status in the <b>Netherlands</b>; other countries show the chargers without live status"],
+    ["⏱", "Status updates at most every <b>3 minutes</b>"],
+    ["⭐", "Want more? Tap <b>Get full access</b> on the start screen any time"],
+  ].map(([i, t2]) => `<li><i aria-hidden="true">${i}</i><span>${t2}</span></li>`).join("");
+  $("lock").hidden = false;
+  lockView("trialWelcome");
+}
+$("trialGo").addEventListener("click", () => { lockView("key"); hideLock(); });
+function openUpgrade() { // ask for full access while the trial still runs
+  askFromTrial = true; trialEndInfo = null;
+  try { $("askName").value = $("askName").value || localStorage.getItem(ACCESS_NAME_KEY) || ""; } catch (_) {}
+  $("lock").hidden = false;
+  refreshAsk(); lockView("form");
+}
+$("trialUpgrade").addEventListener("click", openUpgrade);
+$("askWaitBack").addEventListener("click", () => { lockView("key"); hideLock(); });
+
 // Trial over (time or routes): the device keeps its sign-in. Extend once (+1 day, +5 routes), or ask
 // for a full key; once Remco makes it full, this same sign-in works again.
 let trialEndInfo = null;
@@ -1628,7 +1722,12 @@ function showTrialEnded(data) {
     ? `Thanks for trying EVailability! You can extend it once by ${t.extend?.days || 1} day and ${t.extend?.routes || 5} routes, or ask for a full key.`
     : "Thanks for trying EVailability! For more, ask for a full key; this app opens again by itself once you have one.";
   $("trialExtend").hidden = !t.canExtend;
-  $("trialFull").hidden = data.selfService === false;
+  let asked = false; try { asked = !!localStorage.getItem(UPGRADE_ASKED); } catch (_) {}
+  $("trialFull").hidden = asked;
+  if (asked) {
+    $("trialEndText").textContent += " Your request for full access is waiting; this app opens again by itself once it’s approved.";
+    clearInterval(askTimer); askTimer = setInterval(checkAsk, 60000); checkAsk();
+  }
   $("trialErr").hidden = true;
 }
 $("trialExtend").addEventListener("click", async () => {
@@ -1649,7 +1748,11 @@ $("trialFull").addEventListener("click", () => {
 });
 $("trialKey").addEventListener("click", () => lockView("key"));
 $("askOpen").addEventListener("click", () => { askFromTrial = false; refreshAsk(); lockView("form"); setTimeout(() => $("askEmail").focus(), 50); });
-$("askBack").addEventListener("click", () => (askFromTrial && trialEndInfo ? showTrialEnded(trialEndInfo) : lockView("key")));
+$("askBack").addEventListener("click", () => {
+  if (askFromTrial && trialEndInfo) return showTrialEnded(trialEndInfo);
+  if (askFromTrial && accessToken()) { askFromTrial = false; lockView("key"); return hideLock(); } // back to the app
+  lockView("key");
+});
 $("askWaitKey").addEventListener("click", () => { clearInterval(askTimer); lockView("key"); });
 $("askAgain").addEventListener("click", () => lockView("form"));
 $("askForm").addEventListener("submit", sendAsk);
@@ -1898,7 +2001,9 @@ async function refreshMe() {
       localStorage.setItem(DEBUG_ALLOWED_KEY, me.debug ? "1" : "0");
       me.name ? localStorage.setItem(ACCESS_NAME_KEY, me.name) : localStorage.removeItem(ACCESS_NAME_KEY);
       me.trial ? localStorage.setItem(TRIAL_KEY, JSON.stringify(me.trial)) : localStorage.removeItem(TRIAL_KEY);
+      if (!me.trial && localStorage.getItem(UPGRADE_ASKED)) { localStorage.removeItem(UPGRADE_ASKED); localStorage.removeItem(ASK_KEY); }
     } catch (_) {}
+    renderTrialBanner();
     if (was && !me.debug) { errors = []; saveErrors(); } // no debug any more: nothing waiting to pop up later
     if (was !== !!me.debug) { refreshDebugInfo(true); renderDebug(); renderErrors(); try { render(); } catch (_) {} }
     if (!$("help").hidden) renderAccount();
@@ -5278,6 +5383,7 @@ let booted = false;
 function boot() {
   booted = true;
   restore();
+  renderTrialBanner();
   refreshMe();
   if (!localStorage.getItem(INTRO_KEY)) showIntro();
 }

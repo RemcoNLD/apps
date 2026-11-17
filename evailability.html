@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.142"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.144"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -12,7 +12,9 @@
 <!-- Home-screen icon: road with charger rings coming up (icons/evailability-icon.svg is the source) -->
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
-<link rel="manifest" href="evailability.webmanifest">
+<!-- No web app manifest: with one, iPhone's home-screen app ignores the translucent status bar above
+     (black-translucent), the page no longer runs under the status bar and gets too tall (scrolls, empty
+     space at the bottom). evailability.webmanifest stays in the repo for an Android version later. -->
 <title>EVailability</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -176,6 +178,9 @@
 
   /* ---------- driving screen ---------- */
   #drive { height: 100%; display: flex; flex-direction: column; }
+  /* While driving the page itself never scrolls (only the list does): pinned to the screen. iOS can leave
+     a home-screen app scrolled, with a gap at the bottom, after the keyboard closes; this rules that out. */
+  body:has(#drive:not([hidden])) { position: fixed; inset: 0; overflow: hidden; }
   .bar {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 10px 12px; color: var(--muted); font-size: .95rem;
@@ -1744,7 +1749,12 @@ document.addEventListener("focusin", () => {
   fitLock();
   if (!$("lock").hidden) [80, 350].forEach((ms) => setTimeout(() => { if (!$("lock").hidden && $("lock").classList.contains("kbd")) window.scrollTo(0, 0); }, ms));
 });
-document.addEventListener("focusout", () => setTimeout(fitLock, 150));
+document.addEventListener("focusout", () => setTimeout(() => {
+  fitLock();
+  // Keyboard gone: put the page back where it belongs (iOS sometimes leaves it scrolled, with a gap below).
+  const a = document.activeElement;
+  if (!a || !/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) window.scrollTo(0, 0);
+}, 150));
 
 // ------------------------------------------------------------- self-service (no key yet)
 // The lock screen has four views: key, form (request a key / start a trial), wait (request sent, or

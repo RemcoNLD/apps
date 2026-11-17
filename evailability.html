@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.148"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.149"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2103,6 +2103,14 @@ function rememberPlaces(places) {
   }
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (_) {}
 }
+// A place's short name for fields and titles. The geocoder puts a house number first ("10,
+// Plantagepolder, Houten, …"): then "Plantagepolder 10, Houten" instead of just "10".
+function shortPlace(label) {
+  const parts = String(label || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (!parts.length) return "";
+  if (/^\d+\s*[a-z]?(-\d+)?$/i.test(parts[0]) && parts[1]) return `${parts[1]} ${parts[0]}${parts[2] ? `, ${parts[2]}` : ""}`;
+  return parts[0];
+}
 function forgetPlace(label) {
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(recentPlaces().filter((r) => r.label !== label))); } catch (_) {}
 }
@@ -2112,7 +2120,7 @@ function wireSearch(inputId, listId, key) {
   let shown = []; // what the buttons in the list stand for
   const choose = (item) => {
     state[key] = { ...item };
-    input.value = item.label.split(",")[0];
+    input.value = shortPlace(item.label);
     list.innerHTML = ""; // chosen: the suggestions go away
     input.blur();
     syncClear();
@@ -2122,7 +2130,7 @@ function wireSearch(inputId, listId, key) {
     shown = [...recent, ...results];
     const row = (r, i, isRecent) => `<li${isRecent ? ' class="recent"' : ""}><button type="button" data-i="${i}" aria-pressed="false">${
       isRecent ? '<span class="clock" aria-hidden="true">🕘</span>' : ""}${esc(r.label)}</button>${
-      isRecent ? `<button type="button" class="forget" data-forget="${esc(r.label)}" aria-label="Forget ${esc(r.label.split(",")[0])}">×</button>` : ""}</li>`;
+      isRecent ? `<button type="button" class="forget" data-forget="${esc(r.label)}" aria-label="Forget ${esc(shortPlace(r.label))}">×</button>` : ""}</li>`;
     list.innerHTML = recent.map((r, i) => row(r, i, true)).join("") +
       results.map((r, i) => row(r, recent.length + i, false)).join("") + note;
     list.querySelectorAll("button[data-i]").forEach((b) => b.addEventListener("click", () => choose(shown[+b.dataset.i])));
@@ -2672,7 +2680,7 @@ function routeStreetAt(k) {
 }
 // What the turn leads onto: the numbered road there (as on the timeline), else the step's street name.
 function turnTarget(t) {
-  if (t.type === 10) return `<span class="turn-txt">${esc(state.to?.label?.split(",")[0] || "Destination")}</span>`;
+  if (t.type === 10) return `<span class="turn-txt">${esc(shortPlace(state.to?.label) || "Destination")}</span>`;
   const road = mainRoadAt(t.km + 0.4);
   if (road && road.fromKm >= t.km - 1.5 && road.fromKm <= t.km + 1.5) return roadPartBadge(withOverride(road));
   const ref = refIn(t.name);
@@ -2793,7 +2801,7 @@ function optionCard(o, i, fastestMin, isCurrent) {
     <div class="opt-top">${fmtMin(o.durationMin)} <span class="km">${o.distanceKm} km</span>${tag}</div>
     <div class="opt-roads">${roads || '<span class="city">No numbered roads</span>'}</div>
     <div class="opt-meta">${o.ionity} Ionity site${o.ionity === 1 ? "" : "s"} along the way</div>${o.ownVia && (state.vias || []).some((v) => !v.auto)
-      ? `<div class="opt-meta">Via ${esc(state.vias.filter((v) => !v.auto).map((v) => v.label.split(",")[0]).join(" and "))} (your via point)</div>` : !o.ownVia && (state.vias || []).some((v) => !v.auto)
+      ? `<div class="opt-meta">Via ${esc(state.vias.filter((v) => !v.auto).map((v) => shortPlace(v.label)).join(" and "))} (your via point)</div>` : !o.ownVia && (state.vias || []).some((v) => !v.auto)
       ? `<div class="opt-meta">Without your via point</div>` : ""}
   </button>`;
 }
@@ -3321,7 +3329,7 @@ function celebrateArrival() {
   const card = document.createElement("div");
   card.className = "arrived";
   card.setAttribute("role", "status");
-  const name = state.to?.label?.split(",")[0] || "your destination";
+  const name = shortPlace(state.to?.label) || "your destination";
   card.innerHTML = `<div class="big" aria-hidden="true">🎉</div><h2>You’ve arrived</h2><p>${esc(name)}, ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p><button type="button">Nice</button>`;
   document.body.appendChild(card);
   requestAnimationFrame(() => card.classList.add("show"));
@@ -5209,11 +5217,11 @@ function render() {
   // After arrival (Nice pressed): when you arrived, no distance, time or roads ahead any more.
   const done = state.arrived && state.arrivalDone;
   if (done) setHtml($("destRow"), `<span class="marker" aria-hidden="true"></span>
-    <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
+    <div><div class="name">${esc(shortPlace(state.to?.label) || "Destination")}</div>
       <div class="sub">Arrived${state.arrivedAt ? ` ${hhmm(state.arrivedAt)}` : ""}</div></div>
     <div class="dist"><div class="km">✓</div></div>`);
   else setHtml($("destRow"), `<span class="marker" aria-hidden="true"></span>
-    <div><div class="name">${esc(state.to?.label?.split(",")[0] || "Destination")}</div>
+    <div><div class="name">${esc(shortPlace(state.to?.label) || "Destination")}</div>
       <div class="sub">Arrive ${clock(leftMin)}</div>${roadsAhead(3).length ? `<div class="sub roads">${roadsAhead(3).map(roadPartBadge).join('<span class="sep">›</span>')}</div>` : ""}</div>
     <div class="dist"><div class="km">${fmtKm(leftKm)}<small>km</small></div><div class="min">${fmtMin(leftMin)}</div></div>`);
   fitRoads($("destRow").querySelector(".sub.roads"));

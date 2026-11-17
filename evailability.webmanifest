@@ -1,0 +1,15 @@
+{
+  "name": "EVailability",
+  "short_name": "EVailability",
+  "description": "Free fast chargers along your route, live.",
+  "start_url": "evailability.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1d2429",
+  "theme_color": "#1d2429",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/evailability-icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

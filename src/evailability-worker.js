@@ -37,6 +37,7 @@
 //   POST /trial/extend          a trial key (X-Access) extends itself once: +1 day and +5 routes
 //   POST /contact               {kind: "note"|"delete", text} from a key (X-Access) or a waiting request ({id, t}):
 //                               a message for Remco on the Users page (text encrypted like emails)
+//   POST /contact/cancel-delete a key (X-Access) takes back its open deletion request
 //   POST /request/withdraw      {id, t}: the asking device withdraws its waiting request; it's deleted at once
 //                               create/regenerate answer the new key once; only its hash is kept
 //   POST /admin/settings        {settings:{key: value}} saves them (one KV write); empty value = default
@@ -61,7 +62,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "2026-11-17.121";
+const WORKER_VERSION = "2026-11-17.122";
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -2654,7 +2655,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -3024,9 +3025,22 @@ async function handleContact(request, env) {
   const text = String(body.text || "").trim().slice(0, 1000);
   if (kind === "note" && !text) throw new HttpError(400, "Write a message first.");
   const list = await loadMessages(env);
+  // One open deletion request per key: a second one changes nothing (the app shows it as pending).
+  if (kind === "delete" && from.userId && list.some((m) => !m.done && m.kind === "delete" && m.userId === from.userId)) {
+    return json(request, { ok: true, already: true });
+  }
   if (list.filter((m) => !m.done).length >= 100) throw new HttpError(429, "Too many open messages at the moment. Try again later.");
   list.push({ id: userId(), at: new Date().toISOString(), kind, ...from, ...(text ? await encryptText(env, text) : {}) });
   await saveMessages(env, list);
+  return json(request, { ok: true });
+}
+// The key holder takes back an open deletion request (Help › Privacy › Cancel).
+async function handleCancelDelete(request, env) {
+  const from = await senderOf(request, env, {});
+  if (!from?.userId) throw new HttpError(401, "Access key needed");
+  const list = await loadMessages(env);
+  const keep = list.filter((m) => !(!m.done && m.kind === "delete" && m.userId === from.userId));
+  if (keep.length !== list.length) await saveMessages(env, keep);
   return json(request, { ok: true });
 }
 async function handleWithdraw(request, env) {
@@ -3135,6 +3149,7 @@ async function route(request, env) {
   if (path === "/request/status" && request.method === "GET") return handleRequestStatus(request, env, url);
   if (path === "/trial/extend" && request.method === "POST") return handleTrialExtend(request, env);
   if (path === "/contact" && request.method === "POST") return handleContact(request, env);
+  if (path === "/contact/cancel-delete" && request.method === "POST") return handleCancelDelete(request, env);
   if (path === "/request/withdraw" && request.method === "POST") return handleWithdraw(request, env);
   let who = null;
   if (!PUBLIC_PATHS.has(path) && !path.startsWith("/logo/")) {
@@ -3150,7 +3165,9 @@ async function route(request, env) {
     if (who.trial) await trialGate(path, request, env, who);
   }
   if (path === "/me" && request.method === "GET") {
-    return json(request, { name: who?.name || null, debug: !!who?.debug, legacy: who?.id === "legacy",
+    const deletePending = who && who.id !== "legacy" && who.id !== "admin"
+      ? (await loadMessages(env)).some((m) => !m.done && m.kind === "delete" && m.userId === who.id) : false;
+    return json(request, { name: who?.name || null, debug: !!who?.debug, legacy: who?.id === "legacy", deletePending,
       trial: who?.trial ? trialInfo(who.trial) : null });
   }
 

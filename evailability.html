@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.136"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.137"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1217,7 +1217,7 @@
     </div>
     <div class="acc-privacy" id="accPrivacy" hidden>
       <div class="acc-row" style="padding-bottom:4px"><span><b>Privacy</b><span class="acc-sub">Your email is encrypted and only used about your access.</span></span></div>
-      <p class="acc-sub priv-links"><button type="button" class="link" id="privNote">Send a note to the developer</button> · <button type="button" class="link" id="privDelete">Delete my data</button> · <a class="link" href="privacy.html?back=help">Privacy policy</a></p>
+      <p class="acc-sub priv-links"><button type="button" class="link" id="privNote">Send a note to the developer</button> · <button type="button" class="link" id="privDelete">Delete my data</button><span id="privDeletePending" hidden>Deletion requested · <button type="button" class="link" id="privDeleteCancel">Cancel the request</button></span> · <a class="link" href="privacy.html?back=help">Privacy policy</a></p>
       <div class="priv-form" id="privForm" hidden>
         <p class="acc-sub" id="privFormText"></p>
         <textarea class="input" id="privText" rows="3" maxlength="1000"></textarea>
@@ -1710,7 +1710,12 @@ function fitLock() {
   l.style.top = l.style.bottom = l.style.height = ""; // (sizing to visualViewport, before .136, let the app show through)
 }
 if (window.visualViewport) { visualViewport.addEventListener("resize", fitLock); visualViewport.addEventListener("scroll", fitLock); }
-document.addEventListener("focusin", () => setTimeout(fitLock, 50));
+// Synchronously, so the compact layout is in place before iOS decides how far to scroll to the field;
+// then undo any scroll of the page behind (the lock layer is fixed and has its field in view).
+document.addEventListener("focusin", () => {
+  fitLock();
+  if (!$("lock").hidden) [80, 350].forEach((ms) => setTimeout(() => { if (!$("lock").hidden && $("lock").classList.contains("kbd")) window.scrollTo(0, 0); }, ms));
+});
 document.addEventListener("focusout", () => setTimeout(fitLock, 150));
 
 // ------------------------------------------------------------- self-service (no key yet)
@@ -1843,17 +1848,35 @@ function openPriv(kind) {
 $("privNote").addEventListener("click", () => openPriv("note"));
 $("privDelete").addEventListener("click", () => openPriv("delete"));
 $("privCancel").addEventListener("click", () => { $("privForm").hidden = true; });
+// A deletion request waits for the developer: shown as pending (no second request), and can be taken back.
+const DELETE_PENDING = "evailability-delete-pending";
+function renderDeletePending() {
+  let p = false; try { p = localStorage.getItem(DELETE_PENDING) === "1"; } catch (_) {}
+  $("privDelete").hidden = p; $("privDeletePending").hidden = !p;
+}
+$("privDeleteCancel").addEventListener("click", async () => {
+  $("privDeleteCancel").disabled = true;
+  try {
+    const res = await fetch(`${WORKER}/contact/cancel-delete`, { method: "POST", headers: { "X-Access": accessToken() } });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Error ${res.status}`);
+    try { localStorage.removeItem(DELETE_PENDING); } catch (_) {}
+    renderDeletePending();
+    $("privMsg").textContent = "Deletion request cancelled ✓"; $("privMsg").hidden = false;
+  } catch (e) { $("privMsg").textContent = e.message; $("privMsg").hidden = false; }
+  finally { $("privDeleteCancel").disabled = false; }
+});
 $("privSend").addEventListener("click", async () => {
   $("privSend").disabled = true;
   try {
     await sendContact(privKind, $("privText").value);
     $("privForm").hidden = true;
+    if (privKind === "delete") { try { localStorage.setItem(DELETE_PENDING, "1"); } catch (_) {} renderDeletePending(); }
     $("privMsg").textContent = privKind === "delete" ? "Deletion requested ✓ The developer will handle it soon." : "Sent ✓ Thanks!";
     $("privMsg").hidden = false;
   } catch (e) { $("privMsg").textContent = e.message; $("privMsg").hidden = false; }
   finally { $("privSend").disabled = false; }
 });
-$("waitNote").addEventListener("click", () => { $("waitForm").hidden = false; $("waitMsg").hidden = true; $("waitText").focus(); });
+$("waitNote").addEventListener("click", () => { $("waitForm").hidden = false; $("waitMsg").hidden = true; $("lock").classList.add("kbd"); $("waitText").focus(); });
 $("waitCancel").addEventListener("click", () => { $("waitForm").hidden = true; });
 $("waitSend").addEventListener("click", async () => {
   $("waitSend").disabled = true;
@@ -2218,6 +2241,7 @@ async function refreshMe() {
       localStorage.setItem(DEBUG_ALLOWED_KEY, me.debug ? "1" : "0");
       me.name ? localStorage.setItem(ACCESS_NAME_KEY, me.name) : localStorage.removeItem(ACCESS_NAME_KEY);
       me.trial ? localStorage.setItem(TRIAL_KEY, JSON.stringify(me.trial)) : localStorage.removeItem(TRIAL_KEY);
+      if (typeof me.deletePending === "boolean") me.deletePending ? localStorage.setItem(DELETE_PENDING, "1") : localStorage.removeItem(DELETE_PENDING);
       if (!me.trial && localStorage.getItem(UPGRADE_ASKED)) { localStorage.removeItem(UPGRADE_ASKED); localStorage.removeItem(ASK_KEY); }
     } catch (_) {}
     renderTrialBanner();
@@ -5422,6 +5446,7 @@ function renderAccount() {
   $("logoutBtn").textContent = "Log out"; $("logoutBtn").classList.remove("sure");
   $("accDebug").hidden = !tok || !debugAllowed();
   $("accPrivacy").hidden = !tok || !tok.startsWith("u1.");
+  renderDeletePending();
   let trial = null; try { trial = JSON.parse(localStorage.getItem(TRIAL_KEY) || "null"); } catch (_) {}
   $("accTrial").hidden = !tok || !trial;
   if (trial) {

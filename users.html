@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.8"><!-- raise with each change -->
+<meta name="app-version" content="2026-11-17.9"><!-- raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Users · EVailability</title>
@@ -182,6 +182,7 @@ function ago(iso) {
   return day(iso);
 }
 
+const histOpen = { msgs: false, reqs: false }; // the Done / Handled sections stay open across re-renders
 let data = null, open = null, confirming = null, renaming = null, filter = "all", declining = null;
 const FILTERS = [["all", "All", () => true], ["debug", "Debug", (u) => u.debug], ["off", "Off", (u) => !u.active]];
 
@@ -337,7 +338,7 @@ function renderMessages() {
   };
   $("messages").innerHTML = !list.length ? "" : `<h2>Messages${open.length ? `<span class="badge">${open.length}</span>` : ""}</h2>`
     + open.map(card).join("") + (open.length ? "" : `<p class="small muted">No open messages.</p>`)
-    + (done.length ? `<details class="hist"><summary>Done (${done.length})</summary>${done.map(card).join("")}</details>` : "");
+    + (done.length ? `<details class="hist" data-hist="msgs"${histOpen.msgs ? " open" : ""}><summary>Done (${done.length})</summary>${done.map(card).join("")}</details>` : "");
 }
 async function decryptAll() {
   const encs = [...data.requests.map((r) => r.emailEnc), ...data.users.map((u) => u.emailEnc)].filter((e) => e && !emails.has(e));
@@ -396,7 +397,7 @@ function renderRequests() {
   $("requests").innerHTML = (open.length || done.length || setup ? `<h2>Requests${open.length ? `<span class="badge">${open.length}</span>` : ""}</h2>` : "") + setup
     + open.map(card).join("")
     + (open.length || !done.length ? "" : `<p class="small muted">No open requests.</p>`)
-    + (done.length ? `<details class="hist"><summary>Handled (${done.length})</summary>${done.map(card).join("")}</details>` : "");
+    + (done.length ? `<details class="hist" data-hist="reqs"${histOpen.reqs ? " open" : ""}><summary>Handled (${done.length})</summary>${done.map(card).join("")}</details>` : "");
 }
 function renderSelfService() {
   const m = data.selfService;
@@ -513,6 +514,7 @@ $("requests").addEventListener("click", async (e) => {
     await load();
   } catch (err) { showError(err); b.disabled = false; }
 });
+document.addEventListener("toggle", (e) => { const k = e.target.dataset?.hist; if (k) histOpen[k] = e.target.open; }, true);
 $("messages").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-mact]");
   if (!b) return;

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.156"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.157"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -882,6 +882,15 @@
 
   /* ---------- help ---------- */
   #help h3 { font-size: 1.2rem; margin: 26px 0 8px; }
+  /* Help sections fold: the topic is a tappable header, the content opens below it. */
+  #help details.hsec { border-bottom: 1px solid rgba(127,127,127,.2); }
+  #help details.hsec > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 2px; -webkit-tap-highlight-color: transparent; }
+  #help details.hsec > summary::-webkit-details-marker { display: none; }
+  #help details.hsec > summary h3 { margin: 0; }
+  #help details.hsec > summary::after { content: ""; flex: none; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); margin: -4px 6px 0 0; transition: transform .2s; }
+  #help details.hsec[open] > summary::after { transform: rotate(225deg); margin-top: 4px; }
+  #help details.hsec > .hsec-body { padding: 0 2px 12px; }
+  #help details.hsec + .help-actions { margin-top: 22px; }
   #help p, #help li { color: var(--muted); line-height: 1.5; font-size: 1.02rem; }
   #help p b, #help li b { color: var(--line); }
   #help ul { padding-left: 1.1em; margin: 6px 0; }
@@ -6538,10 +6547,28 @@ $("logoutBtn").addEventListener("click", () => {
   $("help").hidden = true; renderDebug(); renderErrors();
   showLock();
 });
+// Help: each topic (an h3 and what follows it, up to the next topic) becomes a folded section with
+// the topic as a tappable header. The intro line, the buttons and the credits stay as they are.
+function foldHelp(root) {
+  const kids = [...root.children];
+  let sec = null;
+  for (const el of kids) {
+    if (el.tagName === "H3") {
+      sec = document.createElement("details"); sec.className = "hsec";
+      const sum = document.createElement("summary"); const body = document.createElement("div"); body.className = "hsec-body";
+      el.replaceWith(sec); sum.appendChild(el); sec.append(sum, body);
+    } else if (el.classList.contains("help-actions") || el.classList.contains("credits")) {
+      sec = null;
+    } else if (sec) {
+      sec.lastChild.appendChild(el);
+    }
+  }
+}
 function openHelp() {
   renderAccount();
   refreshMe();
   $("helpBody").innerHTML = helpHtml();
+  foldHelp($("helpBody"));
   $("help").hidden = false;
   $("help").scrollTop = 0;
   $("replayIntro").addEventListener("click", () => { $("help").hidden = true; showIntro(); });

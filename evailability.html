@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-17.134"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
+<meta name="app-version" content="2026-11-17.135"><!-- THE version: shown on the apps page and read by the app itself; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -731,16 +731,18 @@
   .lock.compact .lock-box > h2 { font-size: 1.4rem; }
   .lock.compact .lock-tag { display: none; }
   .lock.compact .lv { flex: 1 1 auto; margin-top: 12px; }
-  /* Keyboard up (visualViewport smaller): the lock screen is sized to what's left above it, with a
-     mini header, so the field and button stay in view. */
-  .lock.kbd .lock-box { justify-content: flex-start; padding-top: 8px; }
+  /* Typing (an input on the lock screen has focus, so the keyboard is up): the header shrinks to a small
+     logo and name in the top-left corner, the view below gets all the room that's left above the
+     keyboard (the layer is sized to the visible part), and decoration it doesn't need is hidden. */
+  .lock.kbd .lock-box { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto minmax(0, 1fr);
+    column-gap: 10px; align-items: center; align-content: stretch; padding-top: 10px; }
   .lock.kbd .lock-hero { margin: 0; }
-  .lock.kbd .lock-hero svg { width: 44px; height: 44px; }
-  .lock.kbd .lock-box > h2 { font-size: 1.15rem; }
-  .lock.kbd .lock-tag { display: none; }
-  .lock.kbd .lv { flex: 1 1 auto; margin-top: 8px; }
-  .lock.kbd #lockAsk { display: none; }
-  .lock.kbd .hint { display: none; }
+  .lock.kbd .lock-hero svg { width: 36px; height: 36px; }
+  .lock.kbd .lock-box > h2 { font-size: 1.15rem; text-align: left; }
+  .lock.kbd .lock-tag, .lock.kbd #lockAsk, .lock.kbd .hint, .lock.kbd .state-icon, .lock.kbd #askWaitText { display: none; }
+  .lock.kbd .lv { grid-column: 1 / -1; align-self: stretch; margin-top: 10px; }
+  .lock.kbd .wait-links, .lock.kbd #askWaitKey, .lock.kbd #trialKey { display: none; }
+  .lock.kbd #askForm .lock-card > p { display: none; }
   /* The request form, tighter so it fits above the keyboard */
   #askForm .lock-card { padding: 16px 16px 14px; }
   #askForm .lock-card h3 { font-size: 1.15rem; margin: 0 0 2px; }
@@ -1697,10 +1699,16 @@ async function unlock() {
 // sized to the visible part (visualViewport) and gets a mini header while the keyboard is up.
 function fitLock() {
   const vv = window.visualViewport, l = $("lock");
-  if (!vv || l.hidden) return;
-  const kbd = vv.height < window.innerHeight * 0.8;
-  l.style.top = `${vv.offsetTop}px`; l.style.bottom = "auto"; l.style.height = `${vv.height}px`;
-  l.classList.toggle("kbd", kbd);
+  if (l.hidden) return;
+  // Typing = a text field on the lock screen has focus (iPhone then shows the keyboard). Measured from
+  // focus rather than from the window size, which iOS also shrinks with the keyboard.
+  const a = document.activeElement;
+  const typing = !!a && l.contains(a) && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && !/^(checkbox|radio|button|submit)$/.test(a.type)));
+  l.classList.toggle("kbd", typing);
+  if (vv) { // size the layer to what's visible above the keyboard (the layout viewport doesn't shrink)
+    const base = document.documentElement.clientHeight, short = vv.height < base - 60;
+    l.style.top = `${short ? vv.offsetTop : 0}px`; l.style.bottom = "auto"; l.style.height = `${short ? vv.height : base}px`;
+  }
 }
 if (window.visualViewport) { visualViewport.addEventListener("resize", fitLock); visualViewport.addEventListener("scroll", fitLock); }
 document.addEventListener("focusin", () => setTimeout(fitLock, 50));

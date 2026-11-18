@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.29.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.29.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2713,6 +2713,28 @@ document.addEventListener("focusin", () => {
   fitLock();
   if (!$("lock").hidden) [80, 350].forEach((ms) => setTimeout(() => { if (!$("lock").hidden && $("lock").classList.contains("kbd")) window.scrollTo(0, 0); }, ms));
 });
+// Start screen: when the keyboard comes up, iOS scrolls the page by up to the status bar's height (the
+// document is that much taller than the screen, see --app-h), even when the field is already well above
+// the keyboard; the header then slides under the status bar. Seen when Clear (x) empties the destination
+// and gives the field the focus again. For a second after a field gets the focus, put the page back at
+// the top whenever the field would still be in view there; later scrolls are the user's own.
+let startFocusAt = 0;
+function keepStartTop() {
+  if (Date.now() - startFocusAt > 1200 || $("start").hidden) return;
+  const a = document.activeElement;
+  if (!a || a.tagName !== "INPUT" || !$("start").contains(a)) return;
+  const y = window.scrollY || 0, vv = window.visualViewport;
+  if (y <= 0 && !(vv && vv.offsetTop > 0)) return;
+  const visible = vv ? vv.height : window.innerHeight;
+  if (a.getBoundingClientRect().bottom + y + 8 < visible) window.scrollTo(0, 0);
+}
+document.addEventListener("focusin", (e) => {
+  if ($("start").hidden || !$("start").contains(e.target)) return;
+  startFocusAt = Date.now();
+  [60, 200, 400, 700, 1000].forEach((ms) => setTimeout(keepStartTop, ms));
+});
+if (window.visualViewport) { visualViewport.addEventListener("resize", keepStartTop); visualViewport.addEventListener("scroll", keepStartTop); }
+window.addEventListener("scroll", keepStartTop, { passive: true });
 document.addEventListener("focusout", () => setTimeout(() => {
   fitLock();
   // Keyboard gone: put the page back where it belongs (iOS sometimes leaves it scrolled, with a gap below).
@@ -3139,6 +3161,9 @@ function wireSearch(inputId, listId, key) {
   input.addEventListener("blur", () => setTimeout(() => {
     if (document.activeElement !== input && input.value.trim().length < 3 && list.querySelector(".recent")) list.innerHTML = "";
   }, 250));
+  // Keep the field focused while the x is pressed, so the keyboard doesn't close and reopen (that
+  // bounce made iOS scroll the page).
+  clear.addEventListener("mousedown", (e) => e.preventDefault());
   clear.addEventListener("click", () => {
     input.value = "";
     state[key] = null;

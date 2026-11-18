@@ -26,6 +26,7 @@
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /closures/schedule     hours between road-closure updates (read by the GitHub job .github/workflows/closures.yml)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
+//   GET  /admin/timer           the 5-minute timer that starts GitHub jobs: its state (POST: check the GitHub App now)
 //   GET  /admin/settings        switches and values set on the usage page (same header)
 //   GET  /admin/users           access keys: label, status, dates, use per day (same header)
 //   POST /admin/users           {action:"create", label} | {action:"regenerate"|"disable"|"enable"|"delete", id}
@@ -59,13 +60,14 @@
 //   ECONTROL_API_KEY  Austrian charging register (E-Control) key
 //   ADMIN_TOKEN   password for the usage page (admin.html)
 //   ECO_BE_TOKEN  Eco-Movement Belgium DATEX II token (live status per stall)
+//   GH_APP_KEY    private key (.pem) of the GitHub App "EVailability timer" (see "timer"; GH_APP_ID is in wrangler.toml)
 // Optional KV binding
 //   USAGE         keeps the usage counts per day (without it they live in memory only)
 // Optional plain variable
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.2.1"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.3.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -2851,7 +2853,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/admin/timer", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -3429,6 +3431,7 @@ async function route(request, env) {
   if (path === "/admin/usage" && request.method === "GET") return handleUsage(request, env);
   if (path === "/admin/settings" && (request.method === "GET" || request.method === "POST")) return handleSettings(request, env);
   if (path === "/admin/users" && (request.method === "GET" || request.method === "POST")) return handleUsers(request, env);
+  if (path === "/admin/timer" && (request.method === "GET" || request.method === "POST")) return handleTimer(request, env);
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/fr-status" && request.method === "POST") {
@@ -3633,7 +3636,192 @@ async function route(request, env) {
   throw new HttpError(404, "Unknown endpoint");
 }
 
+// ---------------------------------------------------------------- timer (Cron Trigger)
+// Every 5 minutes (wrangler.toml [triggers]) the Worker starts GitHub jobs itself, because GitHub's own
+// schedule often starts hours late or not at all. It signs in as the GitHub App "EVailability timer"
+// (owned by RemcoNLD, installed on this repo only, permission Actions: read and write) with GH_APP_ID
+// (variable) and GH_APP_KEY (secret: the App's .pem key), and gets a one-hour installation token.
+// Nothing here expires: the App key is valid until it's deleted on GitHub (App > Credentials > Key pairs).
+//   Portugal live (pt-live.yml): started every tick.
+//   Road closures (closures.yml): started once data/closures.json is older than the interval set on the
+//   usage page (checked every 15 minutes). A started run always updates (FORCE), so the timer decides.
+// KV "timer": the state shown on the usage page, written only when it changes, plus when closures last
+// started (at most a few writes a day). GET/POST /admin/timer shows it / checks the App now.
+const GH_REPO = "RemcoNLD/apps";
+const GH_API = "https://api.github.com";
+const CLOSURES_RAW = `https://raw.githubusercontent.com/${GH_REPO}/main/data/closures.json`;
+const gh = { pem: null, key: null, installId: null, token: null, tokenExp: 0 };
+
+const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const b64urlText = (s) => b64url(new TextEncoder().encode(s));
+function derLen(n) {
+  if (n < 128) return [n];
+  const b = [];
+  while (n) { b.unshift(n & 255); n >>= 8; }
+  return [0x80 | b.length, ...b];
+}
+// GitHub hands out PKCS#1 keys ("BEGIN RSA PRIVATE KEY"); Web Crypto only imports PKCS#8, so wrap it.
+function pemToPkcs8(pem) {
+  const text = String(pem).replace(/\\n/g, "\n");
+  if (!/-----BEGIN (RSA )?PRIVATE KEY-----/.test(text) || !/-----END (RSA )?PRIVATE KEY-----/.test(text)) {
+    throw new Error("GH_APP_KEY isn’t a complete .pem key (BEGIN or END line missing)");
+  }
+  const body = text.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  let der;
+  try { der = Uint8Array.from(atob(body), (c) => c.charCodeAt(0)); }
+  catch (_) { throw new Error("GH_APP_KEY has characters that don’t belong in a key (pasted wrong?)"); }
+  if (!/BEGIN RSA PRIVATE KEY/.test(text)) return der; // already PKCS#8
+  const alg = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00];
+  const head = [0x02, 0x01, 0x00, ...alg, 0x04, ...derLen(der.length)];
+  const out = new Uint8Array([0x30, ...derLen(head.length + der.length), ...head, ...der]);
+  return out;
+}
+async function appKey(env) {
+  if (gh.key && gh.pem === env.GH_APP_KEY) return gh.key;
+  if (!env.GH_APP_KEY) throw new Error("GH_APP_KEY isn’t set in the Worker");
+  try {
+    gh.key = await crypto.subtle.importKey("pkcs8", pemToPkcs8(env.GH_APP_KEY),
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  } catch (e) {
+    if (/GH_APP_KEY/.test(e.message)) throw e;
+    throw new Error("GH_APP_KEY couldn’t be read as a private key (incomplete or a different file?)");
+  }
+  gh.pem = env.GH_APP_KEY;
+  gh.installId = null; gh.token = null; // a new key: sign in afresh
+  return gh.key;
+}
+async function appJwt(env) {
+  const id = String(env.GH_APP_ID || "").trim();
+  if (!/^\d+$/.test(id)) throw new Error("GH_APP_ID isn’t set (or isn’t a number) in the Worker");
+  const now = Math.floor(Date.now() / 1000);
+  const data = `${b64urlText(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${b64urlText(JSON.stringify({ iat: now - 60, exp: now + 540, iss: id }))}`;
+  const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", await appKey(env), new TextEncoder().encode(data));
+  return `${data}.${b64url(new Uint8Array(sig))}`;
+}
+async function ghCall(path, bearer, method = "GET", body) {
+  countCall("GitHub API");
+  const res = await fetch(`${GH_API}${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${bearer}`, Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "evailability-worker",
+      ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (_) {}
+  return { status: res.status, ok: res.ok, data };
+}
+// Installation token, kept per Worker copy until 5 minutes before it expires (valid one hour).
+async function installToken(env) {
+  if (gh.token && Date.now() < gh.tokenExp - 5 * 60 * 1000 && gh.pem === env.GH_APP_KEY) return gh.token;
+  const jwt = await appJwt(env);
+  if (!gh.installId) {
+    const r = await ghCall(`/repos/${GH_REPO}/installation`, jwt);
+    if (r.status === 401) throw new Error("GitHub doesn’t accept the App’s sign-in: GH_APP_ID and GH_APP_KEY don’t belong together (or the key was deleted)");
+    if (r.status === 404) throw new Error(`The App isn’t installed on ${GH_REPO} (GitHub > the App > Install App)`);
+    if (!r.ok) throw new Error(`GitHub ${r.status} looking up the installation: ${r.data?.message || "no message"}`);
+    gh.installId = r.data.id;
+  }
+  const t = await ghCall(`/app/installations/${gh.installId}/access_tokens`, jwt, "POST");
+  if (t.status === 404) { gh.installId = null; throw new Error(`The App isn’t installed on ${GH_REPO} any more`); }
+  if (!t.ok) throw new Error(`GitHub ${t.status} giving a token: ${t.data?.message || "no message"}`);
+  gh.token = t.data.token; // passed on as given (GitHub's token format may change length)
+  gh.tokenExp = Date.parse(t.data.expires_at) || Date.now() + 50 * 60 * 1000;
+  return gh.token;
+}
+async function startWorkflow(env, file) {
+  const token = await installToken(env);
+  const r = await ghCall(`/repos/${GH_REPO}/actions/workflows/${file}/dispatches`, token, "POST", { ref: "main" });
+  if (r.status === 403) throw new Error(`The App may not start ${file}: give it Actions: Read and write (GitHub > the App > Permissions & events), then accept the change under Install App`);
+  if (r.status === 401) { gh.token = null; throw new Error("GitHub refused the installation token; trying again next time"); }
+  if (!r.ok) throw new Error(`GitHub ${r.status} starting ${file}: ${r.data?.message || "no message"}`);
+}
+// Hours since data/closures.json was made, from its first few hundred bytes ("generatedAt" comes first).
+async function closuresAgeH() {
+  countCall("GitHub raw");
+  const res = await fetch(CLOSURES_RAW, { headers: { Range: "bytes=0-400" } });
+  if (!res.ok && res.status !== 206) throw new Error(`closures.json: ${res.status}`);
+  const m = /"generatedAt"\s*:\s*"([^"]+)"/.exec(await res.text());
+  if (!m) throw new Error("closures.json has no generatedAt");
+  return (Date.now() - Date.parse(m[1])) / 36e5;
+}
+async function loadTimer(env) {
+  try { return JSON.parse((await kvGet(env, "timer")) || "{}"); } catch (_) { return {}; }
+}
+async function saveTimer(env, state) {
+  try { await env.USAGE.put("timer", JSON.stringify(state)); countCall("KV writes"); } catch (e) { console.log("Timer save failed", e.message); }
+}
+// One job's outcome into the state; true if it's worth saving (became OK or failed, or a different error).
+function noteJob(state, job, ok, msg) {
+  const prev = state[job] || {};
+  const now = new Date().toISOString();
+  const changed = prev.ok !== ok || (!ok && prev.msg !== msg);
+  state[job] = { ...prev, ok, msg, since: changed ? now : prev.since || now };
+  return changed;
+}
+async function runTimer(env, at = Date.now()) {
+  await loadSettings(env);
+  const state = await loadTimer(env);
+  let save = false;
+  try {
+    await startWorkflow(env, "pt-live.yml");
+    save = noteJob(state, "pt", true, "starts every 5 minutes") || save;
+  } catch (e) {
+    save = noteJob(state, "pt", false, e.message) || save;
+    console.log("Timer: Portugal live", e.message);
+  }
+  if (new Date(at).getUTCMinutes() % 15 < 5) {
+    try {
+      const h = Number(setting(env, "closuresHours"));
+      const hours = [6, 12, 24, 48].includes(h) ? h : 12;
+      const age = await closuresAgeH();
+      const startedAgoMin = (Date.now() - Date.parse(state.closures?.startedAt || 0)) / 60000;
+      // 15 minutes early is fine; never twice within 45 minutes (the run takes a few minutes to commit).
+      if (age >= hours - 0.25 && startedAgoMin > 45) {
+        await startWorkflow(env, "closures.yml");
+        state.closures = { ...(state.closures || {}), startedAt: new Date().toISOString() };
+        save = true;
+      }
+      save = noteJob(state, "closures", true, `every ${hours} h`) || save;
+    } catch (e) {
+      save = noteJob(state, "closures", false, e.message) || save;
+      console.log("Timer: Road closures", e.message);
+    }
+  }
+  if (save) await saveTimer(env, state);
+  return state;
+}
+// GET: the timer's state. POST: check the App now (sign in, token, may it see the workflows?) without
+// starting anything.
+async function handleTimer(request, env) {
+  checkAdmin(request, env);
+  const state = await loadTimer(env);
+  if (request.method === "GET") return json(request, { state, appId: env.GH_APP_ID || null, keySet: !!env.GH_APP_KEY });
+  const steps = [];
+  try {
+    gh.token = null; // a real check: sign in again
+    const token = await installToken(env);
+    steps.push(`Signed in as the App (id ${env.GH_APP_ID}) and got a token for ${GH_REPO}`);
+    const r = await ghCall(`/repos/${GH_REPO}/actions/workflows?per_page=50`, token);
+    if (!r.ok) throw new Error(`The App can’t see the workflows (GitHub ${r.status}): give it Actions: Read and write`);
+    const files = (r.data.workflows || []).map((w) => w.path.split("/").pop());
+    for (const f of ["pt-live.yml", "closures.yml"]) {
+      if (!files.includes(f)) throw new Error(`${f} isn’t in the repo`);
+    }
+    steps.push("It can see Portugal live and Road closures");
+    return json(request, { ok: true, steps, state });
+  } catch (e) {
+    return json(request, { ok: false, steps, error: e.message, state });
+  }
+}
+
 export default {
+  // Cron Trigger (wrangler.toml): starts the GitHub jobs, see "timer" above.
+  async scheduled(event, env, ctx) {
+    ENV_NOW = env;
+    ctx.waitUntil(runTimer(env, event.scheduledTime).catch((e) => console.log("Timer", e.message)));
+  },
   async fetch(request, env, ctx) {
     ENV_NOW = env; // the same for every request of this Worker copy
     if (request.method !== "OPTIONS") countCall("Worker requests");

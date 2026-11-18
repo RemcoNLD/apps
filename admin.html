@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.2.0"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.3.0"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -495,8 +495,10 @@ function renderSettings(data, msg = "") {
   }).join("");
   $("settings").innerHTML = `<h2>Settings</h2><div class="card group">${rows}
     <div class="small muted" id="setMsg">${esc(msg || data.note || "")}</div></div>
-    <h2>Road closures</h2><div class="card small" id="closInfo">Loading…</div>`;
+    <h2>Road closures</h2><div class="card small" id="closInfo">Loading…</div>
+    <h2>GitHub timer</h2><div class="card small" id="timerInfo">Loading…</div>`;
   loadClosuresInfo(Number(data.settings.find((x) => x.key === "closuresHours")?.value));
+  loadTimerInfo();
 }
 // Last run of the GitHub job that fetches planned road closures (data/closures.json on this site).
 async function loadClosuresInfo(hours) {
@@ -515,6 +517,27 @@ async function loadClosuresInfo(hours) {
     $("closInfo").innerHTML = `<div class="cl-row">${src}</div><div class="muted">${state}Updated ${esc(at)}, ${ago} h ago · ${run}</div>`;
   } catch (e) {
     $("closInfo").innerHTML = `${esc(e.message)} ${run}`;
+  }
+}
+// The Worker's 5-minute timer that starts the GitHub jobs (Portugal live, Road closures) through the
+// GitHub App. GET: its state; "Check now" (POST) signs in as the App without starting anything.
+async function loadTimerInfo(check = false) {
+  const box = $("timerInfo");
+  if (check) box.innerHTML = "Checking…";
+  try {
+    const res = await fetch(`${WORKER}/admin/timer`, { method: check ? "POST" : "GET", headers: { Authorization: `Bearer ${settingsToken}` } });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || `Error ${res.status}`);
+    const st = d.state || {};
+    const job = (name, j) => !j ? `<div>${name}: <span class="muted">no tick yet (within 5 minutes after a deploy)</span></div>`
+      : `<div>${name}: ${j.ok ? "<b>OK</b>" : `<b class="error">failing</b>`}, ${esc(j.msg || "")} <span class="muted">· since ${esc(ago(j.since))}${j.startedAt ? ` · last started ${esc(ago(j.startedAt))}` : ""}</span></div>`;
+    const check2 = check ? (d.ok ? `<div><b>Check OK</b>: ${d.steps.map(esc).join("; ")}.</div>`
+      : `<div class="error"><b>Check failed</b>: ${esc(d.error || "?")}</div>`) : "";
+    box.innerHTML = `${check2}${job("Portugal live", st.pt)}${job("Road closures", st.closures)}
+      <div class="muted">Starts the GitHub jobs every 5 minutes as the GitHub App · <button type="button" class="link" id="timerCheck">Check now</button></div>`;
+    $("timerCheck").onclick = () => loadTimerInfo(true);
+  } catch (e) {
+    box.innerHTML = `<span class="error">${esc(e.message)}</span>`;
   }
 }
 async function saveSetting(key, value) {

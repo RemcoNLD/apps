@@ -258,6 +258,13 @@ EXACT = {
 # ---- brand sheet
 "Brands": ("Merken", "Marcas"),
 "Done": ("Klaar", "Concluído"),
+# ---- start screen brand picker (0.34)
+"Choose brands": ("Merken kiezen", "Escolher marcas"),
+"All brands": ("Alle merken", "Todas as marcas"),
+"The brands to look for on the next route you plan.": ("De merken om naar te zoeken op de volgende route die je plant.", "As marcas a procurar no próximo percurso que planear."),
+"In several countries": ("In meerdere landen", "Em vários países"),
+"All": ("Alle", "Todas"),
+"None": ("Geen", "Nenhuma"),
 "Main roads on the line": ("Hoofdwegen op de lijn", "Estradas principais na linha"),
 "Every road": ("Elke weg", "Todas as estradas"),
 "own row, also without chargers": ("eigen rij, ook zonder laders", "linha própria, também sem carregadores"),

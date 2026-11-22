@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.33.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.34.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -680,9 +680,20 @@
   #start .results button { padding: 9px 12px; }
   .brands-head { display: flex; align-items: baseline; justify-content: space-between; margin: 16px 0 8px; font-weight: 700; }
   .brands-head .hint { margin: 0; font-weight: 400; font-size: .85rem; }
-  #start .brands { gap: 6px; }
-  #start .brand-btn { padding: 5px 10px 5px 5px; font-size: .9rem; gap: 6px; }
-  #start .brand-btn .logo { width: 20px; height: 20px; }
+  /* Chargers on the start screen (0.34): one row with the chosen brands; tap for the grouped list */
+  .brands-pick {
+    display: flex; align-items: center; gap: 0; width: 100%; padding: 8px 12px 8px 8px; border-radius: 12px;
+    background: var(--asphalt-raised); border: 2px solid var(--sign-blue); color: var(--line); font-weight: 700; font-size: 1rem; text-align: left;
+  }
+  .brands-pick .logo { width: 24px; height: 24px; margin-left: -7px; box-shadow: 0 0 0 2px var(--asphalt-raised); flex-shrink: 0; }
+  .brands-pick .logo:first-child { margin-left: 0; }
+  .brands-pick .names { flex: 1; min-width: 0; margin-left: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .brands-pick .chev { flex-shrink: 0; width: 20px; height: 20px; color: var(--muted); margin-left: 6px; }
+  #brandPick .bgroup { margin-top: 18px; }
+  #brandPick .bgroup-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); font-weight: 700; font-size: .95rem; }
+  #brandPick .bgroup-head .flag { width: 24px; height: 16px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(127,127,127,.45); }
+  #brandPick .bgroup-head .t { flex: 1; }
+  #brandPick .bgroup-head .link { font-size: .95rem; padding: 4px 0; color: var(--sign-blue); text-decoration: none; font-weight: 700; }
   #start .check { margin: 14px 0 0; font-size: .95rem; }
   #start .primary { margin-top: 14px; padding: 14px; }
   /* Status age, bottom right in your own row */
@@ -1277,7 +1288,7 @@
   <ul id="fromResults" class="results"></ul>
 
   <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT, FR, PT · BE (next site)</span></div>
-  <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
+  <button type="button" id="brandsPick" class="brands-pick" aria-haspopup="dialog" aria-label="Choose brands"></button>
   <div class="brands-head" style="margin-top:14px"><span>Charging power</span><span class="hint">Change any time</span></div>
   <div class="power" role="group" aria-label="Minimum charging power" data-power>
     <button type="button" data-kw="50">Fast<small>50 kW+</small></button>
@@ -1298,6 +1309,15 @@
     <button type="button" class="link" id="optionsClose">Close</button>
   </div>
   <div id="optionsBody"></div>
+</div>
+
+<div class="sheet" id="brandPick" hidden role="dialog" aria-modal="true" aria-labelledby="brandPickTitle">
+  <div class="sheet-head">
+    <h2 id="brandPickTitle">Chargers</h2>
+    <button type="button" class="link" id="brandPickClose">Done</button>
+  </div>
+  <p class="hint">The brands to look for on the next route you plan.</p>
+  <div id="brands" role="group" aria-labelledby="brandPickTitle"></div>
 </div>
 
 <div class="sheet" id="brandSheet" hidden role="dialog" aria-modal="true" aria-labelledby="brandSheetTitle">
@@ -1743,6 +1763,12 @@ const I18N_TEXT = {
 "just now": "zojuist",
 "Brands": "Merken",
 "Done": "Klaar",
+"Choose brands": "Merken kiezen",
+"All brands": "Alle merken",
+"The brands to look for on the next route you plan.": "De merken om naar te zoeken op de volgende route die je plant.",
+"In several countries": "In meerdere landen",
+"All": "Alle",
+"None": "Geen",
 "Main roads on the line": "Hoofdwegen op de lijn",
 "Every road": "Elke weg",
 "own row, also without chargers": "eigen rij, ook zonder laders",
@@ -2022,6 +2048,12 @@ const I18N_TEXT = {
 "just now": "agora mesmo",
 "Brands": "Marcas",
 "Done": "Concluído",
+"Choose brands": "Escolher marcas",
+"All brands": "Todas as marcas",
+"The brands to look for on the next route you plan.": "As marcas a procurar no próximo percurso que planear.",
+"In several countries": "Em vários países",
+"All": "Todas",
+"None": "Nenhuma",
 "Main roads on the line": "Estradas principais na linha",
 "Every road": "Todas as estradas",
 "own row, also without chargers": "linha própria, também sem carregadores",
@@ -2087,7 +2119,7 @@ const HELP_I18N = {
     <li>Tik op een veld voor de laatste tien <b>plaatsen die je gebruikte</b>; typ om ze te filteren. Het × ernaast vergeet er een.</li>
     <li><b>+</b> naast Naar voegt een <b>viapunt</b> toe (maximaal twee), bijvoorbeeld via Luxemburg in plaats van Brussel. Het scherm leest van onder naar boven, zoals je rit: een nieuw viapunt komt direct onder Naar, dus voer ze in de volgorde in waarin je ze passeert. Een <b>plaats</b> als viapunt wordt gepasseerd over de hoofdweg die er het dichtst bij ligt; naar een <b>straatadres</b> wordt precies gereden. Het × op een viapunt haalt het weg.</li>
     <li>Zonder viapunt krijg je <b>routes om uit te kiezen</b>, met hun hoofdwegen en de steden onderweg.</li>
-    <li><b>Laders</b>: de merken om naar te zoeken, en het laadvermogen dat je wilt (zie Laadvermogen).</li>
+    <li><b>Laders</b>: de merken om naar te zoeken, en het laadvermogen dat je wilt (zie Laadvermogen). Tik op de merkenregel voor de lijst: eerst merken die in meerdere landen zitten, dan merken die vooral in één land zitten, onder de vlag van dat land. <b>Alle</b> of <b>Geen</b> naast een groep kiest de hele groep.</li>
     <li><b>Rit simuleren</b>: rijdt de route voor je, versneld, om de app thuis uit te proberen.</li>
   </ul>
 
@@ -2170,7 +2202,7 @@ const HELP_I18N = {
     <li>Toque num campo para ver os últimos dez <b>locais que usou</b>; escreva para os filtrar. O × ao lado de um esquece-o.</li>
     <li><b>+</b> ao lado de Para adiciona um <b>ponto intermédio</b> (até dois), por exemplo pelo Luxemburgo em vez de Bruxelas. O ecrã lê-se de baixo para cima, como a sua viagem: um novo ponto intermédio fica logo abaixo de Para, por isso introduza-os pela ordem em que vai passar por eles. Uma <b>localidade</b> como ponto intermédio é passada pela estrada principal mais próxima; a uma <b>morada</b> vai-se exatamente. O × num ponto intermédio remove-o.</li>
     <li>Sem ponto intermédio, recebe <b>percursos à escolha</b>, com as estradas principais e as cidades pelo caminho.</li>
-    <li><b>Carregadores</b>: as marcas a procurar e a potência de carregamento que pretende (ver Potência de carregamento).</li>
+    <li><b>Carregadores</b>: as marcas a procurar e a potência de carregamento que pretende (ver Potência de carregamento). Toque na linha das marcas para ver a lista: primeiro as marcas presentes em vários países, depois as que estão sobretudo num país, sob a bandeira desse país. <b>Todas</b> ou <b>Nenhuma</b> ao lado de um grupo escolhe o grupo inteiro.</li>
     <li><b>Simular a viagem</b>: faz o percurso por si, acelerado, para experimentar a app em casa.</li>
   </ul>
 
@@ -6631,6 +6663,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.34", date: "2026-11-22", title: { en: "Brands by country", nl: "Merken per land", pt: "Marcas por país" },
+    items: { en: ["The start screen shows your brands in one row. Tap it for the list: brands found in several countries first, then brands found mainly in Germany or France, under their flag, each with All or None."],
+      nl: ["Het startscherm toont je merken in één regel. Tik erop voor de lijst: eerst merken die in meerdere landen zitten, dan merken die vooral in Duitsland of Frankrijk zitten, onder hun vlag, elk met Alle of Geen."],
+      pt: ["O ecrã inicial mostra as suas marcas numa só linha. Toque nela para ver a lista: primeiro as marcas presentes em vários países, depois as que estão sobretudo na Alemanha ou em França, sob a sua bandeira, cada grupo com Todas ou Nenhuma."] } },
   { v: "0.33", date: "2026-11-22", title: { en: "A sharper start screen", nl: "Een scherper startscherm", pt: "Um ecrã inicial mais nítido" },
     items: { en: ["The top of the start screen is no longer blurry on iPhone, and its buttons (back to the route, clear, help) are now round icons, so they always fit."],
       nl: ["De bovenkant van het startscherm is niet meer wazig op de iPhone, en de knoppen (terug naar de route, wissen, hulp) zijn nu ronde iconen, zodat ze altijd passen."],
@@ -6809,7 +6845,7 @@ function helpHtml() {
     <li>Tap a field to see the last ten <b>places you used</b>; type to narrow them down. The × next to one forgets it.</li>
     <li><b>+</b> next to To adds a <b>via</b> point (up to two), for example via Luxembourg instead of Brussels. The screen reads bottom to top, like your drive: a new via goes right under To, so enter them in the order you'll pass them. A <b>town</b> as via is passed on the main road nearest to it; a <b>street address</b> is driven to exactly. The × on a via removes it.</li>
     <li>Without a via, you get <b>route options</b> to choose from, with their main roads and the cities on the way.</li>
-    <li><b>Chargers</b>: the brands to look for, and the charging power you want (see Charging power).</li>
+    <li><b>Chargers</b>: the brands to look for, and the charging power you want (see Charging power). Tap the brands row for the list: brands found in several countries first, then brands found mainly in one country, under its flag. <b>All</b> or <b>None</b> next to a group picks the whole group.</li>
     <li><b>Simulate the drive</b>: drives the route for you, sped up, to try the app at home.</li>
   </ul>
 
@@ -7042,20 +7078,60 @@ $("addBrandsBtn").addEventListener("click", async () => {
   }
 });
 
-// Brand picker: at least one stays on. Applies to the next route you plan.
-function renderBrandPicker() {
-  $("brands").innerHTML = BRANDS.map((b) =>
-    `<button type="button" class="brand-btn" data-k="${b.key}" aria-pressed="${state.brands.includes(b.key)}">${logoHtml(b.key)}${esc(b.name)}</button>`).join("");
+// Brand picker (0.34): the start screen shows one row with the chosen brands; tapping it opens a sheet with
+// the brands grouped by where they run: several countries first, then the brands found mainly in one country
+// (with its flag). Every brand is in exactly one group, so the choice still applies to the whole route.
+// At least one stays on. Applies to the next route you plan. A new brand without a group lands in the first.
+const BRAND_GROUPS = [
+  { title: "In several countries", keys: ["ionity", "tesla", "fastned", "allego", "shell", "total", "electra", "powerdot"] },
+  { cc: "DE", keys: ["enbw", "aral"] },
+  { cc: "FR", keys: ["izivia"] },
+];
+function brandGroups() {
+  const placed = new Set(BRAND_GROUPS.flatMap((g) => g.keys));
+  return BRAND_GROUPS.map((g, i) => ({ ...g,
+    keys: [...g.keys.filter((k) => BRAND[k]), ...(i ? [] : BRANDS.map((b) => b.key).filter((k) => !placed.has(k)))] }))
+    .filter((g) => g.keys.length);
 }
+const CHEV_SVG = `<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+function setBrands(list) {
+  state.brands = BRANDS.map((b) => b.key).filter((k) => list.includes(k));
+  if (!state.brands.length) state.brands = ["ionity"];
+  try { localStorage.setItem(BRANDS_KEY, JSON.stringify(state.brands)); } catch (_) {}
+}
+function renderBrandPicker() {
+  const on = state.brands;
+  const names = on.length === BRANDS.length ? T("All brands")
+    : on.slice(0, 2).map((k) => BRAND[k].name).join(", ") + (on.length > 2 ? ` +${on.length - 2}` : "");
+  $("brandsPick").innerHTML = on.slice(0, 4).map(logoHtml).join("") + `<span class="names" data-no-tr>${esc(names)}</span>` + CHEV_SVG;
+  $("brands").innerHTML = brandGroups().map((g, i) => {
+    const allOn = g.keys.every((k) => on.includes(k));
+    const head = g.cc ? `${flags(g.cc)}<span class="t">${esc(T(FLAG_NAMES[g.cc]))}</span>` : `<span class="t">${esc(g.title)}</span>`;
+    return `<div class="bgroup"><div class="bgroup-head">${head}<button type="button" class="link" data-g="${i}">${allOn ? "None" : "All"}</button></div>` +
+      `<div class="brands">${g.keys.map((k) =>
+        `<button type="button" class="brand-btn" data-k="${k}" aria-pressed="${on.includes(k)}">${logoHtml(k)}${esc(BRAND[k].name)}</button>`).join("")}</div></div>`;
+  }).join("");
+}
+$("brandsPick").addEventListener("click", () => { renderBrandPicker(); $("brandPick").hidden = false; });
+$("brandPickClose").addEventListener("click", () => { $("brandPick").hidden = true; });
 $("brands").addEventListener("click", (e) => {
+  const g = e.target.closest("[data-g]");
+  if (g) {
+    const keys = brandGroups()[+g.dataset.g].keys;
+    const allOn = keys.every((k) => state.brands.includes(k));
+    const rest = state.brands.filter((k) => !keys.includes(k));
+    // "None" keeps at least one brand: if this group held them all, its first brand stays on.
+    setBrands(allOn ? (rest.length ? rest : [keys[0]]) : [...state.brands, ...keys]);
+    renderBrandPicker();
+    return;
+  }
   const btn = e.target.closest(".brand-btn");
   if (!btn) return;
   const k = btn.dataset.k;
   const on = state.brands.includes(k);
   if (on && state.brands.length === 1) return;
-  state.brands = on ? state.brands.filter((x) => x !== k) : BRANDS.map((b) => b.key).filter((x) => x === k || state.brands.includes(x));
-  try { localStorage.setItem(BRANDS_KEY, JSON.stringify(state.brands)); } catch (_) {}
-  btn.setAttribute("aria-pressed", String(!on));
+  setBrands(on ? state.brands.filter((x) => x !== k) : [...state.brands, k]);
+  renderBrandPicker();
 });
 renderBrandPicker();
 

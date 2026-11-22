@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.35.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.35.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2185,7 +2185,7 @@ const HELP_I18N = {
   <h3>Onderweg</h3>
   <ul>
     <li><b>Scroll omhoog</b> voor laders verder vooruit. De blauwe pijl brengt je terug naar de volgende.</li>
-    <li>Je <b>viapunten</b> (een wit bolletje met een blauwe rand) en <b>grenzen</b> (de vlag van het nieuwe land) staan op de lijn, met de afstand en tijd ernaartoe.</li>
+    <li>Je <b>viapunten</b> (een wit bolletje met een blauwe rand) en <b>grenzen</b> (de vlag van het nieuwe land) staan op de lijn, met de afstand en tijd ernaartoe. Grenzen alleen als alle wegen getoond worden; viapunten altijd.</li>
     <li><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent.</li>
     <li><b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps, Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
@@ -2269,7 +2269,7 @@ const HELP_I18N = {
   <h3>Pelo caminho</h3>
   <ul>
     <li><b>Deslize para cima</b> para ver carregadores mais à frente. A seta azul leva-o de volta aos próximos.</li>
-    <li>Os seus <b>pontos intermédios</b> (um ponto branco com contorno azul) e as <b>fronteiras</b> (a bandeira do novo país) aparecem na linha, com a distância e o tempo até lá.</li>
+    <li>Os seus <b>pontos intermédios</b> (um ponto branco com contorno azul) e as <b>fronteiras</b> (a bandeira do novo país) aparecem na linha, com a distância e o tempo até lá. As fronteiras só aparecem com todas as estradas visíveis; os pontos intermédios sempre.</li>
     <li><b>Toque no destino</b> para comparar outros percursos a partir de onde está.</li>
     <li><b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
@@ -6477,7 +6477,8 @@ function render() {
     while (ci < closures.length && closures[ci].fromKm <= km) { const m = closures[ci++]; inOrder.push({ key: `closure-${m.id}`, html: closureRow(m) }); }
   };
   pushClosures(u.km); // one you're in or right at: nearest
-  const borders = bordersAhead();
+  // Road rows hidden (Changes only): borders hidden too (0.35.1); via points always stay.
+  const borders = rows ? bordersAhead() : [];
   let bi = 0;
   const pushBorders = (km) => {
     while (bi < borders.length && borders[bi].km <= km) { const b = borders[bi++]; inOrder.push({ key: `border-${b.km}-${b.iso}`, html: borderRow(b) }); }
@@ -6700,9 +6701,9 @@ $("introNext").addEventListener("click", () => {
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
   { v: "0.35", date: "2026-11-22", title: { en: "Via points on the line", nl: "Viapunten op de lijn", pt: "Pontos intermédios na linha" },
-    items: { en: ["Your via points now show in the list as a white dot with a blue ring on the line, with the distance and time to them.", "Via points and border crossings have a thin line across, and a border flag no longer sits right against a road number."],
-      nl: ["Je viapunten staan nu in de lijst als een wit bolletje met een blauwe rand op de lijn, met de afstand en tijd ernaartoe.", "Viapunten en grensovergangen hebben een dunne lijn erdoorheen, en een grensvlag staat niet meer pal tegen een wegnummer."],
-      pt: ["Os seus pontos intermédios aparecem agora na lista como um ponto branco com contorno azul na linha, com a distância e o tempo até lá.", "Os pontos intermédios e as fronteiras têm uma linha fina a atravessá-los, e a bandeira de uma fronteira já não fica colada a um número de estrada."] } },
+    items: { en: ["Your via points now show in the list as a white dot with a blue ring on the line, with the distance and time to them.", "Via points and border crossings have a thin line across, and a border flag no longer sits right against a road number. With road rows set to changes only, borders are hidden too; via points always show."],
+      nl: ["Je viapunten staan nu in de lijst als een wit bolletje met een blauwe rand op de lijn, met de afstand en tijd ernaartoe.", "Viapunten en grensovergangen hebben een dunne lijn erdoorheen, en een grensvlag staat niet meer pal tegen een wegnummer. Staan de wegen op alleen wisselingen, dan zijn de grenzen ook verborgen; viapunten staan er altijd."],
+      pt: ["Os seus pontos intermédios aparecem agora na lista como um ponto branco com contorno azul na linha, com a distância e o tempo até lá.", "Os pontos intermédios e as fronteiras têm uma linha fina a atravessá-los, e a bandeira de uma fronteira já não fica colada a um número de estrada. Com as estradas só nas mudanças, as fronteiras também ficam ocultas; os pontos intermédios aparecem sempre."] } },
   { v: "0.34", date: "2026-11-22", title: { en: "Brands by country", nl: "Merken per land", pt: "Marcas por país" },
     items: { en: ["The start screen shows your brands in one row. Tap it for the list: brands found in several countries first, then brands found mainly in Germany or France, under their flag, each with All or None."],
       nl: ["Het startscherm toont je merken in één regel. Tik erop voor de lijst: eerst merken die in meerdere landen zitten, dan merken die vooral in Duitsland of Frankrijk zitten, onder hun vlag, elk met Alle of Geen."],
@@ -6938,7 +6939,7 @@ function helpHtml() {
   <h3>On the way</h3>
   <ul>
     <li><b>Scroll up</b> to see chargers further ahead. The blue arrow brings you back to the next ones.</li>
-    <li>Your <b>via points</b> (a white dot with a blue ring) and <b>borders</b> (the new country's flag) sit on the line, with the distance and time to them.</li>
+    <li>Your <b>via points</b> (a white dot with a blue ring) and <b>borders</b> (the new country's flag) sit on the line, with the distance and time to them. Borders only show with every road shown; via points always.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
     <li><b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps, Waze or Flitsmeister, or copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.32.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.33.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -69,8 +69,19 @@
   [hidden] { display: none !important; }
 
   /* ---------- start screen ---------- */
-  #start { max-width: 560px; margin: 0 auto; padding: 10px 16px 24px; }
-  #start h1 { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; flex: 1; }
+  /* Start screen (0.33): pinned to the screen like the driving screen, header fixed, only the form scrolls.
+     iOS 26 lays its own soft blur ("scroll edge effect") over the top of a scrolling page in a home-screen
+     app; with the page itself no longer scrolling, and the header a bit lower, the header stays sharp. */
+  #start { position: fixed; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column;
+    height: var(--app-h, auto); background: var(--asphalt);
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
+  body:has(#start:not([hidden])) { position: fixed; inset: 0; overflow: hidden; height: var(--app-h, auto); }
+  #start > .start-top { flex: none; width: 100%; max-width: 560px; margin: 0 auto; padding: 8px 16px 10px; }
+  .start-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    width: 100%; max-width: 560px; margin: 0 auto; padding: 2px 16px calc(env(safe-area-inset-bottom, 0px) + 24px); }
+  .start-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+  #start h1 { font-size: 1.4rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  @media (max-width: 360px) { #start h1 { font-size: 1.2rem; } }
   #start .lede { color: var(--muted); margin: 0 0 28px; line-height: 1.5; }
   label.field { display: block; font-weight: 600; margin: 18px 0 6px; }
   .input {
@@ -639,14 +650,15 @@
   .start-top .apps-back { margin: 0; font-size: 1.9rem; line-height: 1; padding: 0 6px 4px 0; }
   /* Clear: empties every address field to start over (shown only when there is something to clear) */
   .start-clear {
-    height: 36px; flex-shrink: 0; padding: 0 14px; border-radius: 18px; background: none;
-    border: 2px solid var(--muted); color: var(--muted); font-weight: 700; font-size: .95rem;
+    width: 36px; height: 36px; flex-shrink: 0; padding: 0 !important; display: grid; place-items: center;
+    border-radius: 50%; background: none; border: 2px solid var(--muted); color: var(--muted);
   }
+  .start-clear svg, .start-back svg { width: 20px; height: 20px; display: block; }
   .start-clear:active { color: var(--line); border-color: var(--line); }
   /* ‹ Route: back to the route you were driving, unchanged (Change route keeps it until a new one is planned) */
   .start-back {
-    height: 36px; flex-shrink: 0; padding: 0 12px 0 8px; border-radius: 18px; background: none;
-    border: 2px solid var(--sign-blue); color: var(--sign-blue); font-weight: 800; font-size: .95rem;
+    width: 36px; height: 36px; flex-shrink: 0; padding: 0 !important; display: grid; place-items: center;
+    border-radius: 50%; background: none; border: 2px solid var(--sign-blue); color: var(--sign-blue);
   }
   .start-back:active { background: var(--sign-blue); color: #fff; }
   #start.editing .apps-back { display: none; } /* one ‹ at a time: back to the route wins */
@@ -911,7 +923,7 @@
   #help .cupd .v b { color: var(--line); }
   #help svg.flag { width: 22px; height: 15px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(127,127,127,.35); vertical-align: -2px; }
   /* Version links and What's new */
-  .start-top .ver-link { background: none; border: 0; padding: 4px 2px; margin: 4px 0 0 -4px; color: var(--muted); font: 600 .78rem/1 system-ui, sans-serif; cursor: pointer; align-self: center; }
+  .start-top .ver-link { flex: none; background: none; border: 0; padding: 4px 2px; margin: 0; color: var(--muted); font: 600 .78rem/1 system-ui, sans-serif; cursor: pointer; }
   .splash .foot .sp-ver { background: none; border: 0; color: #93a0a8; font-size: .82rem; padding: 4px 10px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
   #changelog .cl-rel { margin: 18px 0 0; }
   #changelog .cl-rel h3 { font-size: 1.15rem; margin: 0 0 2px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
@@ -1230,12 +1242,12 @@
 <section id="start">
   <div class="start-top">
     <a class="apps-back" id="appsBack" href="./" aria-label="Back to apps" hidden>‹</a>
-    <button type="button" class="start-back" id="backToRoute" aria-label="Back to the route" hidden>‹ Route</button>
-    <h1>EVailability</h1>
-    <button type="button" class="ver-link" id="verStart" aria-label="What’s new"></button>
-    <button type="button" class="start-clear" id="clearStart" hidden>Clear</button>
-    <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual">?</button>
+    <button type="button" class="start-back" id="backToRoute" aria-label="Back to the route" title="Back to the route" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="start-title"><h1>EVailability</h1><button type="button" class="ver-link" id="verStart" aria-label="What’s new"></button></div>
+    <button type="button" class="start-clear" id="clearStart" aria-label="Clear" title="Clear" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9.5 7V4.8h5V7M6.5 7l1 12.2h9l1-12.2M10.2 10.5v5.5M13.8 10.5v5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button type="button" class="help-btn" id="helpStart" aria-label="Help and manual" title="Help and manual">?</button>
   </div>
+  <div class="start-scroll" id="startScroll">
   <div class="svc-notice" id="svcNotice" role="status" hidden></div>
   <div class="trial-banner" id="trialBanner" hidden>
     <div><b>Trial</b> <span id="trialBannerText"></span></div>
@@ -1277,6 +1289,7 @@
 
   <button id="planBtn" class="primary" disabled>Plan route</button>
   <p id="startError" class="error" hidden></p>
+  </div>
 </section>
 
 <div class="sheet" id="options" hidden role="dialog" aria-modal="true" aria-labelledby="optionsTitle">
@@ -2132,7 +2145,7 @@ const HELP_I18N = {
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
     <li>Het scherm blijft aan tijdens het rijden. ${screenAwake() ? "" : "Op dit moment kan het uitgaan: tik tijdens het rijden één keer op het scherm. "}Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
     <li>Als je aankomt, is er een klein feestje.</li>
-    <li><b>Route wijzigen</b> brengt je naar het startscherm met je bestemming en viapunten nog ingevuld, zodat je er een kunt aanpassen en opnieuw plannen. <b>‹ Route</b> linksboven brengt je ongewijzigd terug naar je route; <b>Wissen</b> rechtsboven maakt alle velden leeg.</li>
+    <li><b>Route wijzigen</b> brengt je naar het startscherm met je bestemming en viapunten nog ingevuld, zodat je er een kunt aanpassen en opnieuw plannen. De blauwe ronde knop <b>‹</b> linksboven brengt je ongewijzigd terug naar je route; het prullenbakje rechtsboven maakt alle velden leeg.</li>
   </ul>
 
   <div class="help-actions">
@@ -2215,7 +2228,7 @@ const HELP_I18N = {
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
     <li>O ecrã mantém-se ligado enquanto conduz. ${screenAwake() ? "" : "Neste momento pode desligar-se: toque uma vez no ecrã durante a condução. "}Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
     <li>Quando chega, há uma pequena celebração.</li>
-    <li><b>Alterar percurso</b> leva-o ao ecrã inicial com o destino e os pontos intermédios ainda preenchidos, para poder alterar um e voltar a planear. <b>‹ Percurso</b>, no canto superior esquerdo, leva-o de volta ao percurso sem alterações; <b>Limpar</b>, no canto superior direito, apaga todos os campos.</li>
+    <li><b>Alterar percurso</b> leva-o ao ecrã inicial com o destino e os pontos intermédios ainda preenchidos, para poder alterar um e voltar a planear. O botão redondo azul <b>‹</b>, no canto superior esquerdo, leva-o de volta ao percurso sem alterações; o caixote do lixo, no canto superior direito, apaga todos os campos.</li>
   </ul>
 
   <div class="help-actions">
@@ -6618,6 +6631,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.33", date: "2026-11-22", title: { en: "A sharper start screen", nl: "Een scherper startscherm", pt: "Um ecrã inicial mais nítido" },
+    items: { en: ["The top of the start screen is no longer blurry on iPhone, and its buttons (back to the route, clear, help) are now round icons, so they always fit."],
+      nl: ["De bovenkant van het startscherm is niet meer wazig op de iPhone, en de knoppen (terug naar de route, wissen, hulp) zijn nu ronde iconen, zodat ze altijd passen."],
+      pt: ["O topo do ecrã inicial já não fica desfocado no iPhone, e os botões (voltar ao percurso, limpar, ajuda) são agora ícones redondos, para caberem sempre."] } },
   { v: "0.32", date: "2026-11-22", title: { en: "Borders and a clearer arrow", nl: "Grenzen en een duidelijkere pijl", pt: "Fronteiras e uma seta mais nítida" },
     items: { en: ["Border crossings show on the line as the new country's flag, with the distance and time to the border.", "Your arrow sits exactly on the line and has an edge, so it stands out.", "\u201cLooking for more chargers\u201d now slides in under the destination without moving the list."],
       nl: ["Grensovergangen staan op de lijn als vlag van het nieuwe land, met afstand en tijd tot de grens.", "Je pijl staat precies op de lijn en heeft een rand, zodat hij opvalt.", "\u201cMeer laders zoeken\u201d schuift nu in onder de bestemming zonder dat de lijst verspringt."],
@@ -6850,7 +6867,7 @@ function helpHtml() {
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${screenAwake() ? "" : "Right now it may turn off: tap the screen once while driving. "}If it still turns off, check that Low Power Mode is off.</li>
     <li>When you arrive, there's a small celebration.</li>
-    <li><b>Change route</b> takes you to the start screen with your destination and via points still filled in, so you can change one and plan again. <b>‹ Route</b> top left takes you back to your route unchanged; <b>Clear</b> top right empties all fields.</li>
+    <li><b>Change route</b> takes you to the start screen with your destination and via points still filled in, so you can change one and plan again. The round blue <b>‹</b> top left takes you back to your route unchanged; the bin top right empties all fields.</li>
   </ul>
 
   <div class="help-actions">

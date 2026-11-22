@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.34.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.35.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -559,12 +559,25 @@
   /* A main road on the timeline (every one up to the destination, chargers or not) */
   .row.road { height: 46px; padding: 0; }
   /* Border crossings on the line (0.32): the new country's flag, with distance and time to the border */
-  .row.border { height: 46px; padding: 0; }
+  /* Border crossings and via points (0.35) are dividers: a thin line across the row behind the flag
+     or dot and the text (both cut it out with the road's colour). Taller than a road row, so a road
+     badge sitting on the edge of the row next to it stays clear of the flag or dot. */
+  .row.border, .row.via { height: 72px; flex-shrink: 0; padding: 0; } /* never squeezed on a short screen */
+  .row.border::before, .row.via::before { content: ""; position: absolute; left: 8px; right: 0; top: 50%; height: 1px; background: var(--muted); opacity: .55; }
+  .row.border > div, .row.via > div { position: relative; z-index: 1; grid-column: 2 / -1; }
+  .row.border .sub.meta, .row.via .sub.meta { display: inline-flex; align-items: baseline; gap: 10px; max-width: 100%; padding: 0 10px 0 6px; margin-left: -6px; background: var(--asphalt); white-space: nowrap; overflow: hidden; }
+  /* A via point: a white dot with a blue ring on the line, like the destination's white square */
+  .tl-via { position: absolute; left: 24px; top: 50%; transform: translate(-50%, -50%); z-index: 2; width: 26px; height: 26px; box-sizing: border-box; border-radius: 50%;
+    background: #fff; border: 6px solid var(--sign-blue); box-shadow: 0 0 0 3px var(--asphalt); }
+  .row.via .cty { color: var(--line); font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+  .row.border .sub.meta > *, .row.via .sub.meta > * { flex-shrink: 0; }
+  .row.border .sub.meta > .cty, .row.via .sub.meta > .cty { flex-shrink: 1; min-width: 0; }
+  .row.via .vlab { color: var(--muted); font-weight: 600; }
+  @media (max-width: 359px) { .row.via .vlab { display: none; } } /* the dot already says it; room for the name */
   .tl-flag { position: absolute; left: 24px; top: 50%; transform: translate(-50%, -50%); z-index: 2; line-height: 0; padding: 3px; border-radius: 5px; background: var(--asphalt); }
   .tl-flag .flag { display: block; width: 27px; height: 18px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(127,127,127,.45); }
   .tl-flag .flag.emoji { width: auto; height: auto; box-shadow: none; font-size: 1.35rem; line-height: 1; }
   .row.border .cty { color: var(--line); font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
-  .row.border .sub.meta { white-space: nowrap; overflow: hidden; }
   /* "Looking for more chargers…" (0.32): a drawer that slides out from under the destination, over the
      list, so nothing below it moves when it comes or goes */
   .drawer-wrap { position: absolute; z-index: 3; left: 50px; right: 2px; top: 0; overflow: hidden; pointer-events: none; padding: 0 14px 18px; }
@@ -2172,6 +2185,7 @@ const HELP_I18N = {
   <h3>Onderweg</h3>
   <ul>
     <li><b>Scroll omhoog</b> voor laders verder vooruit. De blauwe pijl brengt je terug naar de volgende.</li>
+    <li>Je <b>viapunten</b> (een wit bolletje met een blauwe rand) en <b>grenzen</b> (de vlag van het nieuwe land) staan op de lijn, met de afstand en tijd ernaartoe.</li>
     <li><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent.</li>
     <li><b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps, Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
@@ -2255,6 +2269,7 @@ const HELP_I18N = {
   <h3>Pelo caminho</h3>
   <ul>
     <li><b>Deslize para cima</b> para ver carregadores mais à frente. A seta azul leva-o de volta aos próximos.</li>
+    <li>Os seus <b>pontos intermédios</b> (um ponto branco com contorno azul) e as <b>fronteiras</b> (a bandeira do novo país) aparecem na linha, com a distância e o tempo até lá.</li>
     <li><b>Toque no destino</b> para comparar outros percursos a partir de onde está.</li>
     <li><b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
@@ -6267,6 +6282,21 @@ function borderRow(b) {
   const u = state.user;
   return `<div class="row border"><span aria-hidden="true"></span><span class="tl-flag">${flagFor(b.iso)}</span><div><div class="sub meta"><span class="when"><b>${fmtKm(b.km - u.km)}</b>&nbsp;km&ensp;${fmtClock(minAtKm(b.km) - u.min)}</span><span class="cty">${esc(countryName(b.iso))}</span></div></div></div>`;
 }
+// Your own via points still ahead (0.35), from the route's via positions: a white dot with a blue
+// ring on the line, with distance, time and the place. A picked route option is a hidden via: not shown.
+function viasAhead() {
+  const kms = state.route?.viaKms || (state.route?.viaKm != null ? [state.route.viaKm] : []), u = state.user, out = [];
+  (state.vias || []).forEach((v, i) => {
+    const km = kms[i];
+    if (v.auto || !Number.isFinite(km) || km <= u.km) return;
+    out.push({ km, name: shortPlace(v.label) || v.label || "" });
+  });
+  return out;
+}
+function viaRow(v) {
+  const u = state.user;
+  return `<div class="row via"><span aria-hidden="true"></span><span class="tl-via" aria-hidden="true"></span><div><div class="sub meta"><span class="when"><b>${fmtKm(v.km - u.km)}</b>&nbsp;km&ensp;${fmtClock(minAtKm(v.km) - u.min)}</span><span class="vlab">${esc(T("Via"))}</span><span class="cty">${esc(v.name)}</span></div></div></div>`;
+}
 // The "looking for more chargers" drawer under the destination: placed just below the destination
 // row and slid in or out; the old text stays while it slides away.
 function setDrawer(text) {
@@ -6452,13 +6482,19 @@ function render() {
   const pushBorders = (km) => {
     while (bi < borders.length && borders[bi].km <= km) { const b = borders[bi++]; inOrder.push({ key: `border-${b.km}-${b.iso}`, html: borderRow(b) }); }
   };
-  const pushRoad = () => { const p = nextRoads[ri++]; pushClosures(p.fromKm); pushBorders(p.fromKm); inOrder.push({ key: `road-${p.fromKm}`, html: roadRow(p, false) }); };
+  const vias = viasAhead();
+  let vi = 0;
+  const pushVias = (km) => {
+    while (vi < vias.length && vias[vi].km <= km) { const v = vias[vi++]; inOrder.push({ key: `via-${v.km}`, html: viaRow(v) }); }
+  };
+  const pushMarks = (km) => { pushBorders(km); pushVias(km); };
+  const pushRoad = () => { const p = nextRoads[ri++]; pushClosures(p.fromKm); pushMarks(p.fromKm); inOrder.push({ key: `road-${p.fromKm}`, html: roadRow(p, false) }); };
   { const seen = new Map(); for (const site of ahead) { const l = siteLabel(site.members); seen.set(l, (seen.get(l) || 0) + 1); }
     dupLabels = new Set([...seen].filter(([, n]) => n > 1).map(([l]) => l)); }
   ahead.forEach((site, i) => {
     while (ri < nextRoads.length && nextRoads[ri].fromKm <= site.alongKm) pushRoad();
     pushClosures(site.alongKm);
-    pushBorders(site.alongKm);
+    pushMarks(site.alongKm);
     // Without road rows: a badge where the road changes between chargers, and under the nearest
     // charger the road you're on.
     const below = rows ? null : roadChange(i ? ahead[i - 1].alongKm : -Infinity, site.alongKm) || (i === 0 ? curRoad : null);
@@ -6467,7 +6503,7 @@ function render() {
   });
   while (ri < nextRoads.length) pushRoad();
   pushClosures(Infinity);
-  pushBorders(Infinity);
+  pushMarks(Infinity);
   if (!ahead.length && !checking) {
     inOrder.push({ key: "empty", html: hiddenCount
       ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
@@ -6663,6 +6699,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.35", date: "2026-11-22", title: { en: "Via points on the line", nl: "Viapunten op de lijn", pt: "Pontos intermédios na linha" },
+    items: { en: ["Your via points now show in the list as a white dot with a blue ring on the line, with the distance and time to them.", "Via points and border crossings have a thin line across, and a border flag no longer sits right against a road number."],
+      nl: ["Je viapunten staan nu in de lijst als een wit bolletje met een blauwe rand op de lijn, met de afstand en tijd ernaartoe.", "Viapunten en grensovergangen hebben een dunne lijn erdoorheen, en een grensvlag staat niet meer pal tegen een wegnummer."],
+      pt: ["Os seus pontos intermédios aparecem agora na lista como um ponto branco com contorno azul na linha, com a distância e o tempo até lá.", "Os pontos intermédios e as fronteiras têm uma linha fina a atravessá-los, e a bandeira de uma fronteira já não fica colada a um número de estrada."] } },
   { v: "0.34", date: "2026-11-22", title: { en: "Brands by country", nl: "Merken per land", pt: "Marcas por país" },
     items: { en: ["The start screen shows your brands in one row. Tap it for the list: brands found in several countries first, then brands found mainly in Germany or France, under their flag, each with All or None."],
       nl: ["Het startscherm toont je merken in één regel. Tik erop voor de lijst: eerst merken die in meerdere landen zitten, dan merken die vooral in Duitsland of Frankrijk zitten, onder hun vlag, elk met Alle of Geen."],
@@ -6898,6 +6938,7 @@ function helpHtml() {
   <h3>On the way</h3>
   <ul>
     <li><b>Scroll up</b> to see chargers further ahead. The blue arrow brings you back to the next ones.</li>
+    <li>Your <b>via points</b> (a white dot with a blue ring) and <b>borders</b> (the new country's flag) sit on the line, with the distance and time to them.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
     <li><b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps, Waze or Flitsmeister, or copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>

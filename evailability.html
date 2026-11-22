@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.35.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.35.2"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1079,6 +1079,7 @@
   .avr .rg-empty { stroke: var(--muted); stroke-width: 2.6; stroke-dasharray: 2.6 3.1; opacity: .75; }
   .avr .rg-unk { stroke: var(--muted); stroke-width: 2.6; opacity: .6; }
   .avr .rg-nores { stroke: var(--muted); stroke-width: 1.1; opacity: .7; }
+  .avr .rg-old { stroke: var(--muted); opacity: .45; } /* Belgium: a stall not checked in the last 3 minutes (0.35.2) */
   .avr > .stat { position: relative; line-height: 1; text-align: center; }
   .row .avail .avr > .stat { font-size: 1.6rem; font-weight: 800; letter-spacing: -.04em; }
   .avr.free .stat strong { color: var(--free); }
@@ -4815,11 +4816,14 @@ function beMergeStalls(s, prev) {
   const stalls = { ...(st.stalls || {}) };
   for (const [id, v] of Object.entries(prev?.stalls || {})) {
     if (!(st.evseIds || []).includes(id) || !v?.at) continue;
-    if (!stalls[id] || Date.parse(stalls[id].at || 0) < Date.parse(v.at)) stalls[id] = v;
+    // A tie keeps this phone's answer: it carries `got`, so a round cut short isn't started over.
+    if (!stalls[id] || Date.parse(stalls[id].at || 0) <= Date.parse(v.at)) stalls[id] = v;
   }
   st.stalls = stalls;
   const times = (st.evseIds || []).map((id) => Date.parse(stalls[id]?.at || "")).filter(Boolean);
   s.statusAt = times.length ? Math.min(Date.now(), ...times) : null;
+  // The newest stall (0.35.2): the ring is in colour while any stall is fresh; old stalls grey on their own (ringSvg).
+  s.beNewestAt = times.length ? Math.min(Date.now(), Math.max(...times)) : null;
   if (times.length) st.checkedAt = new Date(s.statusAt).toISOString();
   Object.assign(st, beCounts(st));
 }
@@ -4857,10 +4861,11 @@ async function refreshBelgium(members, { auto = false } = {}) {
   let why = null, paused = false;
   try {
     sites: for (const s of due) {
-      const st = s.status;
-      st.stalls = st.stalls || {}; // a new round: the last known stalls stay (grey by age) and are replaced one by one
+      // Always s.status itself, never a copy held across a wait: matchBelgium (app reopened) can replace
+      // the status object mid-round, and answers written to the old one never showed (0.35.2).
+      s.status.stalls = s.status.stalls || {}; // a new round: the last known stalls stay (grey by age) and are replaced one by one
       let beFails = 0;
-      Object.assign(st, beCounts(st));
+      Object.assign(s.status, beCounts(s.status));
       for (const evse of left(s)) {
         for (let tries = 0; ; tries++) {
           // The app went to the background: stop here; the round carries on when it's back (beAuto, or a tap).
@@ -4876,14 +4881,15 @@ async function refreshBelgium(members, { auto = false } = {}) {
           if (r.retryAfterMs) {
             if (tries >= (r.tryOtherId ? 5 : 3)) {
               if (++beFails >= 3) throw new Error(r.failed || r.note || "Belgium is busy, try again in a minute");
-              if (!st.stalls[evse]) st.stalls[evse] = { kind: "unknown" }; // skip this stall (keeping its last known), carry on
+              if (!s.status.stalls[evse]) s.status.stalls[evse] = { kind: "unknown" }; // skip this stall (keeping its last known), carry on
               break;
             }
             beNextAt = Date.now() + r.retryAfterMs + 300;
             continue;
           }
           beNextAt = r.cached ? beNextAt : Date.now() + BE_GAP_MS;
-          st.stalls[evse] = { kind: r.kind, raw: r.raw || null, at: r.checkedAt || new Date().toISOString(), got: Date.now() };
+          s.status.stalls = s.status.stalls || {};
+          s.status.stalls[evse] = { kind: r.kind, raw: r.raw || null, at: r.checkedAt || new Date().toISOString(), got: Date.now() };
           beFails = 0;
           beMergeStalls(s, null);
           save(); // so a reload (iOS closing the app) carries on after this stall
@@ -4892,7 +4898,7 @@ async function refreshBelgium(members, { auto = false } = {}) {
       }
       s.beDoneAt = Date.now();
       s.beRoundAt = null;
-      const r = ringParts(st);
+      const r = ringParts(s.status);
       if (r.nores === r.total) why = "Eco-Movement gave no live status for this site";
       else if (r.nores) why = `${r.nores} of ${r.total} stalls without live status`;
     }
@@ -6209,9 +6215,22 @@ function ringSvg(st) {
   const r = ringParts(st);
   const open = `<svg viewBox="0 0 40 40" aria-hidden="true"><g transform="rotate(-90 20 20)">`;
   if (!r) return `${open}<circle class="rg-empty" cx="20" cy="20" r="${RING_R}"/></g></svg>`;
-  const kinds = [];
+  let kinds = [];
   const ends = [["free", r.free], ["busy", r.busy], ["off", r.off], ["nores", r.nores || 0], ["unk", r.unk || 0]];
   for (const [k, n] of ends) for (let i = 0; i < n; i++) kinds.push(k);
+  // Belgium (0.35.2): each stall by its own age: checked in the last 3 minutes in colour, older ones grey
+  // ("k old"), so a stall answered just now turns green or red at once while the others wait their turn.
+  if (st.be && st.stalls) {
+    const order = ["free", "busy", "off", "nores", "unk"], now = Date.now(), fresh = [], old = [];
+    for (const id of st.evseIds || []) {
+      const v = st.stalls[id], k0 = v?.kind;
+      const k = k0 === "free" || k0 === "busy" || k0 === "off" ? k0 : k0 ? "nores" : "unk";
+      const t = Date.parse(v?.at || "");
+      (k !== "unk" && t && now - t > STALE_MS ? old : fresh).push(k);
+    }
+    const byKind = (a, b) => order.indexOf(a) - order.indexOf(b);
+    if (old.length && fresh.some((k) => k !== "unk")) kinds = [...fresh.sort(byKind), ...old.sort(byKind).map((k) => `${k} old`)];
+  }
   const per = RING_C / r.total;
   const gaps = r.total > 1 && r.total <= RING_GAPS_MAX;
   const gap = gaps ? Math.min(2.2, per * 0.3) : 0;
@@ -6221,15 +6240,16 @@ function ringSvg(st) {
   const f = (n) => Math.round(n * 100) / 100;
   return open + arcs.map((a) => {
     const len = Math.max(0.6, a.len - gap);
-    if (a.k === "off" || a.k === "nores") { // out of order: grey outline (there, not working); no usable answer: dotted outline
+    if (a.k.startsWith("off") || a.k.startsWith("nores")) { // out of order: grey outline (there, not working); no usable answer: dotted outline
       return [RING_R - 1.8, RING_R + 1.8].map((rr) => {
         const k = rr / RING_R;
-        return `<circle class="rg-${a.k}" cx="20" cy="20" r="${rr}" stroke-dasharray="${f(len * k)} ${f((RING_C - len) * k)}" stroke-dashoffset="${f(-(a.from + gap / 2) * k)}"/>`;
+        return `<circle class="${rgClass(a.k)}" cx="20" cy="20" r="${rr}" stroke-dasharray="${f(len * k)} ${f((RING_C - len) * k)}" stroke-dashoffset="${f(-(a.from + gap / 2) * k)}"/>`;
       }).join("");
     }
-    return `<circle class="rg-${a.k}" cx="20" cy="20" r="${RING_R}" stroke-dasharray="${f(len)} ${f(RING_C - len)}" stroke-dashoffset="${f(-(a.from + gap / 2))}"/>`;
+    return `<circle class="${rgClass(a.k)}" cx="20" cy="20" r="${RING_R}" stroke-dasharray="${f(len)} ${f(RING_C - len)}" stroke-dashoffset="${f(-(a.from + gap / 2))}"/>`;
   }).join("") + `</g></svg>`;
 }
+const rgClass = (k) => k.split(" ").map((x) => `rg-${x}`).join(" "); // "free old" → "rg-free rg-old"
 function ringTitle(st) {
   const r = ringParts(st);
   if (!r) return "";
@@ -6248,11 +6268,13 @@ function availRing(info, extra = "") {
 function shownStatus(s) {
   let info = statusInfo(s);
   const loading = s.loadingAt && Date.now() - s.loadingAt < 20000;
-  const stale = !s.statusAt || Date.now() - s.statusAt > staleMs(s);
+  // Belgium: by its newest stall, so a stall just checked shows in colour at once (0.35.2); older stalls grey on their own.
+  const at = s.status?.be && s.beNewestAt ? s.beNewestAt : s.statusAt;
+  const stale = !at || Date.now() - at > staleMs(s);
   // Updating a recent value: nothing changes on screen until the answer differs.
   // Grey only when the value is old (or there's none yet).
   if (stale) info = { cls: "stale", text: s.status ? info.text : `<span title="${loading ? "Updating" : "Tap to check"}">↻</span>` };
-  info.old = !!s.status && !!s.statusAt && Date.now() - s.statusAt > oldMs(s);
+  info.old = !!s.status && !!at && Date.now() - at > oldMs(s);
   info.st = s.status || null;
   return info;
 }
@@ -6701,9 +6723,9 @@ $("introNext").addEventListener("click", () => {
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
   { v: "0.35", date: "2026-11-22", title: { en: "Via points on the line", nl: "Viapunten op de lijn", pt: "Pontos intermédios na linha" },
-    items: { en: ["Your via points now show in the list as a white dot with a blue ring on the line, with the distance and time to them.", "Via points and border crossings have a thin line across, and a border flag no longer sits right against a road number. With road rows set to changes only, borders are hidden too; via points always show."],
-      nl: ["Je viapunten staan nu in de lijst als een wit bolletje met een blauwe rand op de lijn, met de afstand en tijd ernaartoe.", "Viapunten en grensovergangen hebben een dunne lijn erdoorheen, en een grensvlag staat niet meer pal tegen een wegnummer. Staan de wegen op alleen wisselingen, dan zijn de grenzen ook verborgen; viapunten staan er altijd."],
-      pt: ["Os seus pontos intermédios aparecem agora na lista como um ponto branco com contorno azul na linha, com a distância e o tempo até lá.", "Os pontos intermédios e as fronteiras têm uma linha fina a atravessá-los, e a bandeira de uma fronteira já não fica colada a um número de estrada. Com as estradas só nas mudanças, as fronteiras também ficam ocultas; os pontos intermédios aparecem sempre."] } },
+    items: { en: ["Your via points now show in the list as a white dot with a blue ring on the line, with the distance and time to them.", "Via points and border crossings have a thin line across, and a border flag no longer sits right against a road number. With road rows set to changes only, borders are hidden too; via points always show.", "Belgium: each charge point that has just been checked turns green or red straight away, while the others stay grey until their turn, also after you come back to the app."],
+      nl: ["Je viapunten staan nu in de lijst als een wit bolletje met een blauwe rand op de lijn, met de afstand en tijd ernaartoe.", "Viapunten en grensovergangen hebben een dunne lijn erdoorheen, en een grensvlag staat niet meer pal tegen een wegnummer. Staan de wegen op alleen wisselingen, dan zijn de grenzen ook verborgen; viapunten staan er altijd.", "België: elk laadpunt dat net is gecontroleerd wordt meteen groen of rood, de andere blijven grijs tot ze aan de beurt zijn, ook als je terugkomt in de app."],
+      pt: ["Os seus pontos intermédios aparecem agora na lista como um ponto branco com contorno azul na linha, com a distância e o tempo até lá.", "Os pontos intermédios e as fronteiras têm uma linha fina a atravessá-los, e a bandeira de uma fronteira já não fica colada a um número de estrada. Com as estradas só nas mudanças, as fronteiras também ficam ocultas; os pontos intermédios aparecem sempre.", "Bélgica: cada posto acabado de verificar fica logo verde ou vermelho, e os outros ficam cinzentos até chegar a sua vez, também quando volta à app."] } },
   { v: "0.34", date: "2026-11-22", title: { en: "Brands by country", nl: "Merken per land", pt: "Marcas por país" },
     items: { en: ["The start screen shows your brands in one row. Tap it for the list: brands found in several countries first, then brands found mainly in Germany or France, under their flag, each with All or None."],
       nl: ["Het startscherm toont je merken in één regel. Tik erop voor de lijst: eerst merken die in meerdere landen zitten, dan merken die vooral in Duitsland of Frankrijk zitten, onder hun vlag, elk met Alle of Geen."],

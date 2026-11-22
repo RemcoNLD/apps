@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.30.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.31.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1241,7 +1241,7 @@
   </div>
   <ul id="fromResults" class="results"></ul>
 
-  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT, FR, PT · BE (tap)</span></div>
+  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT, FR, PT · BE (next site)</span></div>
   <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
   <div class="brands-head" style="margin-top:14px"><span>Charging power</span><span class="hint">Change any time</span></div>
   <div class="power" role="group" aria-label="Minimum charging power" data-power>
@@ -1606,7 +1606,7 @@ const I18N_TEXT = {
 "Remove via point": "Viapunt verwijderen",
 "Clear": "Wissen",
 "Chargers": "Laders",
-"Live: NL, DE, AT, FR, PT · BE (tap)": "Live: NL, DE, AT, FR, PT · BE (tik)",
+"Live: NL, DE, AT, FR, PT · BE (next site)": "Live: NL, DE, AT, FR, PT · BE (eerstvolgende)",
 "Charging power": "Laadvermogen",
 "Change any time": "Altijd te wijzigen",
 "Minimum charging power": "Minimaal laadvermogen",
@@ -1880,7 +1880,7 @@ const I18N_TEXT = {
 "Remove via point": "Remover ponto intermédio",
 "Clear": "Limpar",
 "Chargers": "Carregadores",
-"Live: NL, DE, AT, FR, PT · BE (tap)": "Em direto: NL, DE, AT, FR, PT · BE (toque)",
+"Live: NL, DE, AT, FR, PT · BE (next site)": "Em direto: NL, DE, AT, FR, PT · BE (próximo local)",
 "Charging power": "Potência de carregamento",
 "Change any time": "Pode mudar a qualquer momento",
 "Minimum charging power": "Potência mínima de carregamento",
@@ -2073,7 +2073,7 @@ const HELP_I18N = {
   <div class="cupd">
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">Elke minuut vanzelf; <b>tik op een lader</b> om hem nu bij te werken.</div>
     <div class="k">${flags("FR","PT")}</div><div class="v">Vanzelf, elke 5 minuten: zo vaak als de landelijke bron bijwerkt. De ringen worden pas na 8 minuten grijs.</div>
-    <div class="k">${flags("BE")}</div><div class="v">Tik op een locatie: de laders worden één voor één gecontroleerd (± 10 s per stuk) en de ring vult zich. Tot dan zie je de laatste controle, door jou of iemand anders, grijs naar leeftijd.</div>
+    <div class="k">${flags("BE")}</div><div class="v">De eerstvolgende Belgische locatie op je route werkt vanzelf elke 10 minuten bij zolang de app open is, lader voor lader (± 10 s per stuk). Tik op een locatie om die nu te controleren. Tot dan zie je de laatste controle, door jou of iemand anders, grijs naar leeftijd.</div>
   </div>
   <p>Een lader die nu vrij is, is misschien niet meer vrij als je aankomt.</p>
 
@@ -2156,7 +2156,7 @@ const HELP_I18N = {
   <div class="cupd">
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">A cada minuto, sozinho; <b>toque num carregador</b> para o atualizar já.</div>
     <div class="k">${flags("FR","PT")}</div><div class="v">Sozinho, a cada 5 minutos: tantas vezes quanto a fonte nacional atualiza. Os anéis só ficam cinzentos após 8 minutos.</div>
-    <div class="k">${flags("BE")}</div><div class="v">Toque num local: os carregadores são verificados um a um (± 10 s cada) e o anel vai-se preenchendo. Até lá, mostra a última verificação, sua ou de outra pessoa, a cinzento conforme a idade.</div>
+    <div class="k">${flags("BE")}</div><div class="v">O próximo local belga no seu percurso atualiza-se sozinho a cada 10 minutos enquanto a app está aberta, carregador a carregador (± 10 s cada). Toque num local para o verificar já. Até lá, mostra a última verificação, sua ou de outra pessoa, a cinzento conforme a idade.</div>
   </div>
   <p>Um carregador livre agora pode já não estar livre quando chegar.</p>
 
@@ -2342,6 +2342,10 @@ const oldMs = (s) => (snapCountry(s) ? PT_OLD_MS : OLD_MS);
 // most once a minute per site. Before a tap the ring shows the stalls as dashed segments.
 const BE_GAP_MS = 10 * 1000 + 300;
 const BE_COOLDOWN_MS = 60 * 1000;
+// Since 0.31 the next Belgian site ahead also updates by itself: at most once per 10 minutes while the
+// app is open (counting anyone's checks), right away when the app is opened again if it's due, and a
+// round cut short (app closed or in the background) carries on with the stalls it hadn't done yet.
+const BE_AUTO_MS = 10 * 60 * 1000;
 const tapOnly = (s) => s.country === "BE";
 // Chargers whose status comes from /status (since 0.30 France too; Belgium goes per stall).
 const viaStatus = (s) => !tapOnly(s);
@@ -3992,7 +3996,7 @@ function startDriving({ resume = false } = {}) {
   state.statusTimer = setInterval(refreshStatus, STATUS_EVERY_MS);
   keepAwake();
   render();
-  setTimeout(() => refreshStatus(false), 300); // what's on screen and not known yet
+  setTimeout(() => { refreshStatus(false); beOpenCheck(); }, 300); // what's on screen and not known yet; the next Belgian site
   refreshDebugInfo(true);
 }
 
@@ -4666,6 +4670,7 @@ async function refreshStatus(force = true) {
   fetchDetours(detourCandidates(inView));
   fetchPlaces(); // rows on screen and the next few above them
   matchBelgium();
+  beAuto();
   // Paid: also the next chargers ahead, not only those on screen.
   const pool = state.paid ? [...new Set([...inView, ...upcomingShown().slice(0, PAID_AHEAD)])] : inView;
   const todo = pool.filter((s) => viaStatus(s) && !busy(s) && (force || !s.statusAt || now - Math.max(s.statusAt, s.askedAt || 0) > FRESH_MS));
@@ -4690,15 +4695,16 @@ async function refreshStatus(force = true) {
 // Once per charger; the ring then shows its stalls dashed until you tap.
 let beMatchBusy = false;
 const BE_MATCH_V = 2; // raise when the index's stall ids change: chargers already matched are matched again
-async function matchBelgium() {
+// With only: ask again for these sites (the app opened again: other phones' checks since then).
+async function matchBelgium(only = null) {
   if (beMatchBusy || !state.route) return;
-  const todo = upcoming().filter((s) => s.country === "BE" && (!s.beMatchedAt || s.beMatchV !== BE_MATCH_V)).slice(0, 150);
+  const todo = only || upcoming().filter((s) => s.country === "BE" && (!s.beMatchedAt || s.beMatchV !== BE_MATCH_V)).slice(0, 150);
   if (!todo.length) return;
   beMatchBusy = true;
   try {
     const r = await api("/be-status", { minKw: minKw(), stations: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 20000, false);
     const before = new Map(todo.map((s) => [s.id, s.status]));
-    for (const s of todo) { s.beMatchedAt = Date.now(); s.beMatchV = BE_MATCH_V; s.beDoneAt = 0; }
+    for (const s of todo) { if (!only) s.beDoneAt = 0; s.beMatchedAt = Date.now(); s.beMatchV = BE_MATCH_V; }
     applyStatus(r.status || {});
     for (const s of todo) {
       // Each stall's last known state: the server's (any phone's taps) or this phone's, whichever is newer.
@@ -4712,6 +4718,7 @@ async function matchBelgium() {
     beMatchBusy = false;
     save(); render();
   }
+  beAuto();
 }
 // A Belgian site's stalls: keep the newest answer per stall; the site's age is its oldest stall's
 // (a ring is only as fresh as its oldest part). No answers at all: not checked (↻ until tapped).
@@ -4736,7 +4743,7 @@ function beCounts(st) {
 }
 // Belgium, step 2 (a tap): the site's stalls one by one, about 10 s apart. One site at a time.
 let beBusy = null, beNextAt = 0;
-async function refreshBelgium(members) {
+async function refreshBelgium(members, { auto = false } = {}) {
   const sites = members.filter((s) => s.country === "BE" && !s.liveDup);
   const ready = sites.filter((s) => s.status?.evseIds?.length);
   if (!ready.length) {
@@ -4745,28 +4752,35 @@ async function refreshBelgium(members) {
     if (stale.length) { for (const s of stale) s.beMatchedAt = 0; matchBelgium(); return "Belgium: finding this site’s stalls · tap again in a moment"; }
     return "No live data for this Belgian site";
   }
-  if (beBusy) return `Belgium: still checking ${beBusy} · one site at a time`;
+  if (beBusy) return auto ? null : `Belgium: still checking ${beBusy} · one site at a time`;
   const now = Date.now();
-  const due = ready.filter((s) => !s.beDoneAt || now - s.beDoneAt >= BE_COOLDOWN_MS);
+  const due = auto ? ready : ready.filter((s) => !s.beDoneAt || now - s.beDoneAt >= BE_COOLDOWN_MS);
   if (!due.length) {
     const last = Math.max(...ready.map((s) => s.beDoneAt));
     return `Checked ${waitText(now - last)} ago · next update in ${waitText(last + BE_COOLDOWN_MS - now)}`;
   }
-  const n = due.reduce((a, s) => a + s.status.evseIds.length, 0);
-  toast(`Belgium: checking ${n} stall${n === 1 ? "" : "s"} · about ${waitText(Math.max(0, n - 1) * BE_GAP_MS + 2000)}`, 3200);
+  // A round remembers when it started (kept on the device), so a round cut short skips the stalls it already did.
+  for (const s of due) if (!s.beRoundAt || now - s.beRoundAt > BE_AUTO_MS) s.beRoundAt = now;
+  const left = (s) => s.status.evseIds.filter((id) => !((s.status.stalls || {})[id]?.got >= s.beRoundAt));
+  const n = due.reduce((a, s) => a + left(s).length, 0);
+  if (!auto) toast(`Belgium: checking ${n} stall${n === 1 ? "" : "s"} · about ${waitText(Math.max(0, n - 1) * BE_GAP_MS + 2000)}`, 3200);
+  if (auto) for (const s of due) s.beAutoAt = now;
   beBusy = (() => { try { return siteName(due[0]); } catch (_) { return null; } })() || "a site";
-  let why = null;
+  let why = null, paused = false;
   try {
-    for (const s of due) {
+    sites: for (const s of due) {
       const st = s.status;
       st.stalls = st.stalls || {}; // a new round: the last known stalls stay (grey by age) and are replaced one by one
       let beFails = 0;
       Object.assign(st, beCounts(st));
-      for (const evse of st.evseIds) {
+      for (const evse of left(s)) {
         for (let tries = 0; ; tries++) {
+          // The app went to the background: stop here; the round carries on when it's back (beAuto, or a tap).
+          if (document.visibilityState !== "visible") { paused = true; break sites; }
           s.loadingAt = Date.now(); render();
           const wait = beNextAt - Date.now();
           if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+          if (document.visibilityState !== "visible") { paused = true; break sites; }
           s.loadingAt = Date.now();
           let r;
           try { r = await api(`/be-evse?id=${encodeURIComponent(evse)}`, null, 20000, true); }
@@ -4781,13 +4795,15 @@ async function refreshBelgium(members) {
             continue;
           }
           beNextAt = r.cached ? beNextAt : Date.now() + BE_GAP_MS;
-          st.stalls[evse] = { kind: r.kind, raw: r.raw || null, at: r.checkedAt || new Date().toISOString() };
+          st.stalls[evse] = { kind: r.kind, raw: r.raw || null, at: r.checkedAt || new Date().toISOString(), got: Date.now() };
           beFails = 0;
           beMergeStalls(s, null);
+          save(); // so a reload (iOS closing the app) carries on after this stall
           break;
         }
       }
       s.beDoneAt = Date.now();
+      s.beRoundAt = null;
       const r = ringParts(st);
       if (r.nores === r.total) why = "Eco-Movement gave no live status for this site";
       else if (r.nores) why = `${r.nores} of ${r.total} stalls without live status`;
@@ -4795,12 +4811,36 @@ async function refreshBelgium(members) {
   } catch (e) {
     reportError(`Belgium: ${e.message}`);
     why = "Belgium couldn’t be updated";
+    for (const s of due) s.beRoundAt = null; // a failed round isn't carried on; the next one starts over
   } finally {
     for (const s of sites) s.loadingAt = null;
     beBusy = null;
     save(); render();
   }
-  return why;
+  return paused || auto ? null : why;
+}
+// The next Belgian site ahead (that has stalls to ask), on its own: due when its oldest stall is
+// over 10 minutes old (anyone's check counts) or a round of it was cut short. Never twice within
+// 10 minutes, so a site whose stalls keep failing isn't asked every minute.
+function beNextSite() {
+  return upcomingShown().find((s) => s.country === "BE" && s.status?.evseIds?.length) || null;
+}
+function beAuto() {
+  if (beBusy || document.visibilityState !== "visible" || $("drive").hidden || !state.route || state.arrived) return;
+  if (localStorage.getItem("evailability-trial")) return; // trial keys have no Belgium
+  const s = beNextSite();
+  if (!s) return;
+  const now = Date.now();
+  const cut = s.beRoundAt && now - s.beRoundAt <= BE_AUTO_MS;
+  if (!cut && s.beAutoAt && now - s.beAutoAt < BE_AUTO_MS) return;
+  if (!cut && s.statusAt && now - s.statusAt < BE_AUTO_MS) return;
+  refreshBelgium([s], { auto: true });
+}
+// The app opened again (or reloaded): fetch the next site's last known stalls from the server first
+// (other phones may have checked it meanwhile), then beAuto decides.
+function beOpenCheck() {
+  const s = beNextSite();
+  if (s && !localStorage.getItem("evailability-trial")) matchBelgium([s]); else beAuto();
 }
 
 // After scrolling: wait until the list has been still for a moment, then fetch what's in view.
@@ -4857,7 +4897,7 @@ function awakeText() {
   return `Screen may turn off${state.awakeError ? ` (${state.awakeError})` : ""}. Tap the screen once while driving.`;
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && !$("drive").hidden) { keepAwake(); refreshStatus(); }
+  if (document.visibilityState === "visible" && !$("drive").hidden) { keepAwake(); refreshStatus(); beOpenCheck(); }
 });
 // A tap lets iOS start what it refused without one.
 for (const ev of ["touchend", "click"]) document.addEventListener(ev, () => { if (!$("drive").hidden) keepAwake(); }, { passive: true });
@@ -6508,6 +6548,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.31", date: "2026-11-22", title: { en: "Belgium by itself", nl: "België vanzelf", pt: "Bélgica sozinha" },
+    items: { en: ["The next Belgian site on your route updates by itself every 10 minutes while the app is open. When you open the app again it checks straight away and finishes a check that was cut short. Tap any site to check it now."],
+      nl: ["De eerstvolgende Belgische locatie op je route werkt vanzelf elke 10 minuten bij zolang de app open is. Open je de app opnieuw, dan controleert hij meteen en maakt hij een onderbroken controle af. Tik op een locatie om die nu te controleren."],
+      pt: ["O próximo local belga no seu percurso atualiza-se sozinho a cada 10 minutos enquanto a app está aberta. Ao abrir a app de novo, verifica logo e termina uma verificação que ficou a meio. Toque num local para o verificar já."] } },
   { v: "0.30", date: "2026-11-22", title: { en: "Last known status", nl: "Laatst bekende status", pt: "Último estado conhecido" },
     items: { en: ["After planning or changing a route, every charger shows its last known status straight away, greyed by its age, instead of ↻. Press and hold to see when it was checked.", "France updates by itself every 5 minutes, like Portugal: no more tapping.", "Belgium shows the stalls’ last check (by anyone) until you tap for a fresh one."],
       nl: ["Na het plannen of wijzigen van een route toont elke lader meteen zijn laatst bekende status, grijs naar leeftijd, in plaats van ↻. Houd ingedrukt om te zien wanneer die is gecontroleerd.", "Frankrijk werkt vanzelf elke 5 minuten bij, net als Portugal: niet meer tikken.", "België toont de laatste controle van de laadpunten (door wie dan ook) tot je tikt voor een nieuwe."],
@@ -6700,7 +6744,7 @@ function helpHtml() {
   <div class="cupd">
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">Every minute by itself; <b>tap a charger</b> to update it now.</div>
     <div class="k">${flags("FR","PT")}</div><div class="v">By itself, every 5 minutes: as often as the national source updates. Their rings grey only after 8 minutes.</div>
-    <div class="k">${flags("BE")}</div><div class="v">Tap a site: its chargers are checked one by one (about 10 s each) and the ring fills in. Until then it shows the last check, by you or anyone else, greyed by its age.</div>
+    <div class="k">${flags("BE")}</div><div class="v">The next Belgian site on your route updates by itself every 10 minutes while the app is open, charger by charger (about 10 s each). Tap any site to check it now. Until then it shows the last check, by you or anyone else, greyed by its age.</div>
   </div>
   <p>A charger that's free now may not be free when you arrive.</p>
 

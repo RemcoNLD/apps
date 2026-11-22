@@ -67,7 +67,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.4.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.5.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1773,11 +1773,11 @@ function beSitesNear(index, brand, lat, lon, km) {
 }
 // Belgium's last known state (Worker 0.4.0), like ParkPilot's stored waiting times: every stall answer
 // from Eco-Movement is kept in one KV record "be-last" = {evse: [kind, checkedAt, raw]}, written only when
-// a stall's state changes or its stored value is over 10 minutes old, so a tap's answers outlive the
+// a stall's state changes or its stored value is over 30 minutes old (10 until Worker 0.5.0), so a tap's answers outlive the
 // 60-second memory cache and every Worker copy. /be-status sends them with each site, so a new route
 // (or a replan) shows the stalls' last known state at once; the app greys it by its age.
 const BE_LAST_KEY = "be-last";
-const BE_LAST_REWRITE_MS = 10 * 60 * 1000;
+const BE_LAST_REWRITE_MS = 30 * 60 * 1000; // 0.5.0: was 10 min; the app (0.31) checks the next Belgian site every 10 min, so an unchanged stall would be rewritten every round
 const BE_LAST_KEEP_MS = 7 * 24 * 3600 * 1000;
 let beLastState = null; // { at, data } — read at most once a minute per Worker copy
 async function beLast(env, fresh = false) {

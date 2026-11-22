@@ -146,7 +146,7 @@ EXACT = {
 "Remove via point": ("Viapunt verwijderen", "Remover ponto intermédio"),
 "Clear": ("Wissen", "Limpar"),
 "Chargers": ("Laders", "Carregadores"),
-"Live: NL, DE, AT, FR, PT · BE (tap)": ("Live: NL, DE, AT, FR, PT · BE (tik)", "Em direto: NL, DE, AT, FR, PT · BE (toque)"),
+"Live: NL, DE, AT, FR, PT · BE (next site)": ("Live: NL, DE, AT, FR, PT · BE (eerstvolgende)", "Em direto: NL, DE, AT, FR, PT · BE (próximo local)"),
 "Charging power": ("Laadvermogen", "Potência de carregamento"),
 "Change any time": ("Altijd te wijzigen", "Pode mudar a qualquer momento"),
 "Minimum charging power": ("Minimaal laadvermogen", "Potência mínima de carregamento"),

@@ -1,0 +1,38 @@
+# France live status: reads transport.data.gouv.fr's national IRVE dynamic file (CSV, ~9.5 MB) and keeps
+# only the points in data/fr-fast-sites.json, as fr-status.json on the branch "live-fr" (force-pushed:
+# one commit, no history, no Pages build). The Worker reads that small file, so France updates by itself
+# like the other countries. GitHub's own 5-minute schedule often starts late, so the Worker's timer also
+# starts it (as the GitHub App "EVailability timer").
+name: France live
+on:
+  schedule:
+    - cron: "3-59/5 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: fr-live
+  cancel-in-progress: false
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            tools
+            data/fr-fast-sites.json
+          sparse-checkout-cone-mode: false
+      - name: Read the live file
+        run: python3 tools/build-fr-status.py /tmp/fr-status.json
+      - name: Publish to the live-fr branch
+        run: |
+          mkdir /tmp/live && cd /tmp/live
+          git init -q -b live-fr
+          cp /tmp/fr-status.json .
+          git config user.name "fr-live-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add fr-status.json
+          git commit -q -m "France live status $(date -u +%H:%M)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" live-fr

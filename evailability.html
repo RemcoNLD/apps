@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.29.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.30.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1241,7 +1241,7 @@
   </div>
   <ul id="fromResults" class="results"></ul>
 
-  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT, PT · FR, BE (tap)</span></div>
+  <div class="brands-head"><span id="brandsLabel">Chargers</span><span class="hint">Live: NL, DE, AT, FR, PT · BE (tap)</span></div>
   <div class="brands" id="brands" role="group" aria-labelledby="brandsLabel"></div>
   <div class="brands-head" style="margin-top:14px"><span>Charging power</span><span class="hint">Change any time</span></div>
   <div class="power" role="group" aria-label="Minimum charging power" data-power>
@@ -1606,7 +1606,7 @@ const I18N_TEXT = {
 "Remove via point": "Viapunt verwijderen",
 "Clear": "Wissen",
 "Chargers": "Laders",
-"Live: NL, DE, AT, PT · FR, BE (tap)": "Live: NL, DE, AT, PT · FR, BE (tik)",
+"Live: NL, DE, AT, FR, PT · BE (tap)": "Live: NL, DE, AT, FR, PT · BE (tik)",
 "Charging power": "Laadvermogen",
 "Change any time": "Altijd te wijzigen",
 "Minimum charging power": "Minimaal laadvermogen",
@@ -1880,7 +1880,7 @@ const I18N_TEXT = {
 "Remove via point": "Remover ponto intermédio",
 "Clear": "Limpar",
 "Chargers": "Carregadores",
-"Live: NL, DE, AT, PT · FR, BE (tap)": "Em direto: NL, DE, AT, PT · FR, BE (toque)",
+"Live: NL, DE, AT, FR, PT · BE (tap)": "Em direto: NL, DE, AT, FR, PT · BE (toque)",
 "Charging power": "Potência de carregamento",
 "Change any time": "Pode mudar a qualquer momento",
 "Minimum charging power": "Potência mínima de carregamento",
@@ -2033,7 +2033,7 @@ const I18N_TEXT = {
 "Destination · 108 km": "Destino · 108 km"
 }
 };
-const I18N_PATTERNS = [["^Arrive (.+)$", "Aankomst $1", "Chegada $1"], ["^Signed in as (.+)$", "Ingelogd als $1", "Sessão iniciada como $1"], ["^(\\d+) of (\\d+) free\\.$", "$1 van $2 vrij.", "$1 de $2 livres."], ["^(\\d+) of (\\d+) free$", "$1 van $2 vrij", "$1 de $2 livres"], ["^(\\d+) in use, (\\d+) out of order\\.$", "$1 in gebruik, $2 buiten gebruik.", "$1 em uso, $2 avariados."], ["^(\\d+) in use\\.$", "$1 in gebruik.", "$1 em uso."], ["^(\\d+) out of order\\.$", "$1 buiten gebruik.", "$1 avariados."], ["^(\\d+) in use$", "$1 in gebruik", "$1 em uso"], ["^(\\d+) out of order$", "$1 buiten gebruik", "$1 avariados"], ["^Last change at the site: (.+) \\((.+)\\)$", "Laatste wijziging op de locatie: $1 ({t:$2})", "Última alteração no local: $1 ({t:$2})"], ["^(\\d+) min ago$", "$1 min geleden", "há $1 min"], ["^(\\d+) h (\\d+) min ago$", "$1 u $2 min geleden", "há $1 h $2 min"], ["^(\\d+) h ago$", "$1 u geleden", "há $1 h"], ["^All in use since (.+)$", "Alles bezet sinds $1", "Tudo ocupado desde $1"], ["^\\((.+)\\)$", "({t:$1})", "({t:$1})"], ["^, no change since (.+) \\((.+)\\)$", ", geen wijziging sinds $1 ({t:$2})", ", sem alterações desde $1 ({t:$2})"], ["^Last full at (.+) \\((.+)\\)\\.$", "Laatst vol om $1 ({t:$2}).", "Esteve cheio pela última vez às $1 ({t:$2})."], ["^Checked (\\d+) s ago · next update in (.+)$", "$1 s geleden gecontroleerd · volgende update over $2", "Verificado há $1 s · próxima atualização daqui a $2"], ["^Checked (.+) ago · next update in (.+)$", "$1 geleden gecontroleerd · volgende update over $2", "Verificado há $1 · próxima atualização daqui a $2"], ["^Updated less than a minute ago · next in (.+)$", "Minder dan een minuut geleden bijgewerkt · volgende over $1", "Atualizado há menos de um minuto · próxima daqui a $1"], ["^France checked (.+) ago · next update in (.+)$", "Frankrijk {t:$1} geleden gecontroleerd · volgende update over $2", "França verificada há {t:$1} · próxima atualização daqui a $2"], ["^France paused after an error · next update in (.+)$", "Frankrijk gepauzeerd na een fout · volgende update over $1", "França em pausa após um erro · próxima atualização daqui a $1"], ["^France couldn’t be updated; paused for (\\d+) min$", "Frankrijk kon niet worden bijgewerkt; $1 min gepauzeerd", "Não foi possível atualizar a França; em pausa durante $1 min"], ["^Belgium: still checking (.+) · one site at a time$", "België: nog bezig met $1 · één locatie tegelijk", "Bélgica: ainda a verificar $1 · um local de cada vez"], ["^Belgium: checking (\\d+) stalls? · about (.+)$", "België: $1 laadpunt(en) controleren · ongeveer $2", "Bélgica: a verificar $1 posto(s) · cerca de $2"], ["^(\\d+) fast stalls · tap to check$", "$1 snellaadpunten · tik om te controleren", "$1 postos rápidos · toque para verificar"], ["^(\\d+) of (\\d+) stalls without live status$", "$1 van $2 laadpunten zonder live status", "$1 de $2 postos sem estado em direto"], ["^(\\d+) not checked$", "$1 niet gecontroleerd", "$1 não verificados"], ["^(\\d+) without live status$", "$1 zonder live status", "$1 sem estado em direto"], ["^(\\d+)(st|nd|rd|th) exit$", "$1e afslag", "$1.ª saída"], ["^(\\d+) min$", "$1 min", "$1 min"], ["^(\\d+) min old · tap to retry$", "$1 min oud · tik om opnieuw te proberen", "$1 min de idade · toque para tentar novamente"], ["^(.+) km off route$", "$1 km van de route", "$1 km fora do percurso"], ["^Trial: (\\d+) days? and (\\d+) routes? left · live status in the Netherlands only$", "Proef: nog $1 dag(en) en $2 route(s) · live status alleen in Nederland", "Experiência: faltam $1 dia(s) e $2 percurso(s) · estado em direto só nos Países Baixos"], ["^· (\\d+) days? · (\\d+) routes? left$", "· nog $1 dag(en) · $2 route(s)", "· faltam $1 dia(s) · $2 percurso(s)"], ["^· (\\d+) days? and (\\d+) routes? left$", "· nog $1 dag(en) en $2 route(s)", "· faltam $1 dia(s) e $2 percurso(s)"], ["^Live status in the Netherlands · full access via the start screen$", "Live status in Nederland · volledige toegang via het startscherm", "Estado em direto nos Países Baixos · acesso completo no ecrã inicial"], ["^Thanks for trying EVailability! You can extend it once by (\\d+) days? and (\\d+) routes, or ask for a full key\\.$", "Bedankt voor het proberen van EVailability! Je kunt de proefperiode één keer verlengen met $1 dag en $2 routes, of een volledige sleutel aanvragen.", "Obrigado por experimentar o EVailability! Pode prolongá-lo uma vez por $1 dia e $2 percursos, ou pedir uma chave completa."], ["^(.+) Your request for full access is waiting; this app opens again by itself once it’s approved\\.$", "{t:$1} Je aanvraag voor volledige toegang staat open; de app opent vanzelf weer zodra die is goedgekeurd.", "{t:$1} O seu pedido de acesso completo está pendente; a app volta a abrir sozinha quando for aprovado."], ["^(.+) Ask the person who gave it to you for a new one\\.$", "{t:$1} Vraag degene die hem je gaf om een nieuwe.", "{t:$1} Peça uma nova a quem lha deu."], ["^Couldn’t compare routes \\((.+)\\)\\. Planned the fastest\\.$", "Routes vergelijken mislukt ({t:$1}). De snelste is gepland.", "Não foi possível comparar percursos ({t:$1}). Foi planeado o mais rápido."], ["^Couldn’t replan: (.+)$", "Opnieuw plannen mislukt: {t:$1}", "Não foi possível voltar a planear: {t:$1}"], ["^Couldn’t reroute: (.+)$", "Nieuwe route mislukt: {t:$1}", "Não foi possível recalcular: {t:$1}"], ["^New route around (.+)\\.$", "Nieuwe route om {t:$1} heen.", "Novo percurso a contornar {t:$1}."], ["^Planning a route around (.+)…$", "Route om {t:$1} heen plannen…", "A planear um percurso a contornar {t:$1}…"], ["^No way around (.+) found\\. The route still goes through\\.$", "Geen weg om {t:$1} heen gevonden. De route gaat er nog doorheen.", "Não foi encontrada alternativa a {t:$1}. O percurso continua a passar por lá."], ["^Couldn’t plan a route around (.+)\\. Try again in a moment\\.$", "Kon geen route om {t:$1} heen plannen. Probeer het zo opnieuw.", "Não foi possível planear um percurso a contornar {t:$1}. Tente daqui a pouco."], ["^this closure$", "deze afsluiting", "este corte"], ["^these closures$", "deze afsluitingen", "estes cortes"], ["^the closure$", "de afsluiting", "o corte"], ["^(\\d+) closures$", "$1 afsluitingen", "$1 cortes"], ["^(.+) closed$", "$1 afgesloten", "$1 cortada"], ["^until (.+)$", "tot $1", "até $1"], ["^from (.+) to (.+)$", "van $1 tot $2", "de $1 até $2"], ["^Add (\\d+) and replan$", "$1 toevoegen en opnieuw plannen", "Adicionar $1 e voltar a planear"], ["^No more easy-to-reach chargers\\. (\\d+) that needs? a longer detour (?:is|are) hidden\\.$", "Geen makkelijk bereikbare laders meer. $1 met langer omrijden verborgen.", "Não há mais carregadores de fácil acesso. $1 com desvio maior ocultos."], ["^(\\d+) Ionity sites? along the way$", "$1 Ionity-locatie(s) onderweg", "$1 local(is) Ionity pelo caminho"], ["^Via (.+) \\(your via point\\)$", "Via $1 (jouw viapunt)", "Por $1 (o seu ponto intermédio)"], ["^The route service \\(openrouteservice\\) isn’t answering properly right now \\((\\d+)\\)\\. It’s usually back within a few minutes; try again then\\.$", "De routeservice (openrouteservice) reageert nu niet goed ($1). Meestal werkt het binnen een paar minuten weer; probeer het dan opnieuw.", "O serviço de rotas (openrouteservice) não está a responder bem neste momento ($1). Normalmente volta dentro de alguns minutos; tente nessa altura."], ["^Probably not live: no change at the site for (\\d+) h\\. Last reported (\\d+) of (\\d+) free$", "Waarschijnlijk niet live: $1 u geen wijziging op de locatie. Laatst gemeld $2 van $3 vrij", "Provavelmente não está em direto: sem alterações no local há $1 h. Último registo: $2 de $3 livres"], ["^The source last reported (\\d+) of (\\d+) free, but nothing has changed at the site since (.+) \\((.+)\\)\\. The real state is unknown\\.$", "De bron meldde laatst $1 van $2 vrij, maar er is sinds $3 ({t:$4}) niets veranderd op de locatie. De werkelijke stand is onbekend.", "A fonte registou por último $1 de $2 livres, mas nada mudou no local desde $3 ({t:$4}). O estado real é desconhecido."], ["^(.+)\\. Tap to update$", "$1. Tik om bij te werken", "$1. Toque para atualizar"], ["^Beyond an exit, on the (left|right)$", "Na een afrit, aan de {t:$1}", "Depois de uma saída, à {t:$1}"], ["^left$", "linkerkant", "esquerda"], ["^right$", "rechterkant", "direita"], ["^\\+(\\d+) min detour(.*)$", "+$1 min omrijden$2", "+$1 min de desvio$2"], ["^(\\d+) minutes extra to get there and back$", "$1 minuten extra heen en terug", "$1 minutos extra para ir e voltar"], ["^Detours: (.+)$", "Omrijden: $1", "Desvios: $1"], ["^(\\d+) of (\\d+)$", "$1 van $2", "$1 de $2"]];
+const I18N_PATTERNS = [["^Arrive (.+)$", "Aankomst $1", "Chegada $1"], ["^Signed in as (.+)$", "Ingelogd als $1", "Sessão iniciada como $1"], ["^(\\d+) of (\\d+) free\\.$", "$1 van $2 vrij.", "$1 de $2 livres."], ["^(\\d+) of (\\d+) free$", "$1 van $2 vrij", "$1 de $2 livres"], ["^(\\d+) in use, (\\d+) out of order\\.$", "$1 in gebruik, $2 buiten gebruik.", "$1 em uso, $2 avariados."], ["^(\\d+) in use\\.$", "$1 in gebruik.", "$1 em uso."], ["^(\\d+) out of order\\.$", "$1 buiten gebruik.", "$1 avariados."], ["^(\\d+) in use$", "$1 in gebruik", "$1 em uso"], ["^(\\d+) out of order$", "$1 buiten gebruik", "$1 avariados"], ["^Last known, checked at (.+) \\((.+)\\)$", "Laatst bekend, gecontroleerd om $1 ({t:$2})", "Último estado conhecido, verificado às $1 ({t:$2})"], ["^Last change at the site: (.+) \\((.+)\\)$", "Laatste wijziging op de locatie: $1 ({t:$2})", "Última alteração no local: $1 ({t:$2})"], ["^(\\d+) min ago$", "$1 min geleden", "há $1 min"], ["^(\\d+) h (\\d+) min ago$", "$1 u $2 min geleden", "há $1 h $2 min"], ["^(\\d+) h ago$", "$1 u geleden", "há $1 h"], ["^All in use since (.+)$", "Alles bezet sinds $1", "Tudo ocupado desde $1"], ["^\\((.+)\\)$", "({t:$1})", "({t:$1})"], ["^, no change since (.+) \\((.+)\\)$", ", geen wijziging sinds $1 ({t:$2})", ", sem alterações desde $1 ({t:$2})"], ["^Last full at (.+) \\((.+)\\)\\.$", "Laatst vol om $1 ({t:$2}).", "Esteve cheio pela última vez às $1 ({t:$2})."], ["^Checked (\\d+) s ago · next update in (.+)$", "$1 s geleden gecontroleerd · volgende update over $2", "Verificado há $1 s · próxima atualização daqui a $2"], ["^Checked (.+) ago · next update in (.+)$", "$1 geleden gecontroleerd · volgende update over $2", "Verificado há $1 · próxima atualização daqui a $2"], ["^Updated less than a minute ago · next in (.+)$", "Minder dan een minuut geleden bijgewerkt · volgende over $1", "Atualizado há menos de um minuto · próxima daqui a $1"], ["^France checked (.+) ago · next update in (.+)$", "Frankrijk {t:$1} geleden gecontroleerd · volgende update over $2", "França verificada há {t:$1} · próxima atualização daqui a $2"], ["^France paused after an error · next update in (.+)$", "Frankrijk gepauzeerd na een fout · volgende update over $1", "França em pausa após um erro · próxima atualização daqui a $1"], ["^France couldn’t be updated; paused for (\\d+) min$", "Frankrijk kon niet worden bijgewerkt; $1 min gepauzeerd", "Não foi possível atualizar a França; em pausa durante $1 min"], ["^Belgium: still checking (.+) · one site at a time$", "België: nog bezig met $1 · één locatie tegelijk", "Bélgica: ainda a verificar $1 · um local de cada vez"], ["^Belgium: checking (\\d+) stalls? · about (.+)$", "België: $1 laadpunt(en) controleren · ongeveer $2", "Bélgica: a verificar $1 posto(s) · cerca de $2"], ["^(\\d+) fast stalls · tap to check$", "$1 snellaadpunten · tik om te controleren", "$1 postos rápidos · toque para verificar"], ["^(\\d+) of (\\d+) stalls without live status$", "$1 van $2 laadpunten zonder live status", "$1 de $2 postos sem estado em direto"], ["^(\\d+) not checked$", "$1 niet gecontroleerd", "$1 não verificados"], ["^(\\d+) without live status$", "$1 zonder live status", "$1 sem estado em direto"], ["^(\\d+)(st|nd|rd|th) exit$", "$1e afslag", "$1.ª saída"], ["^(\\d+) min$", "$1 min", "$1 min"], ["^(\\d+) min old · tap to retry$", "$1 min oud · tik om opnieuw te proberen", "$1 min de idade · toque para tentar novamente"], ["^(.+) km off route$", "$1 km van de route", "$1 km fora do percurso"], ["^Trial: (\\d+) days? and (\\d+) routes? left · live status in the Netherlands only$", "Proef: nog $1 dag(en) en $2 route(s) · live status alleen in Nederland", "Experiência: faltam $1 dia(s) e $2 percurso(s) · estado em direto só nos Países Baixos"], ["^· (\\d+) days? · (\\d+) routes? left$", "· nog $1 dag(en) · $2 route(s)", "· faltam $1 dia(s) · $2 percurso(s)"], ["^· (\\d+) days? and (\\d+) routes? left$", "· nog $1 dag(en) en $2 route(s)", "· faltam $1 dia(s) e $2 percurso(s)"], ["^Live status in the Netherlands · full access via the start screen$", "Live status in Nederland · volledige toegang via het startscherm", "Estado em direto nos Países Baixos · acesso completo no ecrã inicial"], ["^Thanks for trying EVailability! You can extend it once by (\\d+) days? and (\\d+) routes, or ask for a full key\\.$", "Bedankt voor het proberen van EVailability! Je kunt de proefperiode één keer verlengen met $1 dag en $2 routes, of een volledige sleutel aanvragen.", "Obrigado por experimentar o EVailability! Pode prolongá-lo uma vez por $1 dia e $2 percursos, ou pedir uma chave completa."], ["^(.+) Your request for full access is waiting; this app opens again by itself once it’s approved\\.$", "{t:$1} Je aanvraag voor volledige toegang staat open; de app opent vanzelf weer zodra die is goedgekeurd.", "{t:$1} O seu pedido de acesso completo está pendente; a app volta a abrir sozinha quando for aprovado."], ["^(.+) Ask the person who gave it to you for a new one\\.$", "{t:$1} Vraag degene die hem je gaf om een nieuwe.", "{t:$1} Peça uma nova a quem lha deu."], ["^Couldn’t compare routes \\((.+)\\)\\. Planned the fastest\\.$", "Routes vergelijken mislukt ({t:$1}). De snelste is gepland.", "Não foi possível comparar percursos ({t:$1}). Foi planeado o mais rápido."], ["^Couldn’t replan: (.+)$", "Opnieuw plannen mislukt: {t:$1}", "Não foi possível voltar a planear: {t:$1}"], ["^Couldn’t reroute: (.+)$", "Nieuwe route mislukt: {t:$1}", "Não foi possível recalcular: {t:$1}"], ["^New route around (.+)\\.$", "Nieuwe route om {t:$1} heen.", "Novo percurso a contornar {t:$1}."], ["^Planning a route around (.+)…$", "Route om {t:$1} heen plannen…", "A planear um percurso a contornar {t:$1}…"], ["^No way around (.+) found\\. The route still goes through\\.$", "Geen weg om {t:$1} heen gevonden. De route gaat er nog doorheen.", "Não foi encontrada alternativa a {t:$1}. O percurso continua a passar por lá."], ["^Couldn’t plan a route around (.+)\\. Try again in a moment\\.$", "Kon geen route om {t:$1} heen plannen. Probeer het zo opnieuw.", "Não foi possível planear um percurso a contornar {t:$1}. Tente daqui a pouco."], ["^this closure$", "deze afsluiting", "este corte"], ["^these closures$", "deze afsluitingen", "estes cortes"], ["^the closure$", "de afsluiting", "o corte"], ["^(\\d+) closures$", "$1 afsluitingen", "$1 cortes"], ["^(.+) closed$", "$1 afgesloten", "$1 cortada"], ["^until (.+)$", "tot $1", "até $1"], ["^from (.+) to (.+)$", "van $1 tot $2", "de $1 até $2"], ["^Add (\\d+) and replan$", "$1 toevoegen en opnieuw plannen", "Adicionar $1 e voltar a planear"], ["^No more easy-to-reach chargers\\. (\\d+) that needs? a longer detour (?:is|are) hidden\\.$", "Geen makkelijk bereikbare laders meer. $1 met langer omrijden verborgen.", "Não há mais carregadores de fácil acesso. $1 com desvio maior ocultos."], ["^(\\d+) Ionity sites? along the way$", "$1 Ionity-locatie(s) onderweg", "$1 local(is) Ionity pelo caminho"], ["^Via (.+) \\(your via point\\)$", "Via $1 (jouw viapunt)", "Por $1 (o seu ponto intermédio)"], ["^The route service \\(openrouteservice\\) isn’t answering properly right now \\((\\d+)\\)\\. It’s usually back within a few minutes; try again then\\.$", "De routeservice (openrouteservice) reageert nu niet goed ($1). Meestal werkt het binnen een paar minuten weer; probeer het dan opnieuw.", "O serviço de rotas (openrouteservice) não está a responder bem neste momento ($1). Normalmente volta dentro de alguns minutos; tente nessa altura."], ["^Probably not live: no change at the site for (\\d+) h\\. Last reported (\\d+) of (\\d+) free$", "Waarschijnlijk niet live: $1 u geen wijziging op de locatie. Laatst gemeld $2 van $3 vrij", "Provavelmente não está em direto: sem alterações no local há $1 h. Último registo: $2 de $3 livres"], ["^The source last reported (\\d+) of (\\d+) free, but nothing has changed at the site since (.+) \\((.+)\\)\\. The real state is unknown\\.$", "De bron meldde laatst $1 van $2 vrij, maar er is sinds $3 ({t:$4}) niets veranderd op de locatie. De werkelijke stand is onbekend.", "A fonte registou por último $1 de $2 livres, mas nada mudou no local desde $3 ({t:$4}). O estado real é desconhecido."], ["^(.+)\\. Tap to update$", "$1. Tik om bij te werken", "$1. Toque para atualizar"], ["^Beyond an exit, on the (left|right)$", "Na een afrit, aan de {t:$1}", "Depois de uma saída, à {t:$1}"], ["^left$", "linkerkant", "esquerda"], ["^right$", "rechterkant", "direita"], ["^\\+(\\d+) min detour(.*)$", "+$1 min omrijden$2", "+$1 min de desvio$2"], ["^(\\d+) minutes extra to get there and back$", "$1 minuten extra heen en terug", "$1 minutos extra para ir e voltar"], ["^Detours: (.+)$", "Omrijden: $1", "Desvios: $1"], ["^(\\d+) of (\\d+)$", "$1 van $2", "$1 de $2"]];
 // Help manual and intro texts in Dutch and Portuguese (pt-PT). Same structure as the English ones;
 // the ${…} bits (rings, marks, settings) are filled in the same way.
 const HELP_I18N = {
@@ -2066,15 +2066,14 @@ const HELP_I18N = {
     <div class="k">${demoRing(0, 4)}</div><div class="v">Alles bezet.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Uit</b>: gemeld als buiten gebruik, of er is al uren niets veranderd.</div>
     <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grijs met ?</b>: waarschijnlijk niet live. Er is op deze locatie al meer dan een dag niets veranderd (3 dagen bij kleine locaties), dus het getal kan verouderd zijn. De stip op de lijn is hol.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> nog niet gecontroleerd: tik om te controleren. Een vervaagde ring met grijs getal is meer dan 3 minuten oud; een grijze ring met omlijnd getal meer dan 5 minuten. Een draaiende veeg in de stip betekent dat hij bijwerkt; een getal dat verandert springt even op.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> nog niet gecontroleerd: tik om te controleren. Een vervaagde ring met grijs getal is meer dan 3 minuten oud; een grijze ring met omlijnd getal meer dan 5 minuten. Na het plannen toont elke lader zo eerst zijn laatst bekende stand tot hij is bijgewerkt; houd hem ingedrukt om te zien wanneer die is gecontroleerd. Een draaiende veeg in de stip betekent dat hij bijwerkt; een getal dat verandert springt even op.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">Geen live gegevens voor deze lader.</div>
   </div>
   <p>Het aantal telt alleen laders met het gekozen vermogen of meer. Sommige laders verschijnen kort na het plannen.</p>
   <div class="cupd">
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">Elke minuut vanzelf; <b>tik op een lader</b> om hem nu bij te werken.</div>
-    <div class="k">${flags("FR")}</div><div class="v">Tik op een Franse lader: alle Franse laders op je route worden bijgewerkt, hoogstens eens per paar minuten.</div>
-    <div class="k">${flags("BE")}</div><div class="v">Tik op een locatie: de laders worden één voor één gecontroleerd (± 10 s per stuk) en de ring vult zich.</div>
-    <div class="k">${flags("PT")}</div><div class="v">Vanzelf, elke 5 minuten: zo vaak als de Portugese bron bijwerkt. De ringen worden pas na 8 minuten grijs.</div>
+    <div class="k">${flags("FR","PT")}</div><div class="v">Vanzelf, elke 5 minuten: zo vaak als de landelijke bron bijwerkt. De ringen worden pas na 8 minuten grijs.</div>
+    <div class="k">${flags("BE")}</div><div class="v">Tik op een locatie: de laders worden één voor één gecontroleerd (± 10 s per stuk) en de ring vult zich. Tot dan zie je de laatste controle, door jou of iemand anders, grijs naar leeftijd.</div>
   </div>
   <p>Een lader die nu vrij is, is misschien niet meer vrij als je aankomt.</p>
 
@@ -2150,15 +2149,14 @@ const HELP_I18N = {
     <div class="k">${demoRing(0, 4)}</div><div class="v">Tudo ocupado.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Desligado</b>: indicado como avariado, ou nada mudou há horas.</div>
     <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Cinzento com ?</b>: provavelmente não está em direto. Nada mudou neste local há mais de um dia (3 dias em locais pequenos), por isso o número pode estar desatualizado. O ponto na linha fica oco.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> ainda não verificado: toque para verificar. Um anel esbatido com número cinzento tem mais de 3 minutos; um anel cinzento com número contornado mais de 5 minutos. Uma rotação no ponto significa que está a atualizar; um número que muda salta brevemente.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> ainda não verificado: toque para verificar. Um anel esbatido com número cinzento tem mais de 3 minutos; um anel cinzento com número contornado mais de 5 minutos. Depois de planear, cada carregador mostra primeiro assim o último estado conhecido até ser atualizado; mantenha premido para ver quando foi verificado. Uma rotação no ponto significa que está a atualizar; um número que muda salta brevemente.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">Sem dados em direto para este carregador.</div>
   </div>
   <p>A contagem só inclui carregadores com a potência escolhida ou mais. Alguns carregadores aparecem pouco depois de planear.</p>
   <div class="cupd">
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">A cada minuto, sozinho; <b>toque num carregador</b> para o atualizar já.</div>
-    <div class="k">${flags("FR")}</div><div class="v">Toque num carregador francês: todos os carregadores franceses do percurso são atualizados, no máximo de poucos em poucos minutos.</div>
-    <div class="k">${flags("BE")}</div><div class="v">Toque num local: os carregadores são verificados um a um (± 10 s cada) e o anel vai-se preenchendo.</div>
-    <div class="k">${flags("PT")}</div><div class="v">Sozinho, a cada 5 minutos: tantas vezes quanto a fonte portuguesa atualiza. Os anéis só ficam cinzentos após 8 minutos.</div>
+    <div class="k">${flags("FR","PT")}</div><div class="v">Sozinho, a cada 5 minutos: tantas vezes quanto a fonte nacional atualiza. Os anéis só ficam cinzentos após 8 minutos.</div>
+    <div class="k">${flags("BE")}</div><div class="v">Toque num local: os carregadores são verificados um a um (± 10 s cada) e o anel vai-se preenchendo. Até lá, mostra a última verificação, sua ou de outra pessoa, a cinzento conforme a idade.</div>
   </div>
   <p>Um carregador livre agora pode já não estar livre quando chegar.</p>
 
@@ -2333,51 +2331,28 @@ const STATUS_EVERY_MS = 60 * 1000;
 const FRESH_MS = 60 * 1000;         // a charger checked within a minute isn't asked again when it scrolls into view
 const STALE_MS = 3 * 60 * 1000;     // further ones turn grey after 3 minutes; tap to refresh
 const OLD_MS = 5 * 60 * 1000;       // after 5 minutes the numbers are only outlined: really old
-// Portugal's source is a national file published every 5 minutes (read by a job, then by the Worker):
-// its values are typically 2–7 minutes old when they arrive, so they grey later.
+// Portugal and France (0.30) come from national files read every 5 minutes by a job, then by the Worker:
+// their values are typically 2–7 minutes old when they arrive, so they grey later.
 const PT_STALE_MS = 8 * 60 * 1000, PT_OLD_MS = 12 * 60 * 1000;
-const staleMs = (s) => (s.country === "PT" ? PT_STALE_MS : STALE_MS);
-const oldMs = (s) => (s.country === "PT" ? PT_OLD_MS : OLD_MS);
-// France: one national file for the whole country, which the server can read only now and then
-// (it costs more CPU than the free plan allows; automatic updates used up the Worker's allowance on
-// 14 Nov). So France is tap-only: a tap on a French charger updates every French charger on the
-// route at once, at most once per 3 minutes; after a failed lookup France pauses for 15 minutes.
-let FR_MIN_GAP_MS = 5 * 60 * 1000; // the server sends the current value: 0 on Workers Paid, else the usage page setting
-// France's timing survives a reload: the gap the server last sent, when France was last asked, any pause.
-const FR_KEY = "evailability-fr";
-function saveFr() {
-  try { localStorage.setItem(FR_KEY, JSON.stringify({ gapMs: FR_MIN_GAP_MS, pauseMs: FR_FAIL_PAUSE_MS, triedAt: state.frTriedAt || 0, offUntil: state.frOffUntil || 0, offReason: state.frOffReason || null })); } catch (_) {}
-}
-function loadFr() {
-  try {
-    const f = JSON.parse(localStorage.getItem(FR_KEY) || "null");
-    if (!f) return;
-    if (f.gapMs >= 0) FR_MIN_GAP_MS = f.gapMs;
-    if (f.pauseMs > 0) FR_FAIL_PAUSE_MS = f.pauseMs;
-    state.frTriedAt = f.triedAt || 0; state.frOffUntil = f.offUntil || 0; state.frOffReason = f.offReason || null;
-  } catch (_) {}
-}
-let FR_FAIL_PAUSE_MS = 15 * 60 * 1000; // the server sends it: 2 min on Workers Paid, 15 on the free plan
-const FR_MAX = 250; // French chargers per lookup, nearest ahead first
+const snapCountry = (s) => s.country === "PT" || s.country === "FR";
+const staleMs = (s) => (snapCountry(s) ? PT_STALE_MS : STALE_MS);
+const oldMs = (s) => (snapCountry(s) ? PT_OLD_MS : OLD_MS);
 // Belgium: live status exists only per stall, and Eco-Movement allows one request per 10 s. So a tap on
 // a Belgian charger checks that site's fast stalls one by one (the ring fills as answers come in), at
 // most once a minute per site. Before a tap the ring shows the stalls as dashed segments.
 const BE_GAP_MS = 10 * 1000 + 300;
 const BE_COOLDOWN_MS = 60 * 1000;
-const tapOnly = (s) => s.country === "FR" || s.country === "BE";
-// Chargers whose status comes from /status (France has its own national read, Belgium goes per stall).
+const tapOnly = (s) => s.country === "BE";
+// Chargers whose status comes from /status (since 0.30 France too; Belgium goes per stall).
 const viaStatus = (s) => !tapOnly(s);
 // Workers Paid (the server says so with each answer, and switches back by itself after the paid-until
-// date): France updates by itself like NL/DE, and more chargers ahead are kept up to date.
-// Any answer that says Paid also lifts the France gap straight away (it was remembered from the free plan).
+// date): more chargers ahead are kept up to date.
 function setPaid(v) {
   if (typeof v !== "boolean") return;
   state.paid = v;
-  if (v) { FR_MIN_GAP_MS = Math.min(FR_MIN_GAP_MS, 2 * 60 * 1000); FR_FAIL_PAUSE_MS = Math.min(FR_FAIL_PAUSE_MS, 2 * 60 * 1000); }
 }
 const PAID_AHEAD = 15;        // chargers ahead (beyond those on screen) updated each round
 const PAID_STATUS_BATCH = 8;  // stations per /status call
-// France by itself on Paid: at the server's interval (2 minutes unless set on the usage page).
 const STATUS_BATCH = 4; // stations per /status call (the Worker looks up at most 4 Austrian sites per call)
 const PASSED_KM = 0.5;      // a station drops off once you're this far past it
 const SHOW_DETOUR_FROM = 2; // minutes; less than this counts as on your route
@@ -3243,9 +3218,10 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.stations = data.stations;
   state.planBrands = data.brands || ["ionity"];
   setPaid(!!data.paid);
-  // Only the first few come with a status; the rest are fetched once they're on screen.
-  // French ones show ↻ until you tap one (France is tap-only).
-  for (const s of state.stations) s.statusAt = s.statusChecked === false || tapOnly(s) ? null : Date.now();
+  // Only the first few come with a status; the rest are fetched once they're on screen. Until then every
+  // charger shows its last known state from this phone (fillLastKnown), greyed by its real age.
+  for (const s of state.stations) s.statusAt = s.statusChecked === false || tapOnly(s) ? null : statusTime(s.status);
+  fillLastKnown(state.stations);
   state.statusAt = Date.now();
   state.user = { km: 0, min: 0, offKm: 0, acc: null, at: null };
   // Where you were a moment ago, on the new route, so it doesn't say "Waiting for your location"
@@ -4434,6 +4410,8 @@ function visibleAhead() {
 
 // Ask in small batches: each Worker call may only make a limited number of lookups.
 async function fetchStatus(stations) {
+  const asked = Date.now();
+  for (const s of stations) s.askedAt = asked; // snapshot values (FR, PT) arrive minutes old: don't re-ask on every scroll
   const list = stations.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, country: s.country, brand: brandKey(s) }));
   const batches = [];
   const per = state.paid ? PAID_STATUS_BATCH : STATUS_BATCH;
@@ -4446,8 +4424,51 @@ async function fetchStatus(stations) {
   applyStatus(status);
 }
 
-// Put new statuses on the chargers. A status's age counts from when the server read it (checkedAt),
-// so a French value from a read 80 s ago doesn't look brand new.
+// When a status was read at its source (checkedAt), so an old value never looks brand new (0.30: before,
+// anything over 10 minutes old counted as read just now). A clock a little ahead of ours counts as now.
+function statusTime(st, now = Date.now()) {
+  const read = Date.parse(st?.checkedAt || "");
+  return read ? Math.min(read, now) : now;
+}
+// Last known per charger, on this phone (0.30, like ParkPilot's cache): every status the app has seen,
+// kept 24 h by charger id, so a replan, a new route or a reload shows the last known state straight away
+// (greyed by its age) instead of ↻, and is then updated as usual.
+const LAST_KEY = "evailability-last";
+const LAST_KEEP_MS = 24 * 3600 * 1000, LAST_MAX = 400;
+let lastKnown = null;
+function loadLast() {
+  if (lastKnown) return lastKnown;
+  try { lastKnown = JSON.parse(localStorage.getItem(LAST_KEY) || "{}") || {}; } catch (_) { lastKnown = {}; }
+  return lastKnown;
+}
+function rememberLast(stations) {
+  const last = loadLast();
+  let changed = false;
+  for (const s of stations || []) {
+    if (!s.status || !s.statusAt || s.status.failed) continue;
+    const had = last[s.id];
+    if (had && had.at >= s.statusAt) continue;
+    last[s.id] = { at: s.statusAt, st: s.status };
+    changed = true;
+  }
+  if (!changed) return;
+  const keep = Date.now() - LAST_KEEP_MS;
+  const ids = Object.keys(last).filter((id) => last[id].at > keep).sort((a, b) => last[b].at - last[a].at).slice(0, LAST_MAX);
+  lastKnown = Object.fromEntries(ids.map((id) => [id, last[id]]));
+  try { localStorage.setItem(LAST_KEY, JSON.stringify(lastKnown)); } catch (_) {}
+}
+function fillLastKnown(stations) {
+  const last = loadLast(), keep = Date.now() - LAST_KEEP_MS;
+  let filled = false;
+  for (const s of stations) {
+    const had = last[s.id];
+    if (!had || had.at < keep || (s.status && s.statusAt && s.statusAt >= had.at)) continue;
+    s.status = had.st; s.statusAt = had.at;
+    if (s.country === "BE") { s.beMatchedAt = 0; s.beDoneAt = 0; } // matched again (the server adds its own last known)
+    filled = true;
+  }
+  if (filled && state.route) reconcileLive();
+}
 function applyStatus(status) {
   const now = Date.now();
   let changed = false;
@@ -4457,8 +4478,7 @@ function applyStatus(status) {
     if (!(s.id in status)) continue;
     if (status[s.id]?.failed) continue; // the lookup failed: keep what we have (it greys with age)
     s.status = status[s.id];
-    const read = Date.parse(s.status?.checkedAt || "");
-    s.statusAt = read && read <= now && now - read < 10 * 60 * 1000 ? read : now;
+    s.statusAt = statusTime(s.status, now);
   }
   reconcileLive();
   for (const s of state.stations) {
@@ -4505,7 +4525,7 @@ function reconcileLive() {
       // The live source's site name (e.g. "Mastpolder"), when Open Charge Map gave both sides one name.
       if (f.name) x.liveName = f.name; // kept apart: it's often the street address, not a site name
       x.status = { ...x.status, available: f.available, total: f.total, maxKw: f.maxKw, state: f.state,
-        changedAt: f.changedAt, fullSince: f.fullSince, liveId: f.id, ...(f.be ? { be: true, evseIds: f.evseIds } : {}) };
+        changedAt: f.changedAt, fullSince: f.fullSince, liveId: f.id, ...(f.be ? { be: true, evseIds: f.evseIds, stalls: f.stalls || x.status.stalls, checkedAt: f.checkedAt || x.status.checkedAt } : {}) };
       if (distKm(x, f) > 0.03) {
         const shift = distKm(x, f);
         x.lat = f.lat; x.lon = f.lon;
@@ -4541,9 +4561,6 @@ function statusBusy() {
 
 async function refreshOne(ids) {
   const picked = state.stations.filter((x) => ids.includes(x.id));
-  if (picked.some((x) => x.country === "FR")) {
-    refreshFrance(ids.join(" ")).then((why) => { if (why) toast(why, 3200); });
-  }
   const list = picked.filter((x) => !tapOnly(x) && !(x.loadingAt && Date.now() - x.loadingAt < 20000));
   if (!list.length) return;
   for (const s of list) s.loadingAt = Date.now();
@@ -4649,12 +4666,9 @@ async function refreshStatus(force = true) {
   fetchDetours(detourCandidates(inView));
   fetchPlaces(); // rows on screen and the next few above them
   matchBelgium();
-  // Paid: France by itself, at most once a minute, when French chargers are on screen or just ahead.
-  if (state.paid && !frBusy && now - (state.frTriedAt || 0) >= Math.max(60 * 1000, FR_MIN_GAP_MS) - 5000 &&
-      [...inView, ...upcomingShown().slice(0, 10)].some((s) => s.country === "FR")) refreshFrance();
   // Paid: also the next chargers ahead, not only those on screen.
   const pool = state.paid ? [...new Set([...inView, ...upcomingShown().slice(0, PAID_AHEAD)])] : inView;
-  const todo = pool.filter((s) => viaStatus(s) && !busy(s) && (force || !s.statusAt || now - s.statusAt > FRESH_MS));
+  const todo = pool.filter((s) => viaStatus(s) && !busy(s) && (force || !s.statusAt || now - Math.max(s.statusAt, s.askedAt || 0) > FRESH_MS));
   if (!todo.length) return;
   for (const s of todo) s.loadingAt = now;
   render();
@@ -4672,66 +4686,6 @@ async function refreshStatus(force = true) {
   }
 }
 
-// France: all French chargers ahead in one lookup, only on a tap. Returns null when it asked,
-// otherwise why not, as a text for a toast.
-let frBusy = false;
-async function refreshFrance(tap = null) { // tap: the tapped row (null when the app updates by itself)
-  if (frBusy) return "France is being updated";
-  if (!state.route) return "";
-  const ahead = upcoming().filter((s) => s.country === "FR").slice(0, FR_MAX);
-  if (!ahead.length) return "";
-  const now = Date.now();
-  const mins = (ms) => Math.max(1, Math.ceil(ms / 60000));
-  // Debug mode: a second tap within 5 s pushes through the pause or the gap (not the server's off
-  // switch). Each read costs more CPU than the free plan allows, so repeated forcing can use up the
-  // Worker's allowance for everything (14 Nov). The server still reuses a read of the last 2.5 min.
-  // Only a second tap on the same row counts (a scroll that ends on another row is no confirmation).
-  const forced = debugOn() && tap && state.frForceRow === tap && now - (state.frForceArmedAt || 0) < 5000;
-  const push = (text) => {
-    if (!debugOn() || !tap) return text;
-    state.frForceArmedAt = now; state.frForceRow = tap;
-    return `${text} · debug: tap again to update anyway`;
-  };
-  if (now < (state.frOffUntil || 0) && !(forced && state.frOffReason !== "off")) {
-    return state.frOffReason === "off" ? "France live is switched off on the server"
-      : push(`France paused after an error · next update in ${waitText(state.frOffUntil - now)}`);
-  }
-  const since = now - (state.frTriedAt || 0);
-  if (since < FR_MIN_GAP_MS && !forced) {
-    const ago = Math.floor(since / 60000);
-    return push(`France checked ${ago ? `${ago} min` : "less than a minute"} ago · next update in ${waitText(FR_MIN_GAP_MS - since)}`);
-  }
-  state.frForceArmedAt = 0;
-  if (forced) toast("France: forced update (debug) · this read may hit the free plan's CPU limit", 3200);
-  frBusy = true;
-  state.frTriedAt = now;
-  const shown = new Set(stationsInView().map((s) => s.id));
-  for (const s of ahead) if (shown.has(s.id)) s.loadingAt = now; // the sweep, only where you can see it
-  render();
-  let why = null;
-  try {
-    const r = await api("/fr-status", { minKw: minKw(), stations: ahead.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 30000, false);
-    if (r.off) { state.frOffUntil = Date.now() + 10 * 60 * 1000; state.frOffReason = "off"; why = "France live is switched off on the server"; }
-    if (r.gapMin >= 0) FR_MIN_GAP_MS = r.gapMin * 60 * 1000; // per plan: 2 on Paid, 5 on free, unless set on the usage page
-    if (r.pauseMin > 0) FR_FAIL_PAUSE_MS = r.pauseMin * 60 * 1000;
-    applyStatus(r.status || {});
-    setPaid(r.paid);
-    state.frAt = Date.now();
-    state.frError = null;
-  } catch (e) {
-    state.frError = e.message; // the old values stay and age: grey, then outlined
-    reportError(`France: ${e.message} France paused for ${Math.round(FR_FAIL_PAUSE_MS / 60000)} min.`);
-    state.frOffUntil = Date.now() + FR_FAIL_PAUSE_MS; state.frOffReason = "error";
-    why = `France couldn’t be updated; paused for ${Math.round(FR_FAIL_PAUSE_MS / 60000)} min`;
-  } finally {
-    for (const s of ahead) s.loadingAt = null;
-    frBusy = false;
-    saveFr();
-    save(); render();
-  }
-  return why;
-}
-
 // Belgium, step 1: match the Belgian pins ahead to the index's sites (stall ids, no live call).
 // Once per charger; the ring then shows its stalls dashed until you tap.
 let beMatchBusy = false;
@@ -4743,10 +4697,13 @@ async function matchBelgium() {
   beMatchBusy = true;
   try {
     const r = await api("/be-status", { minKw: minKw(), stations: todo.map((s) => ({ id: s.id, lat: s.lat, lon: s.lon, brand: brandKey(s) })) }, 20000, false);
+    const before = new Map(todo.map((s) => [s.id, s.status]));
     for (const s of todo) { s.beMatchedAt = Date.now(); s.beMatchV = BE_MATCH_V; s.beDoneAt = 0; }
     applyStatus(r.status || {});
     for (const s of todo) {
-      s.statusAt = null; // not checked yet: grey with ↻ until tapped
+      // Each stall's last known state: the server's (any phone's taps) or this phone's, whichever is newer.
+      if (s.status?.be) beMergeStalls(s, before.get(s.id));
+      else s.statusAt = null;
       if (s.status) delete s.status.nearby; // used once to place the pin; later updates come per stall
     }
   } catch (e) {
@@ -4755,6 +4712,21 @@ async function matchBelgium() {
     beMatchBusy = false;
     save(); render();
   }
+}
+// A Belgian site's stalls: keep the newest answer per stall; the site's age is its oldest stall's
+// (a ring is only as fresh as its oldest part). No answers at all: not checked (↻ until tapped).
+function beMergeStalls(s, prev) {
+  const st = s.status;
+  const stalls = { ...(st.stalls || {}) };
+  for (const [id, v] of Object.entries(prev?.stalls || {})) {
+    if (!(st.evseIds || []).includes(id) || !v?.at) continue;
+    if (!stalls[id] || Date.parse(stalls[id].at || 0) < Date.parse(v.at)) stalls[id] = v;
+  }
+  st.stalls = stalls;
+  const times = (st.evseIds || []).map((id) => Date.parse(stalls[id]?.at || "")).filter(Boolean);
+  s.statusAt = times.length ? Math.min(Date.now(), ...times) : null;
+  if (times.length) st.checkedAt = new Date(s.statusAt).toISOString();
+  Object.assign(st, beCounts(st));
 }
 function beCounts(st) {
   const r = ringParts(st);
@@ -4787,7 +4759,7 @@ async function refreshBelgium(members) {
   try {
     for (const s of due) {
       const st = s.status;
-      st.stalls = {}; // a new round: the ring starts dashed again and fills in
+      st.stalls = st.stalls || {}; // a new round: the last known stalls stay (grey by age) and are replaced one by one
       let beFails = 0;
       Object.assign(st, beCounts(st));
       for (const evse of st.evseIds) {
@@ -4802,17 +4774,16 @@ async function refreshBelgium(members) {
           if (r.retryAfterMs) {
             if (tries >= (r.tryOtherId ? 5 : 3)) {
               if (++beFails >= 3) throw new Error(r.failed || r.note || "Belgium is busy, try again in a minute");
-              st.stalls[evse] = { kind: "unknown" }; // skip this stall, carry on with the next
+              if (!st.stalls[evse]) st.stalls[evse] = { kind: "unknown" }; // skip this stall (keeping its last known), carry on
               break;
             }
             beNextAt = Date.now() + r.retryAfterMs + 300;
             continue;
           }
           beNextAt = r.cached ? beNextAt : Date.now() + BE_GAP_MS;
-          st.stalls[evse] = { kind: r.kind, raw: r.raw || null };
+          st.stalls[evse] = { kind: r.kind, raw: r.raw || null, at: r.checkedAt || new Date().toISOString() };
           beFails = 0;
-          Object.assign(st, beCounts(st), { checkedAt: r.checkedAt });
-          s.statusAt = Date.now();
+          beMergeStalls(s, null);
           break;
         }
       }
@@ -4994,10 +4965,8 @@ $("list").addEventListener("click", (e) => {
   const ids = row.dataset.ids.split(" ");
   const members = state.stations.filter((s) => ids.includes(s.id));
   const now = Date.now();
-  // French chargers follow France's own gap (usage page setting), not the 1-minute tap rule:
-  // refreshFrance() either asks or says when France can be asked again.
+  // Belgian chargers go stall by stall (refreshBelgium), not by the 1-minute tap rule.
   if (members.some(tapOnly)) {
-    if (members.some((s) => s.country === "FR")) refreshFrance(row.dataset.ids).then((why) => { if (why) toast(why, 3200); });
     if (members.some((s) => s.country === "BE")) refreshBelgium(members).then((why) => { if (why) toast(why, 3200); });
     const rest = members.filter((s) => !tapOnly(s) && (!s.statusAt || now - s.statusAt >= TAP_MIN_MS || retryAllowed(s, now)));
     for (const s of rest) if (statusUnusable(s)) s.retryAt = now;
@@ -5134,8 +5103,21 @@ function clockAndAgo(iso) {
   const ago = min < 1 ? "just now" : min < 90 ? `${min} min ago` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} ago`;
   return { clock, ago, min };
 }
+// An old value is still shown (greyed in the row); the card says how old it is (0.30).
+function lastKnownLine(m) {
+  if (!m.status || !m.statusAt || Date.now() - m.statusAt <= staleMs(m)) return "";
+  const t = clockAndAgo(new Date(m.statusAt).toISOString());
+  return t ? `<div><span class="muted">Last known, checked at ${t.clock} (${t.ago})</span></div>` : "";
+}
 function historyHtml(members) {
   const lines = members.map((m) => {
+    const line = historyLine(m, members), age = lastKnownLine(m);
+    return line || age ? (line || "") + age : null;
+  }).filter(Boolean);
+  return lines.join("");
+}
+function historyLine(m, members) {
+  {
     const st = m.status;
     if (!st || st.available == null) return null;
     const logo = members.length > 1 ? logoHtml(brandKey(m)) : "";
@@ -5158,8 +5140,7 @@ function historyHtml(members) {
     const rest = rp ? [rp.busy ? `${rp.busy} in use` : "", rp.off ? `${rp.off} out of order` : ""].filter(Boolean).join(", ") : "";
     return `<div>${logo}<span><b>${st.available} of ${st.total} free.</b>${rest ? ` ${rest[0].toUpperCase()}${rest.slice(1)}.` : ""} ${full ? `Last full at ${full.clock} (${full.ago}).` : "" /* unknown: the app only knows what it happened to look at */}</span></div>` +
       (changed ? `<div><span class="muted">Last change at the site: ${changed.clock} (${changed.ago})</span></div>` : "");
-  }).filter(Boolean);
-  return lines.join("");
+  }
 }
 function closeNavSheet() { $("navSheet").hidden = true; $("navBackdrop").hidden = true; }
 $("navCancel").addEventListener("click", closeNavSheet);
@@ -5724,7 +5705,7 @@ function statusDebugHtml(members) {
     const brand = esc((BRAND[brandKey(m)] || {}).name || brandKey(m));
     const bits = [`source ${esc(st?.source || LIVE_SOURCE[m.country] || m.country || "?")}`, `updated ${ago(m.statusAt)}`];
     if (!st) {
-      bits.push(m.country === "FR" || m.country === "BE" ? "no answer yet (tap to check)" : "no live status returned (no matching live site)");
+      bits.push(m.country === "BE" ? "no answer yet (tap to check)" : "no live status returned (no matching live site)");
       if (m.ghostOf) bits.push("hidden: a site of this brand nearby has live status, so this pin is likely a stray copy");
     } else {
       bits.push(st.available == null ? "free: unknown" : `free ${st.available} of ${st.total ?? "?"}`);
@@ -6369,6 +6350,7 @@ setInterval(() => { if (!$("drive").hidden) render(); }, 30000);
 // ------------------------------------------------------------- saving between visits
 
 function save() {
+  rememberLast(state.stations);
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       to: state.to, vias: state.vias || [], route: state.route, stations: state.stations, statusAt: state.statusAt, sim: $("sim").checked,
@@ -6378,7 +6360,7 @@ function save() {
 }
 
 function restore() {
-  loadFr();
+  try { localStorage.removeItem("evailability-fr"); } catch (_) {} // France's tap timing (before 0.30)
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (!saved?.route) return;
@@ -6526,6 +6508,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.30", date: "2026-11-22", title: { en: "Last known status", nl: "Laatst bekende status", pt: "Último estado conhecido" },
+    items: { en: ["After planning or changing a route, every charger shows its last known status straight away, greyed by its age, instead of ↻. Press and hold to see when it was checked.", "France updates by itself every 5 minutes, like Portugal: no more tapping.", "Belgium shows the stalls’ last check (by anyone) until you tap for a fresh one."],
+      nl: ["Na het plannen of wijzigen van een route toont elke lader meteen zijn laatst bekende status, grijs naar leeftijd, in plaats van ↻. Houd ingedrukt om te zien wanneer die is gecontroleerd.", "Frankrijk werkt vanzelf elke 5 minuten bij, net als Portugal: niet meer tikken.", "België toont de laatste controle van de laadpunten (door wie dan ook) tot je tikt voor een nieuwe."],
+      pt: ["Depois de planear ou alterar um percurso, cada carregador mostra logo o último estado conhecido, a cinzento conforme a idade, em vez de ↻. Mantenha premido para ver quando foi verificado.", "A França atualiza-se sozinha a cada 5 minutos, como Portugal: já não é preciso tocar.", "A Bélgica mostra a última verificação dos postos (feita por qualquer pessoa) até tocar para uma nova."] } },
   { v: "0.29", date: "2026-11-17", title: { en: "Portugal live", nl: "Portugal live", pt: "Portugal em direto" },
     items: { en: ["Live status in Portugal: free chargers update by themselves every 5 minutes, as often as the Portuguese source (MOBI.E) publishes."],
       nl: ["Live status in Portugal: vrije laders worden vanzelf elke 5 minuten bijgewerkt, zo vaak als de Portugese bron (MOBI.E) publiceert."],
@@ -6707,15 +6693,14 @@ function helpHtml() {
     <div class="k">${demoRing(0, 4)}</div><div class="v">All in use.</div>
     <div class="k">${demoRing(0, 4, 4)}</div><div class="v"><b>Off</b>: reported out of order, or nothing has changed for hours.</div>
     <div class="k">${availRing({ ...statusInfo({ status: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } }), st: { available: 11, total: 16, state: "free", changedAt: new Date(Date.now() - 50 * 3600000).toISOString() } })}</div><div class="v"><b>Grey with ?</b>: probably not live. Nothing has changed at this site for over a day (3 days for small sites), so the number may be out of date. The dot on the line is hollow.</div>
-    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet: tap to check. A faded ring with a grey number is more than 3 minutes old; a grey ring with an outlined number more than 5 minutes. A turning sweep in the dot means it's updating; a number that changes pops briefly.</div>
+    <div class="k"><span class="dot ring"></span></div><div class="v"><b>↻</b> not checked yet: tap to check. A faded ring with a grey number is more than 3 minutes old; a grey ring with an outlined number more than 5 minutes. After planning, every charger first shows its last known state this way until it's updated; press and hold to see when it was checked. A turning sweep in the dot means it's updating; a number that changes pops briefly.</div>
     <div class="k"><span class="kv" style="color:var(--muted)">–</span></div><div class="v">No live data for this charger.</div>
   </div>
   <p>The count only includes chargers at your chosen power or more. Some chargers appear a moment after planning.</p>
   <div class="cupd">
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">Every minute by itself; <b>tap a charger</b> to update it now.</div>
-    <div class="k">${flags("FR")}</div><div class="v">Tap a French charger: all French chargers on your route update, at most every few minutes.</div>
-    <div class="k">${flags("BE")}</div><div class="v">Tap a site: its chargers are checked one by one (about 10 s each) and the ring fills in.</div>
-    <div class="k">${flags("PT")}</div><div class="v">By itself, every 5 minutes: as often as the Portuguese source updates. Its rings grey only after 8 minutes.</div>
+    <div class="k">${flags("FR","PT")}</div><div class="v">By itself, every 5 minutes: as often as the national source updates. Their rings grey only after 8 minutes.</div>
+    <div class="k">${flags("BE")}</div><div class="v">Tap a site: its chargers are checked one by one (about 10 s each) and the ring fills in. Until then it shows the last check, by you or anyone else, greyed by its age.</div>
   </div>
   <p>A charger that's free now may not be free when you arrive.</p>
 

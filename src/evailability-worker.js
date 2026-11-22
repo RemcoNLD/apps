@@ -9,8 +9,8 @@
 //                               before and after each, used for routes over 150 km, see handlePlan)
 //                               -> route + chargers of those brands along it (detour minutes only when cached)
 //   POST /status                {stations:[{id, lat, lon, country, brand}]}
-//   POST /fr-status             {stations:[{id, lat, lon, brand}]}  France, from one national file (read at most every 90 s)
-//   (POST /status also answers Portugal, from a 5-minute snapshot made by a GitHub job: pt-live.yml)
+//   POST /fr-status             {stations:[{id, lat, lon, brand}]}  France (old app copies; 0.30+ get France from /status)
+//   (POST /status also answers Portugal and France, from 5-minute snapshots made by GitHub jobs: pt-live.yml, fr-live.yml)
 //   POST /be-status             {stations:[{id, lat, lon, brand}]}  Belgium: pins → index sites with their stall ids (no live call)
 //   GET  /be-evse?id=<evse>     Belgium: one stall's live status (Eco-Movement; at most one call per 10 s, else retryAfterMs)
 //   GET  /debug/be?id=<evse>    Belgium: raw Eco-Movement answer for one stall
@@ -67,7 +67,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.3.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.4.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -299,10 +299,8 @@ const SETTINGS = [
     help: "At most this many automatic trials a day (everyone together); after that people get a request instead." },
   { key: "legacyCode", type: "bool", label: "Old access code (11-proef)", def: () => true,
     help: "On: the old shared 9-digit code still opens the app, and devices that used it keep working. Switch off once everyone has a personal key (Users page); those devices then ask for a key." },
-  { key: "frLive", type: "bool", label: "France live (tap)", def: (env) => env.FR_LIVE !== "off",
-    help: "Off: French chargers show no live data and nothing is read. Each read costs more CPU than the free plan allows." },
-  { key: "frGapMin", type: "number", min: 1, max: 60, label: "France: minutes between updates", def: () => "",
-    help: "Empty: 2 minutes on Workers Paid (France then also updates by itself at this interval), 5 on the free plan. A value you enter belongs to the plan it was entered under: when the plan changes (the paid-until date passes), it is dropped and the new plan's default applies. On the free plan, a tap within this time gets the last read." },
+  { key: "frLive", type: "bool", label: "France live", def: (env) => env.FR_LIVE !== "off",
+    help: "Off: French chargers show no live data. France comes from a 5-minute snapshot made by the GitHub job France live (fr-live.yml), started by the timer." },
   { key: "ndwDiscovery", type: "bool", label: "Netherlands: extra chargers from NDW", def: (env) => env.NDW_DISCOVERY !== "off",
     help: "Sites Open Charge Map doesn't have, found in NDW's live data along the route." },
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
@@ -331,14 +329,6 @@ const paidUntil = (env) => String(setting(env, "paidUntil") || "");
 const isPaid = (env) => { const u = paidUntil(env); return !!u && new Date().toISOString().slice(0, 10) <= u; };
 // France timing per plan: on Paid a read costs nothing that matters, so no gap and a short pause.
 const frGapDefault = (env) => (isPaid(env) ? 2 : 5);
-const frGapMinNow = (env) => {
-  const v = Number(SAVED.frGapMin);
-  const plan = isPaid(env) ? "paid" : "free";
-  // A saved value only counts under the plan it was entered under (the one value from before this
-  // existed was set for the paid trial, so untagged counts as paid).
-  return v > 0 && (SAVED.frGapPlan || "paid") === plan ? v : frGapDefault(env);
-};
-const frPauseMinNow = (env) => (isPaid(env) ? 2 : 15);
 
 async function handleSettings(request, env) {
   checkAdmin(request, env);
@@ -1435,13 +1425,10 @@ async function frWhole(ids, url = FR_DYNAMIC_URL) {
   return { bytes, lines, rows };
 }
 
-// France live status. The national file is read whole (no Range), which costs ~20–30 ms CPU: over the
-// free plan's 10 ms, tolerated now and then but not often (Error 1102 after 5–6 reads in a row). So it
-// has its own endpoint (a failure only loses France), the app asks at most every 2 minutes, and each
-// Worker copy reads the file at most once per FR_SNAPSHOT_MS; all French chargers come from that read.
+// France live status: the index (data/fr-fast-sites.json) places the sites; their state comes from the
+// 5-minute snapshot below. frWhole() above (the old whole-file read) is only used by /debug/fr-range now.
 const FR_INDEX_URL = "https://remconld.github.io/apps/data/fr-fast-sites.json"; // tools/build-fr-index.py
 const FR_INDEX_MS = 24 * 3600 * 1000;
-const FR_SNAPSHOT_MS = 150 * 1000; // at most one read per 2.5 min per Worker copy (the app taps at most every 3)
 const FR_NOT_LIVE_MS = 24 * 3600 * 1000; // newest change at a site older than this: its data looks frozen
 const FR_MATCH_KM = 0.6;   // Open Charge Map pin → index site of the same brand
 const FR_NEARBY_KM = 1.2;  // sites sent back for the app's pin matching (like NDW's nearby)
@@ -1484,66 +1471,99 @@ function frSitesNear(index, brand, lat, lon, km) {
   return out.sort((a, b) => a.d - b.d);
 }
 
-let frSnapState = null; // { at, promise } — one read shared by every request in this Worker copy
-async function frSnapshot(index) {
-  // Free plan: at most one read per gap. Paid: a read is reused for a minute at most.
-  // Paid: a read is reused until just before the next update is due. Free: at most one read per gap.
-  const ttl = isPaid(null) ? Math.max(50 * 1000, frGapMinNow(null) * 60 * 1000 - 10 * 1000)
-    : Math.max(FR_SNAPSHOT_MS, frGapMinNow(null) * 60 * 1000 - 30 * 1000);
-  if (frSnapState && Date.now() - frSnapState.at < ttl) return frSnapState.promise;
-  const promise = frWhole(index.ids).then((w) => ({ rows: w.rows, at: new Date().toISOString() }));
+// France live (Worker 0.4.0): a GitHub job (.github/workflows/fr-live.yml, tools/build-fr-status.py) reads
+// the national file every 5 minutes and force-pushes a small fr-status.json to the branch "live-fr", like
+// Portugal. The Worker only reads that (~180 kB, by commit id), so France updates by itself in /status,
+// with no CPU spike (the whole-file read gave Error 1102) and no KV writes. The snapshot is the server's
+// last known state: always there, with its own age (checkedAt = when the job read the file).
+const FR_LIVE_URL = `https://raw.githubusercontent.com/RemcoNLD/apps/live-fr/fr-status.json`;
+const FR_RAW_AT = (sha) => `https://raw.githubusercontent.com/RemcoNLD/apps/${sha}/fr-status.json`;
+const FR_TOO_OLD_MS = 6 * 3600 * 1000; // older than this: the job is down; numbers would mislead
+let frSnapState = null, frSnapLast = null; // frSnapLast: { sha, data } of the last snapshot read
+async function frSnapshot() {
+  if (frSnapState && Date.now() - frSnapState.at < PT_SNAPSHOT_MS) return frSnapState.promise;
+  const promise = (async () => {
+    countCall("FR live");
+    let sha = null;
+    try { sha = await liveSha("live-fr"); } catch (e) { console.log("France refs failed", e.message); }
+    if (sha && frSnapLast?.sha === sha) return frSnapLast.data;
+    const res = await fetch(sha ? FR_RAW_AT(sha) : FR_LIVE_URL, { cf: { cacheTtl: sha ? 3600 : 60 } });
+    if (!res.ok) throw new HttpError(502, `France live: HTTP ${res.status}`);
+    const data = await res.json();
+    if (sha) frSnapLast = { sha, data };
+    return data;
+  })();
   frSnapState = { at: Date.now(), promise };
-  promise.catch(() => { if (frSnapState?.promise === promise) frSnapState = null; });
+  // A failed read keeps the last good snapshot (last known) rather than nothing.
+  promise.catch(() => { if (frSnapState?.promise === promise) frSnapState = frSnapLast ? { at: Date.now(), promise: Promise.resolve(frSnapLast.data) } : null; });
   return promise;
 }
 
-// One index site → counts. Only points present in the live file count (old ids stay in the static file).
+// One index site → counts. Letters per point (index order): F free, U in use, O out of order, ? unknown,
+// - not in the live file (old ids stay in the static file; only points in the live file count).
 function frSummary(site, snap, minKw = FAST_KW) {
-  const ids = site.kw ? byPower(site.ids.map((id, i) => ({ id, kw: site.kw[i] })), (p) => p.kw, minKw).map((p) => p.id) : site.ids;
-  const live = ids.map((id) => snap.rows[id]).filter(Boolean);
   const base = { maxKw: site.maxKw, source: "transport.data.gouv.fr", checkedAt: snap.at };
+  const rec = snap.s?.[site.key.slice(2)];
+  if (!rec) return { ...base, available: null, total: null, note: "no live data for this site" };
+  const [codes, ages] = rec;
+  const atMs = Date.parse(snap.at);
+  const all = [...codes].map((c, i) => ({ c, kw: site.kw?.[i], age: ages?.[i] })).filter((p) => p.c !== "-");
+  const live = site.kw ? byPower(all, (p) => p.kw, minKw) : all;
   if (!live.length) return { ...base, available: null, total: null, note: "no live data for this site" };
-  const time = (r) => Date.parse(String(r.horodatage).replace(" ", "T")) || 0;
-  const newest = Math.max(...live.map(time));
+  const time = (p) => (p.age == null ? null : atMs - p.age * 60000);
+  const times = live.map(time).filter((t) => t != null);
+  const newest = times.length ? Math.max(...times) : 0;
   const changedAt = newest ? new Date(newest).toISOString() : null;
-  if (!newest || Date.parse(snap.at) - newest > FR_NOT_LIVE_MS) {
+  if (!newest || atMs - newest > FR_NOT_LIVE_MS) {
     return { ...base, available: null, total: null, changedAt, note: "live data looks frozen" };
   }
-  // Out-of-order points stay in the total and come back as offline: the ring shows them as grey
-  // outlined segments (they're there, just not working). Before .117 they were left out of the total.
-  const working = live.filter((r) => r.etat !== "hors_service");
-  const offline = live.length - working.length;
-  const free = working.filter((r) => r.etat === "en_service" && r.occupation === "libre");
-  const known = working.filter((r) => r.occupation === "libre" || r.occupation === "occupe" || r.occupation === "reserve");
-  if (!working.length) return { ...base, available: 0, total: live.length, offline, state: "likely_offline", changedAt };
-  if (!known.length) return { ...base, available: null, total: live.length, offline, changedAt, note: "occupation unknown" };
-  const state = free.length ? "free" : "full";
-  const taken = working.filter((r) => r.occupation !== "libre").map(time).filter(Boolean);
+  // Out-of-order points stay in the total and come back as offline (grey outlined segments).
+  const offline = live.filter((p) => p.c === "O").length;
+  const free = live.filter((p) => p.c === "F").length;
+  const known = live.filter((p) => p.c === "F" || p.c === "U").length;
+  if (offline === live.length) return { ...base, available: 0, total: live.length, offline, state: "likely_offline", changedAt };
+  if (!known) return { ...base, available: null, total: live.length, offline, changedAt, note: "occupation unknown" };
+  const state = free ? "free" : "full";
+  const taken = live.filter((p) => p.c === "U" || p.c === "?").map(time).filter((t) => t != null);
   return {
-    ...base, available: free.length, total: live.length, offline, state, changedAt,
+    ...base, available: free, total: live.length, offline, state, changedAt,
     fullSince: state === "full" && taken.length ? new Date(Math.max(...taken)).toISOString() : null,
   };
 }
 
 async function frStatusFor(stations, minKw = FAST_KW) {
-  const index = await frIndex();
-  const snap = await frSnapshot(index);
   const out = {};
+  if (!stations.length) return { status: out };
+  let index, snap;
+  try {
+    [index, snap] = await Promise.all([frIndex(), frSnapshot()]);
+  } catch (e) {
+    console.log("France failed", e.message);
+    for (const st of stations) out[st.id] = { failed: true, note: `lookup failed: ${String(e.message).slice(0, 80)}` };
+    return { status: out };
+  }
+  const tooOld = !Date.parse(snap.at) || Date.now() - Date.parse(snap.at) > FR_TOO_OLD_MS;
+  const sameIndex = !snap.index || snap.index === index.built; // site numbers only hold for the same index
   for (const st of stations.slice(0, FR_MAX_STATIONS)) {
+    const kw = minKwOf(st.minKw ?? minKw);
     const brand = brandOf(st.brand).key;
     const near = frSitesNear(index, brand, Number(st.lat), Number(st.lon), FR_NEARBY_KM);
     if (!near.length || near[0].d > FR_MATCH_KM) { out[st.id] = null; continue; }
+    if (tooOld || !sameIndex) {
+      out[st.id] = { available: null, total: null, source: "transport.data.gouv.fr", checkedAt: snap.at, note: tooOld ? "live data out of date" : "index changed; next snapshot in a few minutes" };
+      continue;
+    }
     const main = near[0].s;
     out[st.id] = {
-      ...frSummary(main, snap, minKw), liveId: main.key, liveLat: main.lat, liveLon: main.lon,
+      ...frSummary(main, snap, kw), liveId: main.key, liveLat: main.lat, liveLon: main.lon,
       nearby: near.slice(0, 4).map(({ s }) => {
-        const c = frSummary(s, snap, minKw);
+        const c = frSummary(s, snap, kw);
         return { id: s.key, lat: s.lat, lon: s.lon, name: s.name || null, available: c.available, total: c.total,
           offline: c.offline, maxKw: c.maxKw, state: c.state, changedAt: c.changedAt, fullSince: c.fullSince };
       }),
     };
   }
-  return { status: out, checkedAt: snap.at, index: index.built, gapMin: frGapMinNow(null), pauseMin: frPauseMinNow(null), paid: isPaid(null) };
+  return { status: out, checkedAt: snap.at, index: index.built };
 }
 
 // Portugal live status (MOBI.E / NAP Portugal, DATEX II, open access). The national status file is
@@ -1612,13 +1632,22 @@ let ptSnapState = null, ptSnapLast = null; // ptSnapLast: { sha, data } of the l
 // no API rate limit), then the file at that commit, and only when the commit changed.
 const PT_REFS_URL = "https://github.com/RemcoNLD/apps.git/info/refs?service=git-upload-pack";
 const PT_RAW_AT = (sha) => `https://raw.githubusercontent.com/RemcoNLD/apps/${sha}/pt-status.json`;
-async function ptLiveSha() {
-  const res = await fetch(PT_REFS_URL, { headers: { "User-Agent": "EVailability-Worker" } });
-  if (!res.ok) throw new Error(`refs HTTP ${res.status}`);
-  const m = (await res.text()).match(/([0-9a-f]{40}) refs\/heads\/live\b/);
-  if (!m) throw new Error("no live branch");
+// One ref list read serves both branches (live = Portugal, live-fr = France) for 20 s.
+let refsState = null;
+async function liveSha(branch) {
+  if (!refsState || Date.now() - refsState.at > 20 * 1000) {
+    const promise = fetch(PT_REFS_URL, { headers: { "User-Agent": "EVailability-Worker" } }).then((res) => {
+      if (!res.ok) throw new Error(`refs HTTP ${res.status}`);
+      return res.text();
+    });
+    refsState = { at: Date.now(), promise };
+    promise.catch(() => { if (refsState?.promise === promise) refsState = null; });
+  }
+  const m = (await refsState.promise).match(new RegExp(`([0-9a-f]{40}) refs/heads/${branch}(?![\\w-])`));
+  if (!m) throw new Error(`no ${branch} branch`);
   return m[1];
 }
+const ptLiveSha = () => liveSha("live");
 async function ptSnapshot() {
   if (ptSnapState && Date.now() - ptSnapState.at < PT_SNAPSHOT_MS) return ptSnapState.promise;
   const promise = (async () => {
@@ -1742,13 +1771,57 @@ function beSitesNear(index, brand, lat, lon, km) {
   }
   return out.sort((a, b) => a.d - b.d);
 }
-async function beStatusFor(stations, minKw = FAST_KW) {
-  const index = await beIndex();
+// Belgium's last known state (Worker 0.4.0), like ParkPilot's stored waiting times: every stall answer
+// from Eco-Movement is kept in one KV record "be-last" = {evse: [kind, checkedAt, raw]}, written only when
+// a stall's state changes or its stored value is over 10 minutes old, so a tap's answers outlive the
+// 60-second memory cache and every Worker copy. /be-status sends them with each site, so a new route
+// (or a replan) shows the stalls' last known state at once; the app greys it by its age.
+const BE_LAST_KEY = "be-last";
+const BE_LAST_REWRITE_MS = 10 * 60 * 1000;
+const BE_LAST_KEEP_MS = 7 * 24 * 3600 * 1000;
+let beLastState = null; // { at, data } — read at most once a minute per Worker copy
+async function beLast(env, fresh = false) {
+  if (!env?.USAGE) return {};
+  if (!fresh && beLastState && Date.now() - beLastState.at < 60 * 1000) return beLastState.data;
+  let data = {};
+  try { data = JSON.parse((await kvGet(env, BE_LAST_KEY)) || "{}") || {}; } catch { data = beLastState?.data || {}; }
+  beLastState = { at: Date.now(), data };
+  return data;
+}
+async function beRemember(env, r) {
+  if (!env?.USAGE || !r?.evse || !r.checkedAt) return;
+  const prev = (await beLast(env))[r.evse];
+  if (prev && prev[0] === r.kind && Date.parse(r.checkedAt) - Date.parse(prev[1]) < BE_LAST_REWRITE_MS) return;
+  const data = { ...(await beLast(env, true)) }; // read again just before writing: fewer lost updates between copies
+  data[r.evse] = [r.kind, r.checkedAt, r.raw || null];
+  const keep = Date.now() - BE_LAST_KEEP_MS;
+  for (const [k, v] of Object.entries(data)) if (!(Date.parse(v?.[1]) > keep)) delete data[k];
+  try {
+    await env.USAGE.put(BE_LAST_KEY, JSON.stringify(data));
+    countCall("KV writes"); countCall("Belgium last known");
+    beLastState = { at: Date.now(), data };
+  } catch (e) { console.log("Belgium last known: write failed", e.message); }
+}
+// A site's stalls from the last known record: {stalls: {evse: {kind, raw, at}}, checkedAt: the oldest of them}.
+function beLastFor(last, ids) {
+  const stalls = {};
+  let oldest = null;
+  for (const id of ids) {
+    const v = last[id];
+    if (!v) continue;
+    stalls[id] = { kind: v[0], raw: v[2] || null, at: v[1] };
+    if (!oldest || v[1] < oldest) oldest = v[1];
+  }
+  return oldest ? { stalls, checkedAt: oldest, lastKnown: true } : {};
+}
+
+async function beStatusFor(stations, minKw = FAST_KW, env = null) {
+  const [index, last] = await Promise.all([beIndex(), beLast(env).catch(() => ({}))]);
   const out = {};
   // Only the stalls at your power, if the index knows each stall's power: fewer calls, a truer count.
   const stalls = (s) => s.kw ? byPower(s.evseIds.map((id, i) => ({ id, kw: s.kw[i] })), (p) => p.kw, minKw).map((p) => p.id) : s.evseIds;
   const site = (s) => { const ids = stalls(s); return { be: true, available: null, total: ids.length, evseIds: ids, maxKw: s.maxKw,
-    source: "Eco-Movement (BE)" }; };
+    source: "Eco-Movement (BE)", ...beLastFor(last, ids) }; };
   for (const st of stations.slice(0, BE_MAX_STATIONS)) {
     const near = beSitesNear(index, brandOf(st.brand).key, Number(st.lat), Number(st.lon), BE_NEARBY_KM);
     if (!near.length || near[0].d > BE_MATCH_KM) {
@@ -1936,6 +2009,9 @@ async function statusForMany(stations, env) {
   const de = stations.filter((s) => s.country === "DE").slice(0, paid ? 40 : MAX_DE_LOOKUPS);
   const list = [...nl, ...de, ...at];
   Object.assign(out, await ptStatusFor(stations.filter((s) => s.country === "PT")));
+  // France from the 5-minute snapshot (Worker 0.4.0): automatic like the others, no extra calls per charger.
+  const fr = stations.filter((s) => s.country === "FR");
+  if (fr.length && setting(env, "frLive")) Object.assign(out, (await frStatusFor(fr)).status);
   for (let i = 0; i < list.length; i += 5) { // max 5 at a time (NDW allows 10 per second)
     const batch = list.slice(i, i + 5);
     const res = await Promise.all(batch.map((s) => liveStatus(s, env)));
@@ -2067,9 +2143,11 @@ async function handlePlan(request, env) {
   const det = cachedDetours(route, stations);
   // Only the first few (the ones on screen right after planning); the app fetches the rest itself.
   const first = stations.slice(0, isPaid(env) ? 20 : 8);
-  const status = await statusForMany(first, env);
+  // France not here: its index is a large file to load on a fresh Worker copy, and /plan must stay
+  // within the CPU limit; the app asks /status for French chargers straight after planning.
+  const status = await statusForMany(first.filter((s) => s.country !== "FR"), env);
   for (const k of Object.keys(status)) if (status[k]?.failed) status[k] = null; // not checked: the app asks again
-  const checked = new Set(first.filter((s) => status[s.id] != null || !LIVE_COUNTRIES.has(s.country)).map((s) => s.id));
+  const checked = new Set(first.filter((s) => s.country !== "FR" && (status[s.id] != null || !LIVE_COUNTRIES.has(s.country))).map((s) => s.id));
   stations = stations.map((s) => {
     const out = { ...s, status: status[s.id] ?? null, statusChecked: checked.has(s.id) };
     if (det.has(s.id)) { const d = det.get(s.id); out.detourMin = d.min; out.toMin = d.toMin; out.toKm = d.toKm; }
@@ -3439,18 +3517,22 @@ async function route(request, env) {
     // Worker's allowance on 14 Nov so that /plan failed too (1102). The app now asks only on a tap, at
     // most every few minutes (setting "France: minutes between updates").
     // Switch: "France live (tap)" on the usage page (or the Worker variable FR_LIVE = "off").
+    // Since Worker 0.4.0 France comes with /status (from a 5-minute snapshot); this stays for app copies
+    // older than 0.30, which still ask here on a tap (gapMin 1: the snapshot changes every 5 minutes).
     if (!setting(env, "frLive")) return json(request, { status: {}, off: true });
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
-    return json(request, await frStatusFor(body.stations, minKwOf(body.minKw)));
+    return json(request, { ...(await frStatusFor(body.stations, minKwOf(body.minKw))), gapMin: 1, pauseMin: 2, paid: isPaid(env) });
   }
   if (path === "/be-status" && request.method === "POST") {
     const body = await request.json().catch(() => ({}));
     if (!Array.isArray(body.stations)) throw new HttpError(400, "Send {stations:[{id, lat, lon, brand}]}");
-    return json(request, await beStatusFor(body.stations, minKwOf(body.minKw)));
+    return json(request, await beStatusFor(body.stations, minKwOf(body.minKw), env));
   }
   if (path === "/be-evse" && request.method === "GET") {
-    return json(request, await beEvse(env, url.searchParams.get("id") || ""));
+    const r = await beEvse(env, url.searchParams.get("id") || "");
+    if (r.kind && !r.cached) await beRemember(env, r);
+    return json(request, r);
   }
   if (path === "/debug/be" && request.method === "GET") {
     // Raw Eco-Movement answer for one stall plus what we read from it: /debug/be?id=BE*IOY*E417904
@@ -3642,7 +3724,7 @@ async function route(request, env) {
 // (owned by RemcoNLD, installed on this repo only, permission Actions: read and write) with GH_APP_ID
 // (variable) and GH_APP_KEY (secret: the App's .pem key), and gets a one-hour installation token.
 // Nothing here expires: the App key is valid until it's deleted on GitHub (App > Credentials > Key pairs).
-//   Portugal live (pt-live.yml): started every tick.
+//   Portugal live (pt-live.yml) and France live (fr-live.yml, while the frLive setting is on): every tick.
 //   Road closures (closures.yml): started once data/closures.json is older than the interval set on the
 //   usage page (checked every 15 minutes). A started run always updates (FORCE), so the timer decides.
 // KV "timer": the state shown on the usage page, written only when it changes, plus when closures last
@@ -3771,6 +3853,15 @@ async function runTimer(env, at = Date.now()) {
     save = noteJob(state, "pt", false, e.message) || save;
     console.log("Timer: Portugal live", e.message);
   }
+  if (setting(env, "frLive")) {
+    try {
+      await startWorkflow(env, "fr-live.yml");
+      save = noteJob(state, "fr", true, "starts every 5 minutes") || save;
+    } catch (e) {
+      save = noteJob(state, "fr", false, e.message) || save;
+      console.log("Timer: France live", e.message);
+    }
+  }
   if (new Date(at).getUTCMinutes() % 15 < 5) {
     try {
       const h = Number(setting(env, "closuresHours"));
@@ -3806,10 +3897,10 @@ async function handleTimer(request, env) {
     const r = await ghCall(`/repos/${GH_REPO}/actions/workflows?per_page=50`, token);
     if (!r.ok) throw new Error(`The App can’t see the workflows (GitHub ${r.status}): give it Actions: Read and write`);
     const files = (r.data.workflows || []).map((w) => w.path.split("/").pop());
-    for (const f of ["pt-live.yml", "closures.yml"]) {
+    for (const f of ["pt-live.yml", "fr-live.yml", "closures.yml"]) {
       if (!files.includes(f)) throw new Error(`${f} isn’t in the repo`);
     }
-    steps.push("It can see Portugal live and Road closures");
+    steps.push("It can see Portugal live, France live and Road closures");
     return json(request, { ok: true, steps, state });
   } catch (e) {
     return json(request, { ok: false, steps, error: e.message, state });

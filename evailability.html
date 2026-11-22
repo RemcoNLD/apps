@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.31.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.32.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -33,6 +33,7 @@
     --danger: #e0574f;
     --row-h: 86px;
     --you-h: 64px; /* your own row, one line: the next turn (bigger since .91) */
+    --halo: #1d2429; /* edge around your arrow so it stands apart from the line */
     color-scheme: dark;
   }
   @media (prefers-color-scheme: light) {
@@ -45,6 +46,7 @@
       --free: #23914b;
       --full: #c47a12;
       --offline: #7f888e;
+      --halo: #ffffff;
       color-scheme: light;
     }
   }
@@ -242,7 +244,7 @@
     padding: 0 16px 0;
   }
   .strip::before {
-    content: ""; position: absolute; left: 38px; top: 30px; bottom: calc(var(--you-h) / 2); width: 8px;
+    content: ""; position: absolute; left: 36px; /* centre 40 = 16 px padding + half the 48 px marker column */ top: 30px; bottom: calc(var(--you-h) / 2); width: 8px;
     background: var(--sign-blue); border-radius: 4px;
   }
   .list {
@@ -400,7 +402,7 @@
   .dest .sub { margin-top: 2px; }
   /* Appears when you've scrolled up: takes you back to the next chargers. */
   .fab {
-    position: absolute; z-index: 3; left: 18px; bottom: calc(var(--you-h) + 18px);
+    position: absolute; z-index: 3; left: 16px; bottom: calc(var(--you-h) + 18px);
     width: 48px; height: 48px; display: grid; place-items: center;
     border: 0; border-radius: 50%; background: var(--sign-blue); color: #fff;
     box-shadow: 0 0 0 5px var(--asphalt), 0 6px 16px rgba(0, 0, 0, .35);
@@ -408,7 +410,7 @@
   .fab svg { width: 26px; height: 26px; }
   /* While scrolled up: the road at the bottom of the view, until the next change scrolls in */
   .sticky-road {
-    position: absolute; z-index: 3; left: 18px; width: 48px; display: flex; justify-content: center;
+    position: absolute; z-index: 3; left: 16px; width: 48px; display: flex; justify-content: center;
     bottom: calc(var(--you-h) + 18px + 48px + 14px); pointer-events: none;
   }
   .sticky-road > span { display: block; border-radius: 8px; padding: 3px; background: var(--asphalt); }
@@ -419,6 +421,10 @@
     clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%); border: 0; border-radius: 0;
   }
   .you .name { font-size: 1.2rem; }
+  /* Your arrow (0.32): an SVG with an edge, so it doesn't blend into the line under it */
+  .you .marker.me { width: 40px; height: 40px; background: none; clip-path: none; }
+  .you .marker.me svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .you .marker.me path { fill: var(--line); stroke: var(--halo); stroke-width: 3.5; stroke-linejoin: round; paint-order: stroke; }
   /* Your row: "You" and the status on top (an error wraps there), the location on its own full-width line under them */
   #drive .row.you { height: var(--you-h); padding: 0; }
   .row.you .name { margin-left: 12px; }
@@ -430,7 +436,7 @@
   /* Location at the very bottom, in the space above the home indicator (errors appear above it) */
   .locbar {
     display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden;
-    height: 30px; padding: 0 18px 0 32px; /* the compass sits under your arrow */
+    height: 30px; padding: 0 18px 0 30px; /* the compass sits under your arrow */
     margin-bottom: calc(12px - env(safe-area-inset-bottom, 0px)); font-size: 1rem;
     color: var(--muted); cursor: pointer; -webkit-tap-highlight-color: transparent;
   }
@@ -522,7 +528,7 @@
     clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
   }
   /* Road badge sitting on the timeline where the road changes */
-  .tl-road { position: absolute; left: 26px; /* = the line's centre: 16 px strip padding + 26 = 42 */ transform: translate(-50%, 50%); z-index: 2; line-height: 1; }
+  .tl-road { position: absolute; left: 24px; /* = the line's centre: 16 px strip padding + 24 = 40 */ transform: translate(-50%, 50%); z-index: 2; line-height: 1; }
   .tl-road.below { bottom: 0; }
   .tl-road.under-fab { visibility: hidden; }
   .tl-road.above { top: 0; transform: translate(-50%, -50%); }
@@ -541,6 +547,23 @@
   .row.closure .avoid:disabled { opacity: .5; }
   /* A main road on the timeline (every one up to the destination, chargers or not) */
   .row.road { height: 46px; padding: 0; }
+  /* Border crossings on the line (0.32): the new country's flag, with distance and time to the border */
+  .row.border { height: 46px; padding: 0; }
+  .tl-flag { position: absolute; left: 24px; top: 50%; transform: translate(-50%, -50%); z-index: 2; line-height: 0; padding: 3px; border-radius: 5px; background: var(--asphalt); }
+  .tl-flag .flag { display: block; width: 27px; height: 18px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(127,127,127,.45); }
+  .tl-flag .flag.emoji { width: auto; height: auto; box-shadow: none; font-size: 1.35rem; line-height: 1; }
+  .row.border .cty { color: var(--line); font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
+  .row.border .sub.meta { white-space: nowrap; overflow: hidden; }
+  /* "Looking for more chargers…" (0.32): a drawer that slides out from under the destination, over the
+     list, so nothing below it moves when it comes or goes */
+  .drawer-wrap { position: absolute; z-index: 3; left: 50px; right: 2px; top: 0; overflow: hidden; pointer-events: none; padding: 0 14px 18px; }
+  .drawer { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 0 0 14px 14px;
+    background: var(--asphalt-raised); color: var(--muted); font-size: 1rem; font-weight: 600; white-space: nowrap; overflow: hidden;
+    box-shadow: 0 4px 10px rgba(0,0,0,.14); transform: translateY(-110%); opacity: 0; transition: transform .28s ease, opacity .28s ease; }
+  .drawer .spinner { flex: none; color: var(--sign-blue); }
+  .drawer span { overflow: hidden; text-overflow: ellipsis; }
+  .drawer-wrap.open .drawer { transform: none; opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .drawer { transition: opacity .2s; transform: none; } }
   .row.road .sub.meta { font-size: 1rem; }
   .row.road .len { color: var(--muted); }
   .row.road .len::before { content: "↕ "; opacity: .7; }
@@ -1465,6 +1488,7 @@
   <div class="debugline" id="debugLine" hidden></div>
   <div class="strip">
     <div class="row dest" id="destRow"></div>
+    <div class="drawer-wrap" id="drawerWrap" role="status" aria-live="polite"><div class="drawer" id="drawer"></div></div>
     <div class="sticky-road" id="stickyRoad" hidden aria-hidden="true"></div>
     <button type="button" class="fab" id="more" hidden aria-label="Back to the next chargers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <div class="list" id="list"></div>
@@ -1659,6 +1683,8 @@ const I18N_TEXT = {
 "Road rows hidden · tap a road badge to show them again": "Wegrijen verborgen · tik op een wegnummer om ze weer te tonen",
 "Every main road on the line · tap a road row to hide them": "Elke hoofdweg op de lijn · tik op een wegrij om ze te verbergen",
 "Road closures couldn’t be loaded: closed roads won’t show.": "Wegafsluitingen konden niet worden geladen: afgesloten wegen worden niet getoond.",
+"Looking for more chargers…": "Meer laders zoeken…",
+"Looking further ahead…": "Verderop zoeken…",
 "No more chargers within 5 km of your route.": "Geen laders meer binnen 5 km van je route.",
 "On your side of the road": "Aan jouw kant van de weg",
 "On the other side of the road": "Aan de overkant van de weg",
@@ -1936,6 +1962,8 @@ const I18N_TEXT = {
 "Road rows hidden · tap a road badge to show them again": "Linhas de estradas ocultas · toque num número de estrada para as mostrar",
 "Every main road on the line · tap a road row to hide them": "Todas as estradas principais na linha · toque numa linha de estrada para as ocultar",
 "Road closures couldn’t be loaded: closed roads won’t show.": "Não foi possível carregar os cortes de estrada: as estradas cortadas não serão mostradas.",
+"Looking for more chargers…": "A procurar mais carregadores…",
+"Looking further ahead…": "A procurar mais à frente…",
 "No more chargers within 5 km of your route.": "Não há mais carregadores a menos de 5 km do seu percurso.",
 "On your side of the road": "Do seu lado da estrada",
 "On the other side of the road": "Do outro lado da estrada",
@@ -3690,10 +3718,10 @@ function turnDir(t) {
 }
 function turnRow() {
   turnPulse = ""; turnFast = false;
-  if (state.arrived && state.arrivalDone) return `<span class="marker" aria-hidden="true"></span><div class="name">Arrived</div>`;
+  if (state.arrived && state.arrivalDone) return `<span class="marker me" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M20 3 36 36 20 28 4 36Z"/></svg></span><div class="name">Arrived</div>`;
   const u = state.user;
   const t = u.at != null && u.offKm <= ON_ROUTE_KM ? nextTurn() : null;
-  if (!t) return `<span class="marker" aria-hidden="true"></span><div class="name">You</div>`;
+  if (!t) return `<span class="marker me" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M20 3 36 36 20 28 4 36Z"/></svg></span><div class="name">You</div>`;
   const ex = nextExit(t.km);
   // Turning at an exit: its number goes with the turn ("↗ 1.2 km 18 A58").
   const atExit = ex?.isTurn && ex[1] ? `<span class="exit-sign"><b>${esc(ex[1])}</b></span>` : "";
@@ -6170,6 +6198,42 @@ function shownStatus(s) {
 }
 const CLS_ORDER = ["free", "full", "offline", "frozen", "stale", "nodata"];
 
+// Border crossings ahead (0.32), from the route's country stretches: where the country changes to a
+// known one. Shown on the line as the new country's flag.
+function bordersAhead() {
+  const b = state.route?.borders || [], u = state.user, out = [];
+  for (let i = 1; i < b.length; i++) {
+    const iso = b[i].iso, prev = b[i - 1].iso;
+    if (!iso || iso === prev || b[i].fromKm <= u.km) continue;
+    out.push({ km: b[i].fromKm, iso, from: prev });
+  }
+  return out;
+}
+let regionNames = null;
+function countryName(iso) {
+  try { regionNames = regionNames || new Intl.DisplayNames([LANG], { type: "region" }); return regionNames.of(iso) || iso; } catch (_) { return iso; }
+}
+function flagFor(iso) {
+  if (FLAG_BANDS[iso]) return flags(iso);
+  const emoji = /^[A-Z]{2}$/.test(iso) ? String.fromCodePoint(...[...iso].map((c) => 0x1f1a5 + c.charCodeAt(0))) : iso;
+  return `<span class="flag emoji" role="img" aria-label="${esc(countryName(iso))}">${emoji}</span>`;
+}
+function borderRow(b) {
+  const u = state.user;
+  return `<div class="row border"><span aria-hidden="true"></span><span class="tl-flag">${flagFor(b.iso)}</span><div><div class="sub meta"><span class="when"><b>${fmtKm(b.km - u.km)}</b>&nbsp;km&ensp;${fmtClock(minAtKm(b.km) - u.min)}</span><span class="cty">${esc(countryName(b.iso))}</span></div></div></div>`;
+}
+// The "looking for more chargers" drawer under the destination: placed just below the destination
+// row and slid in or out; the old text stays while it slides away.
+function setDrawer(text) {
+  const wrap = $("drawerWrap"), dest = $("destRow");
+  const top = dest.offsetTop + dest.offsetHeight;
+  if (wrap.style.top !== `${top}px`) wrap.style.top = `${top}px`;
+  if (text) {
+    if (wrap.dataset.text !== text) { $("drawer").innerHTML = `<i class="spinner" aria-hidden="true"></i><span>${text}</span>`; wrap.dataset.text = text; }
+    wrap.classList.add("open");
+  } else wrap.classList.remove("open");
+}
+
 // A main road on the timeline: its badge on the line, where it starts and how long it is.
 // The road you're on shows how far you stay on it.
 function roadRow(r, current) {
@@ -6322,7 +6386,7 @@ function render() {
       if (el.offsetTop + el.offsetHeight > top + 1) { anchor = { k: el.dataset.k, off: el.offsetTop - top }; break; }
     }
   }
-  const note = checking ? `<div class="empty">Checking detours${ahead.length ? " further ahead" : ""}…</div>` : "";
+  setDrawer(checking ? (ahead.length ? "Looking further ahead…" : "Looking for more chargers…") : "");
   // In route order, nearest first: the road you're on, then chargers and every main road ahead
   // (also stretches without any charger), up to the destination. Shown reversed (nearest at the bottom).
   const inOrder = [];
@@ -6330,7 +6394,6 @@ function render() {
   const roads = rows ? roadParts() : [];
   const curRoad = u.at != null && u.offKm <= ON_ROUTE_KM ? withOverride(mainRoadAt(u.km)) : null;
   if (curRoad && rows) inOrder.push({ key: `road-${curRoad.fromKm}`, html: roadRow(curRoad, true) });
-  if (note) inOrder.push({ key: "note", html: note });
   const nextRoads = roads.filter((p) => p.fromKm !== curRoad?.fromKm && p.fromKm > u.km);
   let ri = 0;
   const closures = closuresAhead();
@@ -6339,12 +6402,18 @@ function render() {
     while (ci < closures.length && closures[ci].fromKm <= km) { const m = closures[ci++]; inOrder.push({ key: `closure-${m.id}`, html: closureRow(m) }); }
   };
   pushClosures(u.km); // one you're in or right at: nearest
-  const pushRoad = () => { const p = nextRoads[ri++]; pushClosures(p.fromKm); inOrder.push({ key: `road-${p.fromKm}`, html: roadRow(p, false) }); };
+  const borders = bordersAhead();
+  let bi = 0;
+  const pushBorders = (km) => {
+    while (bi < borders.length && borders[bi].km <= km) { const b = borders[bi++]; inOrder.push({ key: `border-${b.km}-${b.iso}`, html: borderRow(b) }); }
+  };
+  const pushRoad = () => { const p = nextRoads[ri++]; pushClosures(p.fromKm); pushBorders(p.fromKm); inOrder.push({ key: `road-${p.fromKm}`, html: roadRow(p, false) }); };
   { const seen = new Map(); for (const site of ahead) { const l = siteLabel(site.members); seen.set(l, (seen.get(l) || 0) + 1); }
     dupLabels = new Set([...seen].filter(([, n]) => n > 1).map(([l]) => l)); }
   ahead.forEach((site, i) => {
     while (ri < nextRoads.length && nextRoads[ri].fromKm <= site.alongKm) pushRoad();
     pushClosures(site.alongKm);
+    pushBorders(site.alongKm);
     // Without road rows: a badge where the road changes between chargers, and under the nearest
     // charger the road you're on.
     const below = rows ? null : roadChange(i ? ahead[i - 1].alongKm : -Infinity, site.alongKm) || (i === 0 ? curRoad : null);
@@ -6353,6 +6422,7 @@ function render() {
   });
   while (ri < nextRoads.length) pushRoad();
   pushClosures(Infinity);
+  pushBorders(Infinity);
   if (!ahead.length && !checking) {
     inOrder.push({ key: "empty", html: hiddenCount
       ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
@@ -6548,6 +6618,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.32", date: "2026-11-22", title: { en: "Borders and a clearer arrow", nl: "Grenzen en een duidelijkere pijl", pt: "Fronteiras e uma seta mais nítida" },
+    items: { en: ["Border crossings show on the line as the new country's flag, with the distance and time to the border.", "Your arrow sits exactly on the line and has an edge, so it stands out.", "\u201cLooking for more chargers\u201d now slides in under the destination without moving the list."],
+      nl: ["Grensovergangen staan op de lijn als vlag van het nieuwe land, met afstand en tijd tot de grens.", "Je pijl staat precies op de lijn en heeft een rand, zodat hij opvalt.", "\u201cMeer laders zoeken\u201d schuift nu in onder de bestemming zonder dat de lijst verspringt."],
+      pt: ["As fronteiras aparecem na linha com a bandeira do novo país, com a distância e o tempo até à fronteira.", "A sua seta fica exatamente na linha e tem um contorno, para se destacar.", "\u201cA procurar mais carregadores\u201d agora desliza por baixo do destino sem mover a lista."] } },
   { v: "0.31", date: "2026-11-22", title: { en: "Belgium by itself", nl: "België vanzelf", pt: "Bélgica sozinha" },
     items: { en: ["The next Belgian site on your route updates by itself every 10 minutes while the app is open. When you open the app again it checks straight away and finishes a check that was cut short. Tap any site to check it now.", "France and Portugal no longer turn grey between two normal updates, and France misses fewer updates."],
       nl: ["De eerstvolgende Belgische locatie op je route werkt vanzelf elke 10 minuten bij zolang de app open is. Open je de app opnieuw, dan controleert hij meteen en maakt hij een onderbroken controle af. Tik op een locatie om die nu te controleren.", "Frankrijk en Portugal worden niet meer grijs tussen twee gewone updates, en Frankrijk mist minder updates."],
@@ -6696,7 +6770,8 @@ $("version").addEventListener("click", () => { $("help").hidden = true; openChan
 const FLAG_BANDS = { NL: ["h", "#AE1C28", "#FFFFFF", "#21468B"], DE: ["h", "#000000", "#DD0000", "#FFCE00"], AT: ["h", "#C8102E", "#FFFFFF", "#C8102E"],
   FR: ["v", "#002395", "#FFFFFF", "#ED2939"], BE: ["v", "#000000", "#FDDA24", "#EF3340"],
   PT: ["pt", "#046A38", "#DA291C", "#FFE900"] }; // Portugal: green 2/5, red 3/5, a yellow disc on the seam
-const FLAG_NAMES = { NL: "Netherlands", DE: "Germany", AT: "Austria", FR: "France", BE: "Belgium", PT: "Portugal" };
+FLAG_BANDS.LU = ["h", "#EA141D", "#FFFFFF", "#51ADDA"]; FLAG_BANDS.IT = ["v", "#009246", "#FFFFFF", "#CE2B37"];
+const FLAG_NAMES = { NL: "Netherlands", DE: "Germany", AT: "Austria", FR: "France", BE: "Belgium", PT: "Portugal", LU: "Luxembourg", IT: "Italy" };
 function flags(...cc) {
   return cc.map((c) => {
     const [dir, a, b, d] = FLAG_BANDS[c];

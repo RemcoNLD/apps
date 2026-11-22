@@ -210,6 +210,8 @@ EXACT = {
 "Road rows hidden · tap a road badge to show them again": ("Wegrijen verborgen · tik op een wegnummer om ze weer te tonen", "Linhas de estradas ocultas · toque num número de estrada para as mostrar"),
 "Every main road on the line · tap a road row to hide them": ("Elke hoofdweg op de lijn · tik op een wegrij om ze te verbergen", "Todas as estradas principais na linha · toque numa linha de estrada para as ocultar"),
 "Road closures couldn’t be loaded: closed roads won’t show.": ("Wegafsluitingen konden niet worden geladen: afgesloten wegen worden niet getoond.", "Não foi possível carregar os cortes de estrada: as estradas cortadas não serão mostradas."),
+"Looking for more chargers…": ("Meer laders zoeken…", "A procurar mais carregadores…"),
+"Looking further ahead…": ("Verderop zoeken…", "A procurar mais à frente…"),
 "No more chargers within 5 km of your route.": ("Geen laders meer binnen 5 km van je route.", "Não há mais carregadores a menos de 5 km do seu percurso."),
 "On your side of the road": ("Aan jouw kant van de weg", "Do seu lado da estrada"),
 "On the other side of the road": ("Aan de overkant van de weg", "Do outro lado da estrada"),

@@ -77,12 +77,22 @@ def main():
         data, url = open(local, "rb").read(), local
     else:
         req = urllib.request.Request(DYNAMIC_URL, headers={"User-Agent": "EVailability live (github.com/RemcoNLD/apps)"})
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                data, url = r.read(), r.geturl()
-        except Exception as e:
-            print(f"Feed not reachable: {e}")
-            summary([f"Feed not reachable: {e}"])
+        # The proxy sometimes resets the connection (2 of 12 runs on 22 Nov 2026); a missed run leaves
+        # France 10 minutes old, so try again a few times within the 5-minute slot before giving up.
+        data = None
+        for attempt, wait in enumerate((0, 5, 15, 30)):
+            if wait:
+                print(f"Retrying in {wait} s")
+                time.sleep(wait)
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    data, url = r.read(), r.geturl()
+                break
+            except Exception as e:
+                print(f"Feed not reachable (try {attempt + 1}): {e}")
+                last_error = e
+        if data is None:
+            summary([f"Feed not reachable after 4 tries: {last_error}"])
             sys.exit(1)
     rows, n = read_rows(data.decode("utf-8-sig", errors="replace"), wanted)
     at = datetime.datetime.now(datetime.timezone.utc)

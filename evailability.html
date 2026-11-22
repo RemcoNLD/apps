@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.31.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.31.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2072,7 +2072,7 @@ const HELP_I18N = {
   <p>Het aantal telt alleen laders met het gekozen vermogen of meer. Sommige laders verschijnen kort na het plannen.</p>
   <div class="cupd">
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">Elke minuut vanzelf; <b>tik op een lader</b> om hem nu bij te werken.</div>
-    <div class="k">${flags("FR","PT")}</div><div class="v">Vanzelf, elke 5 minuten: zo vaak als de landelijke bron bijwerkt. De ringen worden pas na 8 minuten grijs.</div>
+    <div class="k">${flags("FR","PT")}</div><div class="v">Vanzelf, elke 5 minuten: zo vaak als de landelijke bron bijwerkt. De ringen worden pas na 10 minuten grijs.</div>
     <div class="k">${flags("BE")}</div><div class="v">De eerstvolgende Belgische locatie op je route werkt vanzelf elke 10 minuten bij zolang de app open is, lader voor lader (± 10 s per stuk). Tik op een locatie om die nu te controleren. Tot dan zie je de laatste controle, door jou of iemand anders, grijs naar leeftijd.</div>
   </div>
   <p>Een lader die nu vrij is, is misschien niet meer vrij als je aankomt.</p>
@@ -2155,7 +2155,7 @@ const HELP_I18N = {
   <p>A contagem só inclui carregadores com a potência escolhida ou mais. Alguns carregadores aparecem pouco depois de planear.</p>
   <div class="cupd">
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">A cada minuto, sozinho; <b>toque num carregador</b> para o atualizar já.</div>
-    <div class="k">${flags("FR","PT")}</div><div class="v">Sozinho, a cada 5 minutos: tantas vezes quanto a fonte nacional atualiza. Os anéis só ficam cinzentos após 8 minutos.</div>
+    <div class="k">${flags("FR","PT")}</div><div class="v">Sozinho, a cada 5 minutos: tantas vezes quanto a fonte nacional atualiza. Os anéis só ficam cinzentos após 10 minutos.</div>
     <div class="k">${flags("BE")}</div><div class="v">O próximo local belga no seu percurso atualiza-se sozinho a cada 10 minutos enquanto a app está aberta, carregador a carregador (± 10 s cada). Toque num local para o verificar já. Até lá, mostra a última verificação, sua ou de outra pessoa, a cinzento conforme a idade.</div>
   </div>
   <p>Um carregador livre agora pode já não estar livre quando chegar.</p>
@@ -2333,7 +2333,7 @@ const STALE_MS = 3 * 60 * 1000;     // further ones turn grey after 3 minutes; t
 const OLD_MS = 5 * 60 * 1000;       // after 5 minutes the numbers are only outlined: really old
 // Portugal and France (0.30) come from national files read every 5 minutes by a job, then by the Worker:
 // their values are typically 2–7 minutes old when they arrive, so they grey later.
-const PT_STALE_MS = 8 * 60 * 1000, PT_OLD_MS = 12 * 60 * 1000;
+const PT_STALE_MS = 10 * 60 * 1000, PT_OLD_MS = 15 * 60 * 1000; // 0.31.1: was 8/12; a normal 5-minute cycle (job + Worker + app) reaches ~7 min, so only a missed run greys
 const snapCountry = (s) => s.country === "PT" || s.country === "FR";
 const staleMs = (s) => (snapCountry(s) ? PT_STALE_MS : STALE_MS);
 const oldMs = (s) => (snapCountry(s) ? PT_OLD_MS : OLD_MS);
@@ -6549,9 +6549,9 @@ $("introNext").addEventListener("click", () => {
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
   { v: "0.31", date: "2026-11-22", title: { en: "Belgium by itself", nl: "België vanzelf", pt: "Bélgica sozinha" },
-    items: { en: ["The next Belgian site on your route updates by itself every 10 minutes while the app is open. When you open the app again it checks straight away and finishes a check that was cut short. Tap any site to check it now."],
-      nl: ["De eerstvolgende Belgische locatie op je route werkt vanzelf elke 10 minuten bij zolang de app open is. Open je de app opnieuw, dan controleert hij meteen en maakt hij een onderbroken controle af. Tik op een locatie om die nu te controleren."],
-      pt: ["O próximo local belga no seu percurso atualiza-se sozinho a cada 10 minutos enquanto a app está aberta. Ao abrir a app de novo, verifica logo e termina uma verificação que ficou a meio. Toque num local para o verificar já."] } },
+    items: { en: ["The next Belgian site on your route updates by itself every 10 minutes while the app is open. When you open the app again it checks straight away and finishes a check that was cut short. Tap any site to check it now.", "France and Portugal no longer turn grey between two normal updates, and France misses fewer updates."],
+      nl: ["De eerstvolgende Belgische locatie op je route werkt vanzelf elke 10 minuten bij zolang de app open is. Open je de app opnieuw, dan controleert hij meteen en maakt hij een onderbroken controle af. Tik op een locatie om die nu te controleren.", "Frankrijk en Portugal worden niet meer grijs tussen twee gewone updates, en Frankrijk mist minder updates."],
+      pt: ["O próximo local belga no seu percurso atualiza-se sozinho a cada 10 minutos enquanto a app está aberta. Ao abrir a app de novo, verifica logo e termina uma verificação que ficou a meio. Toque num local para o verificar já.", "A França e Portugal já não ficam cinzentos entre duas atualizações normais, e a França falha menos atualizações."] } },
   { v: "0.30", date: "2026-11-22", title: { en: "Last known status", nl: "Laatst bekende status", pt: "Último estado conhecido" },
     items: { en: ["After planning or changing a route, every charger shows its last known status straight away, greyed by its age, instead of ↻. Press and hold to see when it was checked.", "France updates by itself every 5 minutes, like Portugal: no more tapping.", "Belgium shows the stalls’ last check (by anyone) until you tap for a fresh one."],
       nl: ["Na het plannen of wijzigen van een route toont elke lader meteen zijn laatst bekende status, grijs naar leeftijd, in plaats van ↻. Houd ingedrukt om te zien wanneer die is gecontroleerd.", "Frankrijk werkt vanzelf elke 5 minuten bij, net als Portugal: niet meer tikken.", "België toont de laatste controle van de laadpunten (door wie dan ook) tot je tikt voor een nieuwe."],
@@ -6743,7 +6743,7 @@ function helpHtml() {
   <p>The count only includes chargers at your chosen power or more. Some chargers appear a moment after planning.</p>
   <div class="cupd">
     <div class="k">${flags("NL","DE","AT")}</div><div class="v">Every minute by itself; <b>tap a charger</b> to update it now.</div>
-    <div class="k">${flags("FR","PT")}</div><div class="v">By itself, every 5 minutes: as often as the national source updates. Their rings grey only after 8 minutes.</div>
+    <div class="k">${flags("FR","PT")}</div><div class="v">By itself, every 5 minutes: as often as the national source updates. Their rings grey only after 10 minutes.</div>
     <div class="k">${flags("BE")}</div><div class="v">The next Belgian site on your route updates by itself every 10 minutes while the app is open, charger by charger (about 10 s each). Tap any site to check it now. Until then it shows the last check, by you or anyone else, greyed by its age.</div>
   </div>
   <p>A charger that's free now may not be free when you arrive.</p>

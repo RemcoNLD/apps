@@ -70,7 +70,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.8.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.9.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -110,6 +110,14 @@ const BRANDS = [
   { key: "izivia", name: "Izivia", color: "#00a0dc", ocm: /izivia|corri.?door/i, live: /izivia|corri.?door/i, evse: /^FR\*?(IZI|CDO)\*?/i, site: "izivia.com" },
   { key: "powerdot", name: "Powerdot", color: "#6a2c91", ocm: /power ?dot/i, live: /power ?dot/i, evse: /^[A-Z]{2}\*?PWD\*?/i, site: "powerdot.eu" },
   { key: "allego", name: "Allego", color: "#ff6a13", ocm: /allego/i, live: /allego/i, evse: /^[A-Z]{2}\*?ALL\*?/i, site: "allego.eu" },
+  // Dutch networks (0.9.0), matched by operator name only (their EVSE prefixes aren't confirmed yet, so
+  // evse never matches). Listed last, so an existing brand wins a shared name. Essent runs the former
+  // bp pulse network in NL since Oct 2026 (owned by E.ON Drive Infrastructure); German bp sites are
+  // "Aral pulse" and match aral first. Vattenfall InCharge was Nuon. Vattenfall and Eneco run many slow
+  // street chargers too; those are left out by the fast filters (OCM level 3, NDW >= 50 kW).
+  { key: "essent", name: "Essent", color: "#e4003b", ocm: /\bessent\b|\be\.?on drive|\bbp ?pulse\b/i, live: /\bessent\b|\be\.?on drive|\bbp ?pulse\b/i, evse: /(?!)/, site: "essent.nl" },
+  { key: "vattenfall", name: "Vattenfall InCharge", color: "#2071b5", ocm: /vattenfall|\bincharge\b|\bnuon\b/i, live: /vattenfall|\bincharge\b|\bnuon\b/i, evse: /(?!)/, site: "vattenfall.nl" },
+  { key: "eneco", name: "Eneco", color: "#3db54a", ocm: /\beneco\b/i, live: /\beneco\b/i, evse: /(?!)/, site: "eneco.nl" },
 ];
 const BRAND = Object.fromEntries(BRANDS.map((b) => [b.key, b]));
 const brandOf = (key) => BRAND[key] || BRAND.ionity;
@@ -2286,7 +2294,7 @@ function tileBox(key) {
 const validTile = (k) => typeof k === "string" && /^-?\d+_-?\d+(\/[0-3]){0,3}$/.test(k);
 
 async function ndwTile(env, key) {
-  const memoKey = `ndwt1:${key}`;
+  const memoKey = `ndwt2:${key}`; // ndwt2 since Worker 0.9.0: tiles cached before held no Essent/Vattenfall/Eneco
   const hit = memoGet(memoKey);
   if (hit !== undefined) return hit;
   if (env.USAGE) {
@@ -2614,11 +2622,11 @@ async function fetchWithTimeout(url, init, ms) {
   try { return await fetch(url, { ...init, signal: ctl.signal }); } finally { clearTimeout(t); }
 }
 let overpassGood = 0;
-const CHARGE_BRAND_START = /^(fastned|ionity|tesla|enbw|aral|shell( recharge)?|total(energies)?|electra|izivia|powerdot|allego|bp pulse)\b/i;
+const CHARGE_BRAND_START = /^(fastned|ionity|tesla|enbw|aral|shell( recharge)?|total(energies)?|electra|izivia|powerdot|allego|bp pulse|essent|vattenfall( incharge)?|eneco)\b/i;
 // Names of hosts rather than places, never used as a place even at a fuel station.
 const HOST_WORDS = /\b(mc ?donald'?s|burger king|kfc|van der valk|hotel|motel|restaurant|ikea|lidl|aldi|albert heijn|jumbo|parking|parkeergarage|p\+r)\b/i;
 // "Shell 't Hol" -> "'t Hol"; "Fastned Keizershof" -> "Keizershof"; "Shell" or "Tango" -> nothing.
-const FUEL_BRANDS = /\b(shell( recharge)?|bp( pulse)?|esso|total(energies)?|tango|texaco|tinq|avia|q8|gulf|argos|tamoil|firezone|makro|lukoil|aral( pulse)?|omv|jet|agip|eni|fastned|ionity|tesla( supercharger)?|allego|enbw|electra|powerdot|izivia|ev[- ]?box|vattenfall|eneco|greenflux|laadpunt|charging station|snellaadstation|laadstation|tankstation|express|station)\b/gi;
+const FUEL_BRANDS = /\b(shell( recharge)?|bp( pulse)?|esso|total(energies)?|tango|texaco|tinq|avia|q8|gulf|argos|tamoil|firezone|makro|lukoil|aral( pulse)?|omv|jet|agip|eni|fastned|ionity|tesla( supercharger)?|allego|enbw|electra|powerdot|izivia|ev[- ]?box|vattenfall( incharge)?|incharge|eneco|essent|e\.?on drive|greenflux|laadpunt|charging station|snellaadstation|laadstation|tankstation|express|station)\b/gi;
 function placeFromStationName(name, tags = {}) {
   let n = String(name).replace(FUEL_BRANDS, " ");
   for (const k of ["brand", "operator", "network"]) if (tags[k]) n = n.replace(new RegExp(tags[k].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), " ");

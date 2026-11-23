@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.35.2"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.36.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2486,6 +2486,9 @@ const BRANDS = [
   { key: "izivia", name: "Izivia", color: "#00a0dc" },
   { key: "powerdot", name: "Powerdot", color: "#6a2c91" },
   { key: "allego", name: "Allego", color: "#ff6a13" },
+  { key: "essent", name: "Essent", color: "#e4003b" },
+  { key: "vattenfall", name: "Vattenfall InCharge", color: "#2071b5" },
+  { key: "eneco", name: "Eneco", color: "#3db54a" },
 ];
 const BRAND = Object.fromEntries(BRANDS.map((b) => [b.key, b]));
 const brandKey = (s) => (BRAND[s.brand] ? s.brand : "ionity");
@@ -5728,7 +5731,7 @@ function clock(minFromNow) {
   return new Date(Date.now() + minFromNow * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 // Drop the brand from the name (the logo says it) and words like "Raststätte".
-const BRAND_WORDS = /^(ionity|fastned( snelladen| fast charging)?|tesla( supercharger)?|supercharger|enbw( hypercharger| schnellladepark)?|aral( pulse)?|shell( recharge)?|total(energies)?|electra|izivia|powerdot|allego)\b[\s:–-]*/i;
+const BRAND_WORDS = /^(ionity|fastned( snelladen| fast charging)?|tesla( supercharger)?|supercharger|enbw( hypercharger| schnellladepark)?|aral( pulse)?|shell( recharge)?|total(energies)?|electra|izivia|powerdot|allego|essent|bp pulse|vattenfall( incharge)?|eneco)\b[\s:–-]*/i;
 function shortName(n) {
   const out = String(n || "").replace(BRAND_WORDS, "").replace(/^(Raststätte|Rastanlage|Rasthof|Autohof)\s+/i, "").trim();
   return out || String(n || "Charger");
@@ -6722,6 +6725,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.36", date: "2026-11-24", title: { en: "Three Dutch brands", nl: "Drie Nederlandse merken", pt: "Três marcas neerlandesas" },
+    items: { en: ["Essent (the former bp pulse fast chargers), Vattenfall InCharge and Eneco can now be picked under the Dutch flag, with live availability in the Netherlands. Only their fast chargers are shown."],
+      nl: ["Essent (de vroegere snelladers van bp pulse), Vattenfall InCharge en Eneco kun je nu kiezen onder de Nederlandse vlag, met live beschikbaarheid in Nederland. Alleen hun snelladers worden getoond."],
+      pt: ["A Essent (os antigos carregadores rápidos da bp pulse), a Vattenfall InCharge e a Eneco podem agora ser escolhidas sob a bandeira neerlandesa, com disponibilidade em tempo real nos Países Baixos. Só são mostrados os seus carregadores rápidos."] } },
   { v: "0.35", date: "2026-11-22", title: { en: "Via points on the line", nl: "Viapunten op de lijn", pt: "Pontos intermédios na linha" },
     items: { en: ["Your via points now show in the list as a white dot with a blue ring on the line, with the distance and time to them.", "Via points and border crossings have a thin line across, and a border flag no longer sits right against a road number. With road rows set to changes only, borders are hidden too; via points always show.", "Belgium: each charge point that has just been checked turns green or red straight away, while the others stay grey until their turn, also after you come back to the app."],
       nl: ["Je viapunten staan nu in de lijst als een wit bolletje met een blauwe rand op de lijn, met de afstand en tijd ernaartoe.", "Viapunten en grensovergangen hebben een dunne lijn erdoorheen, en een grensvlag staat niet meer pal tegen een wegnummer. Staan de wegen op alleen wisselingen, dan zijn de grenzen ook verborgen; viapunten staan er altijd.", "België: elk laadpunt dat net is gecontroleerd wordt meteen groen of rood, de andere blijven grijs tot ze aan de beurt zijn, ook als je terugkomt in de app."],
@@ -7150,6 +7157,7 @@ const BRAND_GROUPS = [
   { title: "In several countries", keys: ["ionity", "tesla", "fastned", "allego", "shell", "total", "electra", "powerdot"] },
   { cc: "DE", keys: ["enbw", "aral"] },
   { cc: "FR", keys: ["izivia"] },
+  { cc: "NL", keys: ["essent", "vattenfall", "eneco"] },
 ];
 function brandGroups() {
   const placed = new Set(BRAND_GROUPS.flatMap((g) => g.keys));

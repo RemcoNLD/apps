@@ -67,7 +67,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.5.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.6.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -3819,12 +3819,27 @@ async function startWorkflow(env, file) {
   if (r.status === 401) { gh.token = null; throw new Error("GitHub refused the installation token; trying again next time"); }
   if (!r.ok) throw new Error(`GitHub ${r.status} starting ${file}: ${r.data?.message || "no message"}`);
 }
-// Hours since data/closures.json was made, from its first few hundred bytes ("generatedAt" comes first).
+// Hours since data/closures.json was made, from its first bytes ("generatedAt" comes first).
+// No Range request: GitHub gzips the file, so a byte range is a cut-off gzip stream ("Gzip compressed
+// stream ended prematurely", 18-23 Nov 2026). Instead the whole file is asked and only the start read.
 async function closuresAgeH() {
   countCall("GitHub raw");
-  const res = await fetch(CLOSURES_RAW, { headers: { Range: "bytes=0-400" } });
-  if (!res.ok && res.status !== 206) throw new Error(`closures.json: ${res.status}`);
-  const m = /"generatedAt"\s*:\s*"([^"]+)"/.exec(await res.text());
+  const res = await fetch(CLOSURES_RAW, { cf: { cacheTtl: 0 } });
+  if (!res.ok) throw new Error(`closures.json: ${res.status}`);
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let head = "";
+  try {
+    while (head.length < 4000) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      head += dec.decode(value, { stream: true });
+      if (/"generatedAt"\s*:\s*"[^"]+"/.test(head)) break;
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  const m = /"generatedAt"\s*:\s*"([^"]+)"/.exec(head);
   if (!m) throw new Error("closures.json has no generatedAt");
   return (Date.now() - Date.parse(m[1])) / 36e5;
 }

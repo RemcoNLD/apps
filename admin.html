@@ -2,10 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.4.0"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.5.0"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
+<!-- Own manifest and service worker (admin-sw.js), so this page can be its own home-screen app with push
+     notifications. The driving app deliberately has no manifest (iOS status bar); this doesn't touch it. -->
+<link rel="manifest" href="admin.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="EV Admin">
+<meta name="theme-color" content="#1d2429">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
 <style>
   :root {
@@ -63,6 +70,10 @@
   .small { font-size: .9rem; }
   .note { border-left: 4px solid var(--warn); }
   .error { color: var(--bad); }
+  .push-dev { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; padding: 4px 0; }
+  .push-dev + .push-dev { border-top: 1px solid var(--line); }
+  .push-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .push-actions button.sec { background: none; color: var(--blue); border: 1px solid var(--line); }
   /* Last 7 days: a row per source with today's number and the week as bars */
   .week { padding: 4px 16px; }
   .wk { display: flex; align-items: center; gap: 14px; padding: 12px 0; }
@@ -496,9 +507,123 @@ function renderSettings(data, msg = "") {
   $("settings").innerHTML = `<h2>Settings</h2><div class="card group">${rows}
     <div class="small muted" id="setMsg">${esc(msg || data.note || "")}</div></div>
     <h2>Road closures</h2><div class="card small" id="closInfo">Loading…</div>
-    <h2>GitHub timer</h2><div class="card small" id="timerInfo">Loading…</div>`;
+    <h2 id="timer">GitHub timer</h2><div class="card small" id="timerInfo">Loading…</div>
+    <h2 id="notifications">Notifications</h2><div class="card small" id="pushInfo">Loading…</div>`;
   loadClosuresInfo(Number(data.settings.find((x) => x.key === "closuresHours")?.value));
   loadTimerInfo();
+  loadPush();
+  if (location.hash === "#timer") setTimeout(() => $("timer")?.scrollIntoView(), 300);
+}
+// ---- Push notifications (Web Push): the Worker sends one when a timer job fails or works again, the
+// route service goes down or back, or a GitHub job fails. iPhone: only in the home-screen app (iOS 16.4+).
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  const kind = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) || isIOS ? "iPad" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "Mac" : /Windows/.test(ua) ? "Windows" : "Device";
+  const app = standalone ? "home-screen app" : /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : "Safari";
+  return `${kind} · ${app}`;
+}
+let pushReg = null;
+async function pushRegistration() {
+  if (pushReg) return pushReg;
+  pushReg = await navigator.serviceWorker.register("admin-sw.js", { scope: "./admin" });
+  return pushReg;
+}
+async function pushApi(body) {
+  const res = await fetch(`${WORKER}/admin/push`, body
+    ? { method: "POST", headers: { Authorization: `Bearer ${settingsToken}`, "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : { headers: { Authorization: `Bearer ${settingsToken}` } });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || `Error ${res.status}`);
+  return d;
+}
+const b64ToBytes = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+async function loadPush(msg = "", isError = false) {
+  const box = $("pushInfo");
+  if (!box) return;
+  try {
+    const d = await pushApi();
+    let mine = null;
+    if (pushSupported) {
+      try { mine = await (await pushRegistration()).pushManager.getSubscription(); } catch (_) {}
+    }
+    const here = mine && d.subs.some((x) => x.endpoint === mine.endpoint);
+    const list = d.subs.length ? d.subs.map((x) => `<div class="push-dev"><span>${esc(x.label)}${mine && x.endpoint === mine.endpoint ? " <b>(this device)</b>" : ""}
+        <span class="muted">· since ${esc(new Date(x.added).toLocaleDateString("en-GB", { day: "numeric", month: "short" }))}</span></span>
+        <button type="button" class="link" data-unsub="${esc(x.endpoint)}">Remove</button></div>`).join("")
+      : `<div class="muted">No device gets notifications yet.</div>`;
+    let actions;
+    if (!pushSupported) {
+      actions = isIOS && !standalone
+        ? `<div class="muted">On iPhone: tap Share › <b>Add to Home Screen</b>, open <b>EV Admin</b> from your home screen, log in there and turn notifications on.</div>`
+        : `<div class="muted">This browser can’t receive push notifications.</div>`;
+    } else if (here) {
+      actions = `<div class="push-actions"><button type="button" id="pushTest">Send test</button><button type="button" class="sec" id="pushOff">Turn off on this device</button></div>`;
+    } else {
+      actions = `<div class="push-actions"><button type="button" id="pushOn">Turn on for this device</button></div>
+        ${isIOS && !standalone ? `<div class="muted">On iPhone this works only in the home-screen app (Share › Add to Home Screen).</div>` : ""}`;
+    }
+    box.innerHTML = `<div class="muted" style="margin-bottom:6px">A notification when a timer job fails or works again, when the route service goes down or comes back, or when a GitHub job fails.</div>
+      ${list}${actions}${msg ? `<div class="${isError ? "error" : "muted"}" style="margin-top:8px">${esc(msg)}</div>` : ""}`;
+    box.querySelectorAll("[data-unsub]").forEach((b) => b.onclick = () => pushOff(b.dataset.unsub));
+    if ($("pushOn")) $("pushOn").onclick = () => pushOn(d.publicKey);
+    if ($("pushOff")) $("pushOff").onclick = () => pushOff(mine.endpoint, true);
+    if ($("pushTest")) $("pushTest").onclick = () => pushTest(mine.endpoint);
+  } catch (e) {
+    box.innerHTML = `<span class="error">${esc(e.message)}</span>`;
+  }
+}
+async function pushOn(publicKey) {
+  $("pushInfo").querySelector(".push-actions").innerHTML = "Asking…";
+  try {
+    const perm = await Notification.requestPermission(); // straight from the tap (iOS needs a gesture)
+    if (perm !== "granted") throw new Error(perm === "denied"
+      ? "Notifications are blocked for this app. Allow them in Settings › Notifications › EV Admin."
+      : "Notifications weren’t allowed.");
+    const reg = await pushRegistration();
+    await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    // A subscription made with another server key can't be used: start again.
+    if (sub && sub.options?.applicationServerKey) {
+      const k = new Uint8Array(sub.options.applicationServerKey);
+      if (k.join() !== b64ToBytes(publicKey).join()) { await sub.unsubscribe(); sub = null; }
+    }
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) });
+    await pushApi({ action: "subscribe", label: deviceLabel(), sub: sub.toJSON() });
+    await loadPush("Notifications are on for this device. Tap Send test to check.");
+  } catch (e) {
+    await loadPush(e.message, true);
+  }
+}
+async function pushOff(endpoint, own = false) {
+  try {
+    if (own || (pushSupported && (await (await pushRegistration()).pushManager.getSubscription())?.endpoint === endpoint)) {
+      const sub = await (await pushRegistration()).pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+    }
+    await pushApi({ action: "unsubscribe", endpoint });
+    await loadPush("Removed.");
+  } catch (e) {
+    await loadPush(e.message, true);
+  }
+}
+async function pushTest(endpoint) {
+  try {
+    const d = await pushApi({ action: "test", endpoint });
+    const r = d.results?.[0];
+    await loadPush(!r ? "This device isn’t subscribed any more." : r.ok ? "Test sent. It should arrive within a few seconds."
+      : r.gone ? "The push service says this subscription is gone; turn notifications on again." : `The push service answered ${r.status}: ${r.text || "no details"}`, !r?.ok);
+  } catch (e) {
+    await loadPush(e.message, true);
+  }
+}
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data?.type === "push" && settingsToken) loadTimerInfo();
+    if (e.data?.type === "open") { location.hash = "timer"; $("timer")?.scrollIntoView(); if (settingsToken) loadTimerInfo(); }
+  });
 }
 // Last run of the GitHub job that fetches planned road closures (data/closures.json on this site).
 async function loadClosuresInfo(hours) {

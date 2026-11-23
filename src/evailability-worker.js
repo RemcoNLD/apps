@@ -27,6 +27,7 @@
 //   GET  /closures/schedule     hours between road-closure updates (read by the GitHub job .github/workflows/closures.yml)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /admin/timer           the 5-minute timer that starts GitHub jobs: its state (POST: check the GitHub App now)
+//   GET  /admin/push            push notifications for the usage page: public key, subscriptions (POST: subscribe, unsubscribe, test)
 //   GET  /admin/settings        switches and values set on the usage page (same header)
 //   GET  /admin/users           access keys: label, status, dates, use per day (same header)
 //   POST /admin/users           {action:"create", label} | {action:"regenerate"|"disable"|"enable"|"delete", id}
@@ -67,7 +68,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.6.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.7.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -2931,7 +2932,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/admin/timer", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/admin/timer", "/admin/push", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -3510,6 +3511,7 @@ async function route(request, env) {
   if (path === "/admin/settings" && (request.method === "GET" || request.method === "POST")) return handleSettings(request, env);
   if (path === "/admin/users" && (request.method === "GET" || request.method === "POST")) return handleUsers(request, env);
   if (path === "/admin/timer" && (request.method === "GET" || request.method === "POST")) return handleTimer(request, env);
+  if (path === "/admin/push" && (request.method === "GET" || request.method === "POST")) return handlePush(request, env);
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/fr-status" && request.method === "POST") {
@@ -3857,9 +3859,12 @@ function noteJob(state, job, ok, msg) {
   state[job] = { ...prev, ok, msg, since: changed ? now : prev.since || now };
   return changed;
 }
+const TIMER_JOBS = { pt: "Portugal live", fr: "France live", closures: "Road closures" };
 async function runTimer(env, at = Date.now()) {
   await loadSettings(env);
   const state = await loadTimer(env);
+  const wasOk = Object.fromEntries(Object.keys(TIMER_JOBS).map((k) => [k, state[k]?.ok])); // for push messages
+  const msgs = [];
   let save = false;
   try {
     await startWorkflow(env, "pt-live.yml");
@@ -3894,8 +3899,32 @@ async function runTimer(env, at = Date.now()) {
       save = noteJob(state, "closures", false, e.message) || save;
       console.log("Timer: Road closures", e.message);
     }
+    // Failed GitHub runs (also ones the timer didn't start: deploys, pushes, GitHub's own schedule).
+    try { save = (await checkWorkflowRuns(env, state, msgs)) || save; }
+    catch (e) { console.log("Timer: workflow runs", e.message); }
   }
+  // Push: a timer job that turned failing or OK again (not a first tick, not a different error text).
+  for (const [k, name] of Object.entries(TIMER_JOBS)) {
+    const j = state[k];
+    if (!j || wasOk[k] === undefined || wasOk[k] === j.ok) continue;
+    msgs.push(j.ok ? { title: `${name}: OK again`, body: `The timer can start ${name} again.`, tag: `timer-${k}` }
+      : { title: `${name}: failing`, body: String(j.msg || "Unknown error").slice(0, 180), tag: `timer-${k}` });
+  }
+  // Route service (the start-screen notice): down or back.
+  try {
+    const h = await loadHealth(env);
+    const down = !!(h.ors?.down && Date.now() - (h.ors.lastFail || 0) < HEALTH_STALE_MS);
+    if (state.orsDown === undefined) { state.orsDown = down; save = true; }
+    else if (state.orsDown !== down) {
+      state.orsDown = down; save = true;
+      msgs.push(down ? { title: "Route service failing", body: "openrouteservice fails; drivers see the notice on the start screen.", tag: "ors" }
+        : { title: "Route service works again", body: "openrouteservice answers again; the start-screen notice is gone.", tag: "ors" });
+    }
+  } catch (e) { console.log("Timer: health", e.message); }
   if (save) await saveTimer(env, state);
+  for (const m of msgs.slice(0, 5)) {
+    try { await notifyAdmin(env, m); } catch (e) { console.log("Push failed", e.message); }
+  }
   return state;
 }
 // GET: the timer's state. POST: check the App now (sign in, token, may it see the workflows?) without
@@ -3920,6 +3949,166 @@ async function handleTimer(request, env) {
   } catch (e) {
     return json(request, { ok: false, steps, error: e.message, state });
   }
+}
+
+// ---------------------------------------------------------------- push notifications (usage page)
+// Standard Web Push (RFC 8030/8291/8292) to the usage page added to the home screen as its own app
+// (admin.html + admin-sw.js + admin.webmanifest). Only the admin gets these; the driving app has none.
+//   KV "push-vapid": the VAPID key pair, made by the Worker the first time the usage page asks for it
+//     ({pub: base64url raw public key, jwk: private key}); never in Git.
+//   KV "push-subs": the subscriptions [{endpoint, p256dh, auth, label, added}], written only on
+//     subscribe, unsubscribe, or when the push service answers 404/410 (subscription gone).
+//   GET /admin/push: the public key and the subscriptions; POST {action: "subscribe", sub, label} |
+//     {action: "unsubscribe", endpoint} | {action: "test", endpoint?}.
+// Sent from the timer (runTimer): a timer job turning failing or OK again, the route service going
+// down or back, and a GitHub workflow whose newest finished run failed (or works again).
+// The message is encrypted for the phone (aes128gcm); the push service only sees ciphertext.
+const PUSH_TTL_S = 6 * 3600;
+const PUSH_SUB = "https://remconld.github.io/apps/admin.html"; // VAPID contact (Apple wants mailto: or https:)
+const te = new TextEncoder();
+const b64urlBytes = (s) => Uint8Array.from(atob(String(s).replace(/-/g, "+").replace(/_/g, "/") + "===".slice((String(s).length + 3) % 4)), (c) => c.charCodeAt(0));
+const b64urlAny = (bytes) => { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+const cat = (...parts) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let i = 0; for (const p of parts) { out.set(p, i); i += p.length; } return out; };
+async function hkdf(salt, ikm, info, len) {
+  const key = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info }, key, len * 8));
+}
+async function pushVapid(env, make = false) {
+  let v = memoGet("push-vapid");
+  if (v === undefined) {
+    try { v = JSON.parse((await kvGet(env, "push-vapid")) || "null"); } catch (_) { v = null; }
+    memoSet("push-vapid", v, 10 * 60 * 1000);
+  }
+  if (!v && make) {
+    // Read KV itself again first: another Worker copy may have made the key meanwhile, and a second
+    // key would break every subscription made with the first.
+    try { v = JSON.parse((await kvGet(env, "push-vapid")) || "null"); } catch (_) { v = null; }
+  }
+  if (!v && make) {
+    const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const pub = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
+    v = { pub: b64urlAny(pub), jwk: await crypto.subtle.exportKey("jwk", kp.privateKey), made: new Date().toISOString() };
+    await env.USAGE.put("push-vapid", JSON.stringify(v)); countCall("KV writes");
+    memoSet("push-vapid", v, 10 * 60 * 1000);
+  }
+  return v;
+}
+async function pushSubs(env) {
+  try { return JSON.parse((await kvGet(env, "push-subs")) || "[]"); } catch (_) { return []; }
+}
+async function savePushSubs(env, subs) {
+  await env.USAGE.put("push-subs", JSON.stringify(subs)); countCall("KV writes");
+}
+async function vapidHeader(v, endpoint) {
+  const key = await crypto.subtle.importKey("jwk", v.jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const now = Math.floor(Date.now() / 1000);
+  const data = `${b64urlText(JSON.stringify({ typ: "JWT", alg: "ES256" }))}.${b64urlText(JSON.stringify({ aud: new URL(endpoint).origin, exp: now + 12 * 3600, sub: PUSH_SUB }))}`;
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, te.encode(data))); // raw r||s, as JWS wants
+  return `vapid t=${data}.${b64urlAny(sig)}, k=${v.pub}`;
+}
+// RFC 8291: one aes128gcm record for the subscription's keys.
+async function encryptPush(sub, payload) {
+  const uaPub = b64urlBytes(sub.p256dh), authSecret = b64urlBytes(sub.auth);
+  const as = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const asPub = new Uint8Array(await crypto.subtle.exportKey("raw", as.publicKey));
+  const uaKey = await crypto.subtle.importKey("raw", uaPub, { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: uaKey }, as.privateKey, 256));
+  const ikm = await hkdf(authSecret, shared, cat(te.encode("WebPush: info\0"), uaPub, asPub), 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, te.encode("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hkdf(salt, ikm, te.encode("Content-Encoding: nonce\0"), 12);
+  const aes = await crypto.subtle.importKey("raw", cek, "AES-GCM", false, ["encrypt"]);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aes, cat(te.encode(payload), new Uint8Array([2]))));
+  return cat(salt, new Uint8Array([0, 0, 16, 0]), new Uint8Array([asPub.length]), asPub, ct); // rs = 4096
+}
+// One message to one subscription: {ok, status, gone}.
+async function sendPush(env, v, sub, msg) {
+  countCall("Push");
+  try {
+    const res = await fetch(sub.endpoint, {
+      method: "POST",
+      headers: { Authorization: await vapidHeader(v, sub.endpoint), TTL: String(PUSH_TTL_S), Urgency: "high",
+        "Content-Encoding": "aes128gcm", "Content-Type": "application/octet-stream",
+        ...(msg.tag ? { Topic: String(msg.tag).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32) } : {}) },
+      body: await encryptPush(sub, JSON.stringify(msg)),
+    });
+    const text = res.ok ? "" : (await res.text().catch(() => "")).slice(0, 200);
+    return { ok: res.ok, status: res.status, gone: res.status === 404 || res.status === 410, text };
+  } catch (e) {
+    return { ok: false, status: 0, gone: false, text: e.message };
+  }
+}
+// To every subscription (or one endpoint); drops the ones the push service says are gone.
+// msg: {title, body, url?, tag?}. Returns [{label, ok, status, text}].
+async function notifyAdmin(env, msg, onlyEndpoint) {
+  const v = await pushVapid(env);
+  if (!v) return [];
+  const subs = await pushSubs(env);
+  const targets = subs.filter((s) => !onlyEndpoint || s.endpoint === onlyEndpoint);
+  if (!targets.length) return [];
+  const full = { url: "admin.html#timer", ...msg, at: new Date().toISOString() };
+  const results = await Promise.all(targets.map((s) => sendPush(env, v, s, full)));
+  const gone = new Set(targets.filter((_, i) => results[i].gone).map((s) => s.endpoint));
+  if (gone.size) await savePushSubs(env, subs.filter((s) => !gone.has(s.endpoint)));
+  results.forEach((r, i) => { if (!r.ok) console.log("Push", targets[i].label, r.status, r.text); });
+  return results.map((r, i) => ({ label: targets[i].label, ok: r.ok, status: r.status, gone: r.gone, text: r.text }));
+}
+async function handlePush(request, env) {
+  checkAdmin(request, env);
+  const pubSubs = (subs) => subs.map((s) => ({ endpoint: s.endpoint, label: s.label, added: s.added, host: new URL(s.endpoint).host }));
+  if (request.method === "GET") {
+    const v = await pushVapid(env, true);
+    return json(request, { publicKey: v.pub, subs: pubSubs(await pushSubs(env)) });
+  }
+  const body = await request.json().catch(() => ({}));
+  if (body.action === "subscribe") {
+    const s = body.sub || {};
+    const keys = s.keys || {};
+    let host = "";
+    try { host = new URL(s.endpoint).protocol === "https:" ? new URL(s.endpoint).host : ""; } catch (_) {}
+    if (!host || !keys.p256dh || !keys.auth) throw new HttpError(400, "That isn’t a push subscription");
+    const subs = (await pushSubs(env)).filter((x) => x.endpoint !== s.endpoint);
+    subs.push({ endpoint: s.endpoint, p256dh: keys.p256dh, auth: keys.auth, label: String(body.label || "Device").slice(0, 60), added: new Date().toISOString() });
+    await savePushSubs(env, subs.slice(-10));
+    return json(request, { ok: true, subs: pubSubs(subs.slice(-10)) });
+  }
+  if (body.action === "unsubscribe") {
+    const subs = await pushSubs(env);
+    const left = subs.filter((x) => x.endpoint !== body.endpoint);
+    if (left.length !== subs.length) await savePushSubs(env, left);
+    return json(request, { ok: true, subs: pubSubs(left) });
+  }
+  if (body.action === "test") {
+    const results = await notifyAdmin(env, { title: "EVailability", body: "Test notification: push works on this device.", tag: "test" }, body.endpoint || null);
+    return json(request, { ok: results.length > 0 && results.every((r) => r.ok), results, subs: pubSubs(await pushSubs(env)) });
+  }
+  throw new HttpError(400, "Unknown action");
+}
+// GitHub workflows: the newest finished run per workflow (one API call); a failure is announced once,
+// and its recovery once. state.gh = {seen: {<workflow name>: "failure"|"success"}}.
+async function checkWorkflowRuns(env, state, out) {
+  const token = await installToken(env);
+  const r = await ghCall(`/repos/${GH_REPO}/actions/runs?status=completed&per_page=40`, token);
+  if (!r.ok) throw new Error(`GitHub ${r.status} listing runs`);
+  const newest = {};
+  for (const run of r.data.workflow_runs || []) {
+    if (!["success", "failure", "timed_out", "startup_failure"].includes(run.conclusion)) continue;
+    if (!newest[run.name]) newest[run.name] = run; // runs come newest first
+  }
+  const first = !state.gh;
+  const seen = (state.gh = state.gh || { seen: {} }).seen;
+  let changed = first;
+  for (const [name, run] of Object.entries(newest)) {
+    const now = run.conclusion === "success" ? "success" : "failure";
+    if (seen[name] === now) continue;
+    if (!first && (now === "failure" || seen[name] === "failure")) {
+      out.push(now === "failure"
+        ? { title: `${name}: failed`, body: `GitHub job “${name}” failed (${run.event}, ${new Date(run.updated_at).toISOString().slice(11, 16)} UTC). Tap for the usage page; the log is on GitHub Actions.`, tag: `gh-${name}`, url: "admin.html#timer", link: run.html_url }
+        : { title: `${name}: works again`, body: `GitHub job “${name}” succeeded again.`, tag: `gh-${name}` });
+    }
+    seen[name] = now; changed = true;
+  }
+  return changed;
 }
 
 export default {

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Speaker-keuzehulp</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+:root{--bg:#eef2f4;--card:#fff;--ink:#14232b;--mute:#566a74;--line:#d3dde2;--acc:#0f6e8c;--accbg:#dcedf3;--win:#b57d00;--winbg:#fdf1cf;--up:#17803d;--down:#b3261e;color-scheme:light;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a20;--card:#18262e;--ink:#eaf1f4;--mute:#9db0ba;--line:#2c3f49;--acc:#5ec0de;--accbg:#173843;--win:#f0b83a;--winbg:#3a2f10;--up:#4cc77a;--down:#ff8a80;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1a20;--card:#18262e;--ink:#eaf1f4;--mute:#9db0ba;--line:#2c3f49;--acc:#5ec0de;--accbg:#173843;--win:#f0b83a;--winbg:#3a2f10;--up:#4cc77a;--down:#ff8a80;color-scheme:dark}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 "Atkinson Hyperlegible",system-ui,sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding:16px}
+h1{font-size:1.6rem;line-height:1.2;margin:8px 0 4px}
+h2{font-size:1.15rem;margin:0 0 4px}
+p{margin:0}
+.sub{color:var(--mute);margin-bottom:16px}
+.grid{display:grid;gap:16px}
+@media(min-width:860px){.grid{grid-template-columns:1.15fr 1fr;align-items:start}.side{position:sticky;top:12px}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+.advice{border:2px solid var(--win);background:var(--winbg)}
+.advice .big{font-size:1.35rem;font-weight:700;margin:2px 0}
+.advice p+p{margin-top:6px}
+.note{font-size:.92rem;color:var(--mute)}
+.row{display:grid;grid-template-columns:34px 1fr auto;gap:4px 10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.pos{font-weight:700;font-size:1.2rem;text-align:center}
+.name{font-weight:700}
+.chg{font-size:.85rem;font-weight:700}.chg.up{color:var(--up)}.chg.down{color:var(--down)}.chg.same{color:var(--mute);font-weight:400}
+.sc{font-size:1.3rem;font-weight:700;text-align:right}
+.bar{grid-column:2/4;height:10px;background:var(--line);border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:6px;transition:width .25s}
+.row.first .bar i{background:var(--win)}
+.row.first .pos{color:var(--win)}
+.tag{grid-column:2/4;font-size:.88rem;color:var(--mute)}
+.ctl{margin:14px 0}
+.ctl label{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.ctl small{display:block;color:var(--mute);font-weight:400;font-size:.88rem}
+.val{color:var(--acc);white-space:nowrap}
+input[type=range]{width:100%;height:36px;accent-color:var(--acc);margin:2px 0}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+button{font:inherit;min-height:44px;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);color:var(--bg);border-color:var(--acc);font-weight:700}
+button:focus-visible,summary:focus-visible,input:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+details{border-top:1px solid var(--line);padding:4px 0}
+summary{min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;font-weight:700;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary span{font-weight:400;color:var(--mute);font-size:.9rem}
+.mod{color:var(--win)}
+.pm{font-size:.9rem;color:var(--mute);margin:2px 0 6px}
+.toggle{display:flex;gap:10px;align-items:center;min-height:44px;font-weight:700}
+.toggle input{width:22px;height:22px;accent-color:var(--acc)}
+.tools{grid-column:1/4;display:flex;gap:8px;flex-wrap:wrap}
+.tools button{min-height:40px;padding:4px 12px;font-size:.92rem}
+.why{grid-column:1/4;background:var(--bg);border-radius:10px;padding:12px;margin-top:4px}
+.why h3{margin:0 0 6px;font-size:1rem}
+.why>p{margin-top:8px}
+.cr{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:6px 0;border-top:1px solid var(--line)}
+.cr:first-of-type{border-top:0}
+.cr .t{font-weight:700}.cr .pt{font-weight:700;text-align:right;color:var(--acc)}
+.cr .r{grid-column:1/3;color:var(--mute);font-size:.92rem}
+.cmp table{width:100%;border-collapse:collapse;margin:8px 0}
+.cmp th,.cmp td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top;text-align:left;font-size:.95rem}
+.cmp th:first-child,.cmp td:first-child{width:28%;color:var(--mute);font-weight:400}
+.cmp .best{color:var(--up);font-weight:700}
+.cmp .x{float:right;min-height:40px}
+.why p,.cmp p{margin:8px 0;max-width:68ch}
+.cmp h3{margin:16px 0 2px;font-size:1rem}
+.tl{color:var(--mute);font-size:.95rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Welke speaker past bij jou?</h1>
+<p class="sub">Verschuif de schuiven naar wat jij belangrijk vindt. De ranking en het koopadvies veranderen direct mee. Tik bij een product op “Waarom?” voor uitleg, of kies er twee om te vergelijken.</p>
+<div class="grid">
+<div>
+<div class="card advice" id="advice" aria-live="polite"></div>
+<div class="card cmp" id="cmp" hidden></div>
+<div class="card">
+<h2>Ranking</h2>
+<label class="toggle"><input type="checkbox" id="onlyPort"> Alleen speakers die je kunt meenemen</label>
+<div id="list"></div>
+<p class="note" style="margin-top:8px">De pijl laat zien hoe ver een product stijgt of daalt ten opzichte van mijn eigen ranking.</p>
+</div>
+</div>
+<div class="side">
+<div class="card">
+<h2>Wat vind je belangrijk?</h2>
+<p class="note">Kies een profiel of stel zelf in. Het hoeft niet op 100 uit te komen.</p>
+<div class="btns" id="presets"></div>
+<div id="weights"></div>
+</div>
+<div class="card">
+<h2>Ben je het niet eens met mijn cijfers?</h2>
+<p class="note">Tik een product open en pas de cijfers (0 tot 10) aan.</p>
+<div id="edit"></div>
+<div class="btns"><button id="reset">Alles terugzetten naar mijn cijfers</button></div>
+</div>
+</div>
+</div>
+<p class="note" style="margin-top:8px">Gebaseerd op tests van o.a. What Hi-Fi?, TechRadar, SoundGuys, RTINGS en Tom’s Guide. Prijzen zijn indicatief (nov. 2026).</p>
+</div>
+<script>
+var CRIT=[
+{k:"Geluid",h:"Hoe goed en vol klinkt hij?"},
+{k:"Meenemen en opladen",h:"Gewicht, accu, waterdicht, opladen"},
+{k:"Gemak",h:"Hoe makkelijk werkt hij en krijg je hem aan de praat?"},
+{k:"Prijs en kwaliteit",h:"Wat krijg je voor je geld, en hoe betrouwbaar?"}];
+var P=[
+{id:"charge6",n:"JBL Charge 6",p:"€132 tot €147",s:[8,9,9,9.5],port:1,a:"Goed geluid, klein, waterdicht en makkelijk, voor een vriendelijke prijs. Let op: er zit geen USB-C-kabel in de doos.",pm:"Plus: prijs, formaat, robuust. Min: gemeten accu ca. 13-14 uur."},
+{id:"xtreme5",n:"JBL Xtreme 5",p:"€299 tot €349",s:[9.5,7.5,8.5,8],port:1,a:"Het beste geluid van de groep en een zeer lange accu. Je betaalt met gewicht (2,9 kg) en prijs.",pm:"Plus: helder, krachtig, ca. 30 uur accu. Min: zwaar en duur."},
+{id:"kilburn",n:"Marshall Kilburn III",p:"€273 tot €313",s:[7.5,8,9.5,7.5],port:1,a:"Stijlvol, met draaiknoppen en een enorme accu (50+ uur). Het geluid is warm en bassig, niet neutraal.",pm:"Plus: bediening, accu. Min: IP54, zwaar, bassig."},
+{id:"soundlink",n:"Bose SoundLink Plus",p:"€200 tot €280",s:[8,8.5,8,7],port:1,a:"Degelijk, drijft op water en klinkt netjes. De JBL Charge 6 is goedkoper en klinkt volgens vergelijkingen pakkender.",pm:"Plus: compact, IP67, aptX. Min: prijs, geen microfoon."},
+{id:"boombox3",n:"JBL Boombox 3",p:"ca. €267",s:[8.5,5,8,8],port:1,a:"Veel volume en diepe bas, maar 6,7 kg en een oudere generatie (de Boombox 4 bestaat al). Voor ca. €267 (MediaMarkt, laatste kans) is hij een prima partyspeaker; kost hij weer ca. €368, kies dan liever de Xtreme 5.",pm:"Plus: luid, bas, accu. Min: zwaar, oudere generatie."},
+{id:"lifestyle",n:"Bose Lifestyle Ultra Speaker",p:"€333 tot €349",s:[7,2,7.5,6],port:0,a:"Een thuisspeaker met wifi en multiroom. Geen accu, dus niet om mee te nemen. Reviewers zijn verdeeld over het geluid.",pm:"Plus: streamen, multiroom. Min: alleen stekker, prijs."},
+{id:"lenco",n:"Lenco LS-500BK (platenspeler)",p:"€269 tot €300",s:[6,2,6,7],port:0,a:"Een complete vinylset voor beginners. Een ander soort product, dus onderaan bij een speaker-vergelijking. Geen onafhankelijke test gevonden.",pm:"Plus: alles in één doos. Min: montage, wisselende kwaliteit."},
+{id:"flip7",n:"JBL Flip 7 (alternatief)",p:"€98 tot €119",s:[7,9,9,9],port:1,mm:"Te koop: €118, online op voorraad (gecontroleerd 23 november).",a:"Bijna net zo makkelijk en robuust als de Charge 6, maar kleiner, lichter (560 gram) en goedkoper. Je betaalt met minder volume, minder lage bas en een kortere accu.",pm:"Plus: prijs, gewicht, IP68. Min: accu ca. 14 uur, langzaam laden."},
+{id:"sonosplay",n:"Sonos Play (alternatief)",p:"€254 tot €279",s:[8,8,8.5,6.5],port:1,mm:"Productpagina bestaat, maar prijs en voorraad kon ik niet controleren (de site blokkeerde het openen).",a:"Een goede allrounder voor thuis én onderweg, met wifi, Bluetooth en multiroom. Het geluid is helder maar minder spannend dan bij JBL en Marshall, en hij is prijzig.",pm:"Plus: wifi plus Bluetooth, multiroom, IP67. Min: prijs, geen Auracast, app haperingen."},
+{id:"middleton2",n:"Marshall Middleton II (alternatief)",p:"€218 tot €251",s:[8.5,7,8,6.5],port:1,mm:"Productpagina bestaat, maar prijs en voorraad kon ik niet controleren (de site blokkeerde het openen).",a:"Mooi stereogeluid met veel bas en 30 uur accu, maar zwaar voor zijn formaat. TechRadar vindt de Kilburn III de betere koop.",pm:"Plus: stereobeeld, 30 uur accu, IP67. Min: 1,8 kg zonder handvat, geen aptX."},
+{id:"sonyult7",n:"Sony ULT Field 7 (alternatief)",p:"€249 tot €318",s:[7.5,4.5,6.5,6.5],port:1,mm:"Te koop met het label \"Laatste kans\": €318 regulier, €249 in de actie t/m 26 november (volgens Folderz).",a:"Een partyspeaker met veel bas, karaoke-aansluitingen en een lichtshow. Hij weegt 6,3 kg, laadt alleen via het stopcontact en heeft een matige app.",pm:"Plus: bas, aansluitingen, 30 uur accu. Min: zwaar, app, alleen netlader."}];
+var BASEW=[35,25,25,15];
+var PRE=[
+{n:"Mijn advies",w:[35,25,25,15]},
+{n:"Geluid telt zwaarst",w:[60,10,15,15]},
+{n:"Veel meenemen",w:[20,50,15,15]},
+{n:"Zo makkelijk mogelijk",w:[20,15,55,10]},
+{n:"Zuinig",w:[20,15,15,50]}];
+var WHY={
+charge6:["Groot en pakkend geluid voor zijn formaat; bij lage volumes minder boeiend.","Klein, IP68 en snel laden. Gemeten accu ca. 13-14 uur, minder dan opgegeven.","Aanzetten en koppelen, klaar. Wel geen kabel in de doos en geen aux.","Veruit de laagste prijs met toptests."],
+xtreme5:["Testwinnaar: helder, krachtig, veel bas zonder dat de zang verdrinkt.","2,9 kg, maar IP68, ca. 30 uur gemeten en een verwisselbare accu.","Knoppen, app en Auracast. Geen aptX.","Duur, maar geluid en accu rechtvaardigen veel."],
+kilburn:["Warm, vol en bassig; minder helder en nauwkeurig dan de JBL.","50+ uur accu, maar 2,8 kg en IP54 (niet in de regen laten staan).","Draaiknoppen en snelle koppeling: de makkelijkste van de groep.","Mooi ontwerp, maar fors geprijsd voor het geluid."],
+soundlink:["Netjes en ruim geluid, wel compressie op hoog volume.","Compact, IP67 en drijft. Ca. 20 uur, accu niet vervangbaar.","Bluetooth 5.4 met aptX en multipoint. Geen microfoon.","Duurder dan de Charge 6 zonder beter geluid."],
+boombox3:["Zeer luid met diepe bas en een gelijkmatig basbeeld.","6,7 kg: draagbaar alleen als het moet. Wel ca. 30 uur gemeten.","Simpele knoppen en app. PartyBoost in plaats van Auracast.","Oudere generatie; alleen interessant met korting."],
+lifestyle:["Verdeelde reviews: prima, maar niet de beste in zijn prijsklasse.","Alleen stekker: geen accu en niet waterdicht.","Wifi, AirPlay en Spotify Connect. Wel opstartproblemen bij stereo-koppeling.","€349 terwijl concurrenten volgens What Hi-Fi? beter klinken."],
+lenco:["Beginners zijn tevreden; bas en hoog volume zijn beperkt.","Vaste set op netstroom met bedrade boxen.","Zelf monteren en toonarm instellen. Geen koptelefoonuitgang.","Complete set voor ca. €300, maar wisselende kwaliteit en service."],
+flip7:["Levendig en gedetailleerd voor zijn formaat, maar kleiner dan de Charge 6: minder volume en bas.","560 gram en IP68. Accu ca. 14 uur en trage lader.","Grote knoppen, nette app en Auracast. Geen stereo met oudere Flips.","Goedkoopste draagbare speaker in dit rijtje."],
+sonosplay:["Helder, beheerst en pittig, maar zonder veel drama. Boven ca. 40% volume het best.","1,3 kg, IP67 en 24 uur. Geen adapter in de doos.","Wifi en Bluetooth, multiroom is simpel. Wel een wisselvallige app en geen Auracast.","Prijzig voor wat je krijgt, zeker naast een Charge 6."],
+middleton2:["Opvallend goed stereobeeld en stevige bas; comprimeert op volle sterkte.","30 uur accu en IP67, maar 1,8 kg met alleen een klein bandje.","Geen opvallende bedieningsproblemen gevonden; geen aptX.","Naast de Kilburn III is dit de duurdere en minder voordelige Marshall."],
+sonyult7:["Diepe bas en heldere zang, maar fijn detail verdwijnt onder de bas.","6,3 kg en alleen laden via het stopcontact, wel 30 uur en IP67.","Snel gekoppeld, maar de Sony-app is traag en slecht ontworpen.","€249 in de actie, anders €318; bij MediaMarkt met label laatste kans."]};
+var ADV={
+charge6:{t:"De slimme allrounder voor weinig geld",f:["ca. 1 kg","24 u opgegeven, ca. 13-14 u gemeten","IP68"],kies:"één speaker wilt voor overal, tegen een scherpe prijs",voor:"Voor wie één speaker zoekt die overal mee naartoe kan, van keuken tot strand, zonder dat de portemonnee pijn doet.",klank:"Vol en pakkend voor zijn formaat, met stevige bas. Op zacht volume wordt hij wat vlak; hij komt echt tot leven als je wat harder zet. Laat de stand Playtime Boost uit, want die haalt de bas weg.",prak:"Je pakt hem aan het bandje, hij is waterdicht en tegen een val bestand, en je laadt hem snel op. Hij kan ook je telefoon bijladen. In de praktijk gaat de accu een lange dag mee, geen twee dagen.",let:"Er zit geen oplaadkabel in de doos en er is geen aux-ingang. Heb je oudere JBL-speakers met PartyBoost, dan koppelt hij daar niet mee.",liever:"Wil je echt een kamer of tuin vullen met bas, kijk dan naar de Xtreme 5."},
+xtreme5:{t:"De krachtpatser met het beste geluid",f:["2,9 kg","24 u opgegeven, ca. 30 u gemeten","IP68"],kies:"het beste geluid wilt en gewicht je niet stoort",voor:"Voor wie geluid op de eerste plaats zet en de speaker vooral thuis, in de tuin of op een feestje gebruikt.",klank:"Helder, krachtig en met veel bas die de zang niet wegdrukt. Ook op hoog volume blijft het netjes. Dit is het geluid waar de vakbladen het meest enthousiast over waren.",prak:"Met 2,9 kg draag je hem, maar stop je hem niet even in een tas. Daar staat een lange accu tegenover (gemeten ruim 30 uur), plus waterdicht, valbestendig en een verwisselbare accu. De lichtstrips kun je uitzetten.",let:"De prijs en het gewicht. Geen aptX. Zet Playtime Boost liever niet aan, want dat maakt het geluid dunner.",liever:"Gaat hij vooral mee op reis of in een rugzak? Kies dan de Charge 6."},
+kilburn:{t:"De stijlvolle rocker met een eindeloze accu",f:["2,8 kg","50+ u","IP54"],kies:"stijl, knoppen om aan te draaien en een eindeloze accu belangrijk vindt",voor:"Voor wie een speaker wil die ook een meubelstuk is, met knoppen om aan te draaien.",klank:"Warm, rijk en bassig, met een duidelijke Marshall-smaak. Rock, pop en gitaren staan hem prachtig; fijne akoestische muziek of klassiek is minder zijn ding. Via de app temper je de bas.",prak:"De accu gaat 50 uur en langer mee, dus je vergeet bijna dat je hem moet opladen. Hij kan ook je telefoon opladen. Hij weegt 2,8 kg en is spat- en stofbestendig, maar laat hem niet in de regen staan.",let:"Het geluid is niet neutraal; de JBL's klinken helderder. Het draagbandje is wat dun voor het gewicht.",liever:"Wil je helder en precies, ga dan naar de Xtreme 5."},
+soundlink:{t:"De nette, stevige Bose voor onderweg",f:["ca. 1,5 kg","ca. 20 u","IP67"],kies:"Bose-klank wilt in een robuuste speaker die kan drijven",voor:"Voor wie een nette, stevige speaker met Bose-klank zoekt die niet bang is voor water.",klank:"Rond, ruim en prettig, met aardig wat bas. Zet je hem helemaal open, dan gaat het geluid wat samendrukken. Naast de Charge 6 klinkt die van JBL pakkender.",prak:"Hij is waterdicht (IP67) en drijft zelfs. De accu gaat ongeveer 20 uur mee. Koppelen is makkelijk, ook met twee apparaten tegelijk.",let:"Geen microfoon, en de accu kun je zelf niet vervangen. Voor de prijs krijg je bij JBL meer.",liever:"Zoek je de beste prijs-kwaliteit, kijk dan eerst naar de Charge 6."},
+boombox3:{t:"De klassieke partybrul, maar zwaar",f:["6,7 kg","24 u opgegeven, ca. 30 u gemeten","IP67"],kies:"maximaal volume en bas wilt en hem vooral op één plek gebruikt",voor:"Voor wie een echte partyspeaker wil voor tuin, terras of feest en hem zelden ver draagt.",klank:"Heel luid, met diepe, strakke bas. Eerlijk is eerlijk: tegen de volumegrens klinkt hij minder mooi, maar dan staat het feest al aan.",prak:"6,7 kg met een grote handgreep: je verplaatst hem, maar je wandelt er niet mee. De accu gaat ruim een dag mee en hij is waterdicht. Je kunt er je telefoon mee opladen via USB-A.",let:"Dit is de vorige generatie; de Boombox 4 is lichter en nieuwer. Geen USB-C. Hij loopt uit de handel: MediaMarkt noemt het laatste kans en Coolblue verkoopt hem niet meer.",liever:"Wil je een speaker die op meer plekken past, dan is de Xtreme 5 handiger."},
+lifestyle:{t:"De woonkamerspeaker die thuis moet blijven",f:["1,66 kg","geen accu (stekker)","niet waterdicht"],kies:"een thuisspeaker wilt voor multiroom of als surround bij een Bose-soundbar",voor:"Voor wie een nette speaker voor in de woonkamer wil die via wifi streamt, of die als achterspeaker bij de Bose-soundbar moet.",klank:"Beheerst en helder, met ruimtelijk geluid door de driver die omhoog speelt. Vakbladen zijn verdeeld: sommigen vinden hem prachtig, anderen wat dun, tenzij je de bas verhoogt.",prak:"Hij werkt alleen op stroom, heeft geen accu en is niet waterdicht. Instellen gaat via wifi en de Bose-app, en hij werkt met AirPlay, Spotify Connect en Google Cast.",let:"Twee speakers als stereopaar liepen bij een test niet altijd gelijk. De touchknoppen geven weinig gevoel.",liever:"Zoek je een speaker die mee kan, kies dan een van de JBL's of de Kilburn."},
+lenco:{t:"De complete vinyl-instapset",f:["vaste set","netstroom","niet van toepassing"],kies:"een eenvoudige complete set voor platen zoekt",voor:"Voor wie voor het eerst platen wil draaien zonder een losse versterker en boxen te kopen.",klank:"Gebruikers noemen het warm en vol, prima voor beginners. Kenners missen bas en horen onduidelijk geluid bij hoog volume. Verwacht geen hifi, wel gezelligheid.",prak:"Alles zit in één doos, maar je zet het zelf in elkaar: plateau, riem, tegenwicht en toonarm afstellen. Bluetooth werkt alleen als ontvanger en er is geen koptelefoonaansluiting.",let:"Ik vond geen onafhankelijke test. Gebruikers melden soms defecte exemplaren en trage service. Koop hem bij een winkel waar je makkelijk kunt ruilen.",liever:"Wil je alleen muziek met een speaker, laat deze dan links liggen."},
+flip7:{t:"De kleine, lichte en goedkope JBL",f:["0,56 kg","ca. 14 u","IP68"],kies:"een compacte, lichte speaker wilt voor weinig geld",voor:"Voor wie een speaker zoekt die in een jaszak of fietstas past en niet te veel mag kosten.",klank:"Levendig en gedetailleerd voor zijn formaat, met gecontroleerde bas. Het blijft een kleine speaker: minder volume en minder lage bas dan de Charge 6.",prak:"560 gram, waterdicht (IP68) en robuust. De accu gaat ca. 14 uur mee en opladen duurt ca. 2,5 uur. Grote knoppen, een app met EQ en Auracast.",let:"Hij kan niet stereo koppelen met oudere Flip-modellen. Als geluid belangrijk is, is de Charge 6 het volgende niveau.",liever:"Wil je meer bas en een langere accu, kies dan de Charge 6."},
+sonosplay:{t:"De allrounder voor thuis en onderweg",f:["1,3 kg","24 u opgegeven","IP67"],kies:"één speaker wilt voor thuis (wifi, multiroom) én onderweg",voor:"Voor wie al Sonos heeft of één speaker wil voor de woonkamer en het terras.",klank:"Helder, beheerst en pittig, met goed gestuurde bas, maar met minder drama dan JBL of Marshall. Klinkt het best boven ca. 40% volume.",prak:"1,3 kg, IP67 en 24 uur accu. Multiroom koppelen is simpel. Er zit geen netstroomadapter in de doos.",let:"De Sonos-app haperde bij een test en er is geen Auracast. Voor de prijs krijg je bij JBL meer geluid.",liever:"Wil je vooral lekker veel geluid onderweg, kies dan de Charge 6 of Xtreme 5."},
+middleton2:{t:"De bassige stereo-Marshall",f:["1,8 kg","ca. 30 u","IP67"],kies:"stereogeluid van Marshall wilt in een middelgroot formaat",voor:"Voor wie het Marshall-geluid wil, maar iets minder grote en zware speaker dan de Kilburn III.",klank:"Opvallend goed stereobeeld, stevige bas en heldere hoge tonen. Op maximaal volume comprimeert de bas. Alleen SBC en AAC, geen aptX.",prak:"30 uur accu en IP67, maar 1,8 kg en alleen een klein draagbandje.",let:"TechRadar vindt hem duur voor zijn formaat en de Kilburn III de betere koop.",liever:"Wil je meer waar voor je geld, kies dan de Kilburn III."},
+sonyult7:{t:"De partyspeaker met veel bas",f:["6,3 kg","30 u opgegeven","IP67"],kies:"veel bas, karaoke en een lichtshow wilt en hem vooral neerzet",voor:"Voor wie een partyspeaker zoekt voor tuin of feest, met aansluitingen voor microfoon of instrument.",klank:"Diepe bas en heldere zang. Fijn detail verdwijnt onder de bas. In de ULT 2-stand is hij pittiger.",prak:"6,3 kg met handgrepen en alleen laden via het stopcontact. Snel koppelen, maar de app is traag.",let:"Geen ingebouwde microfoon voor bellen. MediaMarkt toont het label laatste kans.",liever:"Wil je een partyspeaker met een betere accu en app, kijk dan naar de JBL Boombox 3 of Xtreme 5."}};
+var LV=function(s){return s>=8.5?"een van de sterkste keuzes in dit rijtje":s>=7?"goed":s>=5.5?"redelijk, maar geen uitblinker":s>=3.5?"eerder zwak":"echt een zwak punt"};
+function imp(i){var r=W[i]/tot(W);return r>=.4?"heel belangrijk":r>=.27?"belangrijk":r>=.15?"telt gewoon mee":"minder belangrijk"}
+var W=BASEW.slice(), S={}, only=false, open={}, sel=[];
+P.forEach(function(p){S[p.id]=p.s.slice()});
+function tot(w){return w.reduce(function(a,b){return a+b},0)}
+function score(p,w){var t=tot(w);if(!t)return 0;var x=0;for(var i=0;i<4;i++)x+=w[i]*S[p.id][i];return x/t*10}
+function baseScore(p){var x=0;for(var i=0;i<4;i++)x+=BASEW[i]*p.s[i];return x/100*10}
+var baseRank={};P.slice().sort(function(a,b){return baseScore(b)-baseScore(a)}).forEach(function(p,i){baseRank[p.id]=i+1});
+function f(x){return Math.round(x)}
+function h(t){return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+function render(){
+  var items=P.filter(function(p){return !only||p.port}).map(function(p){return {p:p,s:score(p,W)}}).sort(function(a,b){return b.s-a.s});
+  var all=P.map(function(p){return {p:p,s:score(p,W)}}).sort(function(a,b){return b.s-a.s});
+  var rk={};all.forEach(function(o,i){rk[o.p.id]=i+1});
+  var html="";
+  items.forEach(function(o,i){
+    var d=baseRank[o.p.id]-rk[o.p.id], c=d>0?'<span class="chg up">▲ '+d+'</span>':d<0?'<span class="chg down">▼ '+(-d)+'</span>':'<span class="chg same">gelijk</span>';
+    html+='<div class="row'+(i===0?' first':'')+'"><div class="pos">'+(i+1)+'</div><div><div class="name">'+h(o.p.n)+'</div><span class="note">'+h(o.p.p)+'</span> '+c+'</div><div class="sc">'+f(o.s)+'</div><div class="bar" role="img" aria-label="Score '+f(o.s)+' van 100"><i style="width:'+Math.max(2,o.s)+'%"></i></div></div>';
+  });
+  document.getElementById("list").innerHTML=buildList(items,rk);
+  var w=items[0],s2=items[1],ba=document.getElementById("advice");
+  var base=P.slice().sort(function(a,b){return baseScore(b)-baseScore(a)})[0];
+  var m='<p class="note">Jouw koopadvies</p><p class="big">'+h(w.p.n)+' ('+f(w.s)+'/100)</p><p>'+h(w.p.a)+'</p><p><b>Hoe klinkt het?</b> '+h(ADV[w.p.id].klank)+'</p><p><b>Waar moet je op letten?</b> '+h(ADV[w.p.id].let)+'</p>';
+  if(s2){var gap=w.s-s2.s;m+='<p>'+(gap<2?'Het is spannend: '+h(s2.p.n)+' zit er maar '+gap.toFixed(1).replace(".",",")+' punt achter. Beide zijn een goede keus.':'Nummer 2 is '+h(s2.p.n)+', '+f(gap)+' punten lager.')+'</p>'}
+  if(w.p.id!==base.id&&!only)m+='<p><b>Let op:</b> met jouw instellingen wint dit product. Volgens mijn eigen weging is dat de '+h(base.n)+'.</p>';
+  if(!tot(W))m='<p class="big">Zet minstens één schuif boven nul.</p>';
+  ba.innerHTML=m;renderCmp2();
+  var t=tot(W);
+  for(var i=0;i<4;i++){document.getElementById("wv"+i).textContent=t?f(W[i]/t*100)+'% van het totaal':'0%'}
+  P.forEach(function(p){var el=document.getElementById("m_"+p.id);if(el){var mod=S[p.id].join()!==p.s.join();el.innerHTML=mod?'<b class="mod">aangepast</b> ':'';document.getElementById("t_"+p.id).textContent=f(score(p,W))+' punten'}});
+}
+function why2(p,top,rank){
+  var t=tot(W);if(!t)return "";
+  var o=[0,1,2,3].sort(function(a,b){return W[b]-W[a]}),A=ADV[p.id],s=score(p,W),first=top.id===p.id,x='<div class="why"><p class="note">Score voor jou: '+f(s)+' van 100.</p>',i;
+  x+='<p><b>'+(first?'Dit is mijn advies voor jou.':'Zo kom ik op plek '+rank+'.')+'</b> Als ik naar jouw wensen luister, draait het vooral om <b>'+CRIT[o[0]].k.toLowerCase()+'</b> en <b>'+CRIT[o[1]].k.toLowerCase()+'</b>. Daar kijk ik dus als eerste naar.</p>';
+  [o[0],o[1]].forEach(function(c){x+='<p><b>'+CRIT[c].k+'</b> ('+imp(c)+' voor jou). Hier is dit product '+LV(S[p.id][c])+'. '+h(WHY[p.id][c])+'</p>'});
+  if(first){var li=0,lv=-1;for(i=0;i<4;i++){var l=W[i]*(10-S[p.id][i]);if(l>lv){lv=l;li=i}}
+    x+='<p><b>Waar moet je rekening mee houden?</b> Voor jouw wensen is het zwakste punt <b>'+CRIT[li].k.toLowerCase()+'</b>. '+h(WHY[p.id][li])+'</p>';
+  }else{var tp=parts(top),pp=parts(p),mi=0,mv=-99,wi=0,wv=99,gap=score(top,W)-s;
+    for(i=0;i<4;i++){var d=tp[i]-pp[i];if(d>mv){mv=d;mi=i}if(d<wv){wv=d;wi=i}}
+    x+='<p><b>Waarom niet nummer 1?</b> De '+h(top.n)+' is voor jouw wensen '+(gap<3?'net iets':gap<10?'duidelijk':'een stuk')+' beter, vooral op <b>'+CRIT[mi].k.toLowerCase()+'</b>. Dit product: '+h(WHY[p.id][mi])+' De '+h(top.n)+': '+h(WHY[top.id][mi])+(wv<-0.5?' Op <b>'+CRIT[wi].k.toLowerCase()+'</b> doet dit product het juist beter.':'')+'</p>';
+  }
+  return x+'<p><b>Voor wie is dit?</b> '+h(A.voor)+'</p><p><b>Hoe klinkt het?</b> '+h(A.klank)+'</p><p><b>In de praktijk.</b> '+h(A.prak)+'</p><p><b>Waar moet je op letten?</b> '+h(A.let)+'</p><p><b>Liever iets anders?</b> '+h(A.liever)+'</p></div>';
+}
+function renderCmp2(){
+  var el=document.getElementById("cmp");
+  if(!sel.length||!tot(W)){el.hidden=true;return}
+  el.hidden=false;
+  if(sel.length<2){el.innerHTML='<h2>Vergelijken</h2><p>Je koos de '+h(byId(sel[0]).n)+'. Kies nog één product met de knop “Vergelijk” in de ranking, dan zet ik ze naast elkaar.</p><div class="btns"><button data-act="clr">Wissen</button></div>';return}
+  var a=byId(sel[0]),b=byId(sel[1]),A=ADV[a.id],B=ADV[b.id],sa=score(a,W),sb=score(b,W),o=[0,1,2,3].sort(function(p,q){return W[q]-W[p]}),lc=function(s){return s.charAt(0).toLowerCase()+s.slice(1)};
+  var x='<button class="x" data-act="clr">Sluiten</button><h2>'+h(a.n)+' of '+h(b.n)+'?</h2>';
+  x+='<p>'+(a.port!==b.port?'Dit zijn eigenlijk twee verschillende soorten producten: de een neem je mee, de ander blijft thuis. ':'Allebei zijn ze om mee te nemen, dus het gaat om smaak en om wat jij belangrijk vindt. ')+'Kort gezegd: de <b>'+h(a.n)+'</b> is '+h(lc(A.t))+'. De <b>'+h(b.n)+'</b> is '+h(lc(B.t))+'.</p><p>Ik loop de punten door in de volgorde die jij belangrijk vindt.</p>';
+  o.forEach(function(c){var d=S[a.id][c]-S[b.id][c],v=Math.abs(d)<1?'Hier zit weinig verschil tussen de twee.':(d>0?a:b).n+(Math.abs(d)>=2?' wint hier duidelijk.':' heeft hier een voorsprong.');
+    x+='<h3>'+CRIT[c].k+' <span class="note">('+imp(c)+' voor jou)</span></h3><p>'+h(v)+' <i>'+h(a.n)+':</i> '+h(WHY[a.id][c])+' <i>'+h(b.n)+':</i> '+h(WHY[b.id][c])+'</p>'});
+  var w=sa>=sb?a:b,l=w===a?b:a;
+  x+='<h3>Mijn advies</h3>';
+  if(Math.abs(sa-sb)<2)x+='<p>Met jouw wensen liggen ze dicht bij elkaar. Kies de <b>'+h(a.n)+'</b> als je '+h(A.kies)+'. Kies de <b>'+h(b.n)+'</b> als je '+h(B.kies)+'.</p>';
+  else x+='<p>Met jouw wensen zou ik de <b>'+h(w.n)+'</b> kiezen. Kies de <b>'+h(l.n)+'</b> alleen als je '+h(ADV[l.id].kies)+'.</p>';
+  x+='<h3>De feiten op een rij</h3><table><tr><th></th><th>'+h(a.n)+'</th><th>'+h(b.n)+'</th></tr><tr><td>Prijs</td><td>'+h(a.p)+'</td><td>'+h(b.p)+'</td></tr><tr><td>Gewicht</td><td>'+h(A.f[0])+'</td><td>'+h(B.f[0])+'</td></tr><tr><td>Accu</td><td>'+h(A.f[1])+'</td><td>'+h(B.f[1])+'</td></tr><tr><td>Waterdicht</td><td>'+h(A.f[2])+'</td><td>'+h(B.f[2])+'</td></tr></table><p class="note">Score voor jou: '+h(a.n)+' '+f(sa)+', '+h(b.n)+' '+f(sb)+'.</p>';
+  el.innerHTML=x+'<div class="btns"><button data-act="clr">Wissen</button></div>';
+}
+function byId(id){return P.filter(function(p){return p.id===id})[0]}
+function num(x){return String(Math.round(x*10)/10).replace(".",",")}
+function parts(p){var t=tot(W),r=[];for(var i=0;i<4;i++)r.push(t?W[i]/t*S[p.id][i]*10:0);return r}
+function why(p,top){
+  var t=tot(W);if(!t)return "";
+  var pt=parts(p),s=score(p,W),x='<div class="why"><h3>Waarom '+f(s)+' punten?</h3>',i,li=0,lv=-1,bi=0,bv=-1;
+  for(i=0;i<4;i++){
+    x+='<div class="cr"><span class="t">'+CRIT[i].k+': '+num(S[p.id][i])+'/10 <span class="note">(telt voor '+f(W[i]/t*100)+'%)</span></span><span class="pt">'+num(pt[i])+' pt</span><span class="r">'+h(WHY[p.id][i])+'</span></div>';
+    var loss=W[i]/t*(10-S[p.id][i])*10;if(loss>lv){lv=loss;li=i}if(pt[i]>bv){bv=pt[i];bi=i}
+  }
+  x+='<p>De meeste punten komen uit <b>'+CRIT[bi].k.toLowerCase()+'</b> ('+num(bv)+' van de '+f(s)+'). '+(lv<1?'Hij laat nergens veel punten liggen.':'Hier laat hij de meeste punten liggen: <b>'+CRIT[li].k.toLowerCase()+'</b> ('+num(lv)+' punten gemist).')+'</p>';
+  if(top&&top.id!==p.id){
+    var tp=parts(top),mi=0,mv=-99,wi=0,wv=99;
+    for(i=0;i<4;i++){var d=tp[i]-pt[i];if(d>mv){mv=d;mi=i}if(d<wv){wv=d;wi=i}}
+    x+='<p>Tegenover nummer 1 ('+h(top.n)+') mis je '+num(score(top,W)-s)+' punten, vooral door <b>'+CRIT[mi].k.toLowerCase()+'</b> ('+num(mv)+' pt).'+(wv<-0.5?' Op <b>'+CRIT[wi].k.toLowerCase()+'</b> doet dit product het juist beter ('+num(-wv)+' pt).':'')+'</p>';
+  }
+  return x+'</div>';
+}
+function buildList(items,rk){
+  var top=items[0].p,html="";
+  items.forEach(function(o,i){
+    var p=o.p,d=baseRank[p.id]-rk[p.id],c=d>0?'<span class="chg up">▲ '+d+'</span>':d<0?'<span class="chg down">▼ '+(-d)+'</span>':'<span class="chg same">gelijk</span>',op=!!open[p.id],sl=sel.indexOf(p.id)>-1;
+    html+='<div class="row'+(i===0?' first':'')+'"><div class="pos">'+(i+1)+'</div><div><div class="name">'+h(p.n)+'</div><span class="note">'+h(p.p)+'</span> '+c+'<div class="tl">'+h(ADV[p.id].t)+'</div>'+(p.mm?'<div class="tl"><b>MediaMarkt:</b> '+h(p.mm)+'</div>':'')+'</div><div class="sc">'+f(o.s)+'</div><div class="bar" role="img" aria-label="Score '+f(o.s)+' van 100"><i style="width:'+Math.max(2,o.s)+'%"></i></div><div class="tools"><button data-act="why" data-id="'+p.id+'" aria-expanded="'+op+'">Waarom '+f(o.s)+'? '+(op?'▴':'▾')+'</button><button data-act="cmp" data-id="'+p.id+'" class="'+(sl?'on':'')+'" aria-pressed="'+sl+'">'+(sl?'Gekozen voor vergelijking':'Vergelijk')+'</button></div>'+(op?why2(p,top,i+1):'')+'</div>';
+  });
+  return html;
+}
+function renderCmp(){
+  var el=document.getElementById("cmp");
+  if(!sel.length||!tot(W)){el.hidden=true;return}
+  el.hidden=false;
+  if(sel.length<2){el.innerHTML='<h2>Vergelijken</h2><p>Je koos '+h(byId(sel[0]).n)+'. Kies nog één product met de knop “Vergelijk” in de ranking.</p><div class="btns"><button data-act="clr">Wissen</button></div>';return}
+  var a=byId(sel[0]),b=byId(sel[1]),sa=score(a,W),sb=score(b,W),pa=parts(a),pb=parts(b),t=tot(W),i;
+  var x='<button class="x" data-act="clr">Sluiten</button><h2>Vergelijking</h2><table><tr><th></th><th>'+h(a.n)+'</th><th>'+h(b.n)+'</th></tr>';
+  x+='<tr><td>Score</td><td class="'+(sa>=sb?'best':'')+'">'+f(sa)+'/100</td><td class="'+(sb>=sa?'best':'')+'">'+f(sb)+'/100</td></tr>';
+  for(i=0;i<4;i++)x+='<tr><td>'+CRIT[i].k+' <span class="note">('+f(W[i]/t*100)+'%)</span></td><td class="'+(pa[i]>pb[i]?'best':'')+'">'+num(S[a.id][i])+'/10<br><span class="note">'+num(pa[i])+' pt</span></td><td class="'+(pb[i]>pa[i]?'best':'')+'">'+num(S[b.id][i])+'/10<br><span class="note">'+num(pb[i])+' pt</span></td></tr>';
+  x+='<tr><td>Prijs</td><td>'+h(a.p)+'</td><td>'+h(b.p)+'</td></tr><tr><td>In het kort</td><td>'+h(a.pm)+'</td><td>'+h(b.pm)+'</td></tr></table>';
+  var w=sa>=sb?a:b,l=w===a?b:a,pw=w===a?pa:pb,pl=w===a?pb:pa,diff=Math.abs(sa-sb),mi=0,mv=-99,wi=0,wv=99;
+  for(i=0;i<4;i++){var d=pw[i]-pl[i];if(d>mv){mv=d;mi=i}if(d<wv){wv=d;wi=i}}
+  if(diff<1)x+='<p><b>Vrijwel gelijk.</b> Het verschil is minder dan een punt. Kijk dus vooral naar wat jij zelf belangrijk vindt.</p>';
+  else x+='<p><b>'+h(w.n)+'</b> wint met '+num(diff)+' punten, vooral door <b>'+CRIT[mi].k.toLowerCase()+'</b>.</p>';
+  x+='<p class="note">'+CRIT[mi].k+': '+h(w.n)+': '+h(WHY[w.id][mi])+' '+h(l.n)+': '+h(WHY[l.id][mi])+'</p>';
+  if(wv<-0.5)x+='<p>'+h(l.n)+' is wel beter op <b>'+CRIT[wi].k.toLowerCase()+'</b> ('+num(-wv)+' pt voorsprong).</p>';
+  el.innerHTML=x+'<div class="btns"><button data-act="clr">Wissen</button></div>';
+}
+function act(e){
+  var b=e.target.closest("[data-act]");if(!b)return;
+  var a=b.getAttribute("data-act"),id=b.getAttribute("data-id"),added=false;
+  if(a==="why")open[id]=!open[id];
+  else if(a==="cmp"){var k=sel.indexOf(id);if(k>-1)sel.splice(k,1);else{sel.push(id);added=true;if(sel.length>2)sel.shift()}}
+  else if(a==="clr")sel=[];
+  render();
+  if(added&&sel.length===2)document.getElementById("cmp").scrollIntoView({block:"start"});
+  if(id){var n=document.querySelector('#list [data-act="'+a+'"][data-id="'+id+'"]');if(n)n.focus()}
+}
+function buildW(){
+  var h2="";CRIT.forEach(function(c,i){h2+='<div class="ctl"><label for="w'+i+'"><span>'+c.k+'<small>'+c.h+'</small></span><span class="val" id="wv'+i+'"></span></label><input type="range" id="w'+i+'" min="0" max="100" step="5" value="'+W[i]+'"></div>'});
+  document.getElementById("weights").innerHTML=h2;
+  CRIT.forEach(function(c,i){document.getElementById("w"+i).addEventListener("input",function(e){W[i]=+e.target.value;markPreset();render()})});
+}
+function setW(w){W=w.slice();for(var i=0;i<4;i++)document.getElementById("w"+i).value=W[i];markPreset();render()}
+function markPreset(){var bs=document.querySelectorAll("#presets button");PRE.forEach(function(p,i){bs[i].className=p.w.join()===W.join()?"on":""})}
+function buildPre(){var el=document.getElementById("presets");PRE.forEach(function(p){var b=document.createElement("button");b.textContent=p.n;b.addEventListener("click",function(){setW(p.w)});el.appendChild(b)})}
+function buildEdit(){
+  var out="";P.forEach(function(p){
+    out+='<details><summary><span style="color:var(--ink);font-weight:700">'+h(p.n)+'</span><span><span id="m_'+p.id+'"></span><span id="t_'+p.id+'"></span></span></summary><p class="pm">'+h(p.pm)+'</p>';
+    CRIT.forEach(function(c,i){out+='<div class="ctl"><label for="s_'+p.id+i+'"><span>'+c.k+'</span><span class="val" id="sv_'+p.id+i+'">'+S[p.id][i].toString().replace(".",",")+'</span></label><input type="range" id="s_'+p.id+i+'" min="0" max="10" step="0.5" value="'+S[p.id][i]+'"></div>'});
+    out+='</details>';
+  });
+  document.getElementById("edit").innerHTML=out;
+  P.forEach(function(p){CRIT.forEach(function(c,i){document.getElementById("s_"+p.id+i).addEventListener("input",function(e){S[p.id][i]=+e.target.value;document.getElementById("sv_"+p.id+i).textContent=e.target.value.replace(".",",");render()})})});
+}
+document.getElementById("onlyPort").addEventListener("change",function(e){only=e.target.checked;render()});
+document.getElementById("reset").addEventListener("click",function(){P.forEach(function(p){S[p.id]=p.s.slice();CRIT.forEach(function(c,i){document.getElementById("s_"+p.id+i).value=p.s[i];document.getElementById("sv_"+p.id+i).textContent=String(p.s[i]).replace(".",",")})});setW(BASEW)});
+document.getElementById("list").addEventListener("click",act);
+document.getElementById("cmp").addEventListener("click",act);
+buildPre();buildW();buildEdit();markPreset();render();
+</script>
+</body>
+</html>

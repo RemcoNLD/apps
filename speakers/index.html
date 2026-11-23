@@ -71,6 +71,8 @@ summary span{font-weight:400;color:var(--mute);font-size:.9rem}
 .why p,.cmp p{margin:8px 0;max-width:68ch}
 .cmp h3{margin:16px 0 2px;font-size:1rem}
 .tl{color:var(--mute);font-size:.95rem}
+button:disabled{opacity:.45;cursor:not-allowed}
+.grid[hidden]{display:none}
 .ob h2{font-size:1.25rem}
 .ob fieldset{border:0;padding:0;margin:14px 0 0}
 .ob legend{font-weight:700;padding:0;margin-bottom:2px}
@@ -93,9 +95,9 @@ summary span{font-weight:400;color:var(--mute);font-size:.9rem}
 <button type="button" data-v="zuinig">Liefst zo goedkoop mogelijk</button><button type="button" data-v="gewoon">Een nette prijs is prima</button><button type="button" data-v="ruim">Kwaliteit mag kosten</button></div></fieldset>
 <fieldset><legend>Hoe wil je hem bedienen?</legend><div class="btns" data-q="ease">
 <button type="button" data-v="simpel">Aanzetten en klaar</button><button type="button" data-v="leuk">Ik stel graag zelf in</button></div></fieldset>
-<div class="btns"><button type="button" id="obgo">Toon mijn advies</button><button type="button" id="obskip">Overslaan</button></div>
+<div class="btns"><button type="button" id="obgo" disabled>Toon mijn advies</button><button type="button" id="obskip">Overslaan</button></div>
 </div>
-<div class="grid">
+<div class="grid" id="main" hidden>
 <div>
 <div class="card advice" id="advice" aria-live="polite"></div>
 <div class="card cmp" id="cmp" hidden></div>
@@ -311,8 +313,8 @@ document.getElementById("cmp").addEventListener("click",act);
 (function(){
   var ob={},box=document.getElementById("ob");
   function sync(){box.querySelectorAll("[data-q]").forEach(function(g){g.querySelectorAll("button").forEach(function(b){b.className=ob[g.getAttribute("data-q")]===b.getAttribute("data-v")?"on":""})})}
-  box.addEventListener("click",function(e){var b=e.target.closest("button[data-v]");if(!b)return;ob[b.parentNode.getAttribute("data-q")]=b.getAttribute("data-v");sync()});
-  function close(){box.hidden=true;var a=document.getElementById("advice");if(a)a.scrollIntoView({block:"start"})}
+  box.addEventListener("click",function(e){var b=e.target.closest("button[data-v]");if(!b)return;ob[b.parentNode.getAttribute("data-q")]=b.getAttribute("data-v");sync();document.getElementById("obgo").disabled=!(ob.use&&ob.budget&&ob.ease)});
+  function close(){box.hidden=true;document.getElementById("main").hidden=false;var a=document.getElementById("advice");if(a)a.scrollIntoView({block:"start"})}
   document.getElementById("obskip").addEventListener("click",close);
   document.getElementById("obgo").addEventListener("click",function(){
     var w={thuis:[45,5,25,25],onderweg:[25,40,20,15],feest:[50,25,10,15],beide:BASEW.slice()}[ob.use||"beide"].slice();

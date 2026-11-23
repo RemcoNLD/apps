@@ -71,12 +71,30 @@ summary span{font-weight:400;color:var(--mute);font-size:.9rem}
 .why p,.cmp p{margin:8px 0;max-width:68ch}
 .cmp h3{margin:16px 0 2px;font-size:1rem}
 .tl{color:var(--mute);font-size:.95rem}
+.ob h2{font-size:1.25rem}
+.ob fieldset{border:0;padding:0;margin:14px 0 0}
+.ob legend{font-weight:700;padding:0;margin-bottom:2px}
+.ob .btns{margin:6px 0 0}
+.alt{display:inline-block;font-size:.78rem;font-weight:700;color:var(--acc);background:var(--accbg);border-radius:6px;padding:1px 7px;margin-left:6px;vertical-align:middle}
+.lnk{display:inline-flex;align-items:center;min-height:44px;font-weight:700;color:var(--acc)}
 </style>
 </head>
 <body>
 <div class="wrap">
 <h1>Welke speaker past bij jou?</h1>
 <p class="sub">Verschuif de schuiven naar wat jij belangrijk vindt. De ranking en het koopadvies veranderen direct mee. Tik bij een product op “Waarom?” voor uitleg, of kies er twee om te vergelijken.</p>
+<p><a class="lnk" href="rapport.html">Lees het volledige rapport met alle bronnen &rarr;</a></p>
+<div class="card ob" id="ob">
+<h2>Eerst even kennismaken</h2>
+<p class="note">Drie korte vragen, dan stel ik de weging voor je in. Je kunt daarna alles nog zelf aanpassen.</p>
+<fieldset><legend>Waar ga je hem vooral voor gebruiken?</legend><div class="btns" data-q="use">
+<button type="button" data-v="thuis">Thuis in de kamer</button><button type="button" data-v="onderweg">Onderweg en buiten</button><button type="button" data-v="feest">Feest of tuin</button><button type="button" data-v="beide">Een beetje van alles</button></div></fieldset>
+<fieldset><legend>Hoe zit het met je budget?</legend><div class="btns" data-q="budget">
+<button type="button" data-v="zuinig">Liefst zo goedkoop mogelijk</button><button type="button" data-v="gewoon">Een nette prijs is prima</button><button type="button" data-v="ruim">Kwaliteit mag kosten</button></div></fieldset>
+<fieldset><legend>Hoe wil je hem bedienen?</legend><div class="btns" data-q="ease">
+<button type="button" data-v="simpel">Aanzetten en klaar</button><button type="button" data-v="leuk">Ik stel graag zelf in</button></div></fieldset>
+<div class="btns"><button type="button" id="obgo">Toon mijn advies</button><button type="button" id="obskip">Overslaan</button></div>
+</div>
 <div class="grid">
 <div>
 <div class="card advice" id="advice" aria-live="polite"></div>
@@ -290,6 +308,21 @@ document.getElementById("onlyPort").addEventListener("change",function(e){only=e
 document.getElementById("reset").addEventListener("click",function(){P.forEach(function(p){S[p.id]=p.s.slice();CRIT.forEach(function(c,i){document.getElementById("s_"+p.id+i).value=p.s[i];document.getElementById("sv_"+p.id+i).textContent=String(p.s[i]).replace(".",",")})});setW(BASEW)});
 document.getElementById("list").addEventListener("click",act);
 document.getElementById("cmp").addEventListener("click",act);
+(function(){
+  var ob={},box=document.getElementById("ob");
+  function sync(){box.querySelectorAll("[data-q]").forEach(function(g){g.querySelectorAll("button").forEach(function(b){b.className=ob[g.getAttribute("data-q")]===b.getAttribute("data-v")?"on":""})})}
+  box.addEventListener("click",function(e){var b=e.target.closest("button[data-v]");if(!b)return;ob[b.parentNode.getAttribute("data-q")]=b.getAttribute("data-v");sync()});
+  function close(){box.hidden=true;var a=document.getElementById("advice");if(a)a.scrollIntoView({block:"start"})}
+  document.getElementById("obskip").addEventListener("click",close);
+  document.getElementById("obgo").addEventListener("click",function(){
+    var w={thuis:[45,5,25,25],onderweg:[25,40,20,15],feest:[50,25,10,15],beide:BASEW.slice()}[ob.use||"beide"].slice();
+    if(ob.budget==="zuinig"){w[3]+=25}else if(ob.budget==="ruim"){w[3]=5}
+    if(ob.ease==="simpel"){w[2]+=20}else if(ob.ease==="leuk"){w[2]=10}
+    var tw=tot(w);w=w.map(function(x){return Math.max(0,Math.min(100,Math.round(x/tw*100/5)*5))});
+    only=(ob.use==="onderweg"||ob.use==="feest");document.getElementById("onlyPort").checked=only;
+    setW(w);close();
+  });
+})();
 buildPre();buildW();buildEdit();markPreset();render();
 </script>
 </body>

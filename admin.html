@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.5.0"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.6.0"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -146,6 +146,44 @@
   .qos-ok { font-weight: 800; font-variant-numeric: tabular-nums; }
   .qos-ok small { font-weight: 500; color: var(--muted); }
   .qos-ok.good { color: var(--ok); } .qos-ok.warn { color: var(--warn); } .qos-ok.bad { color: var(--bad); }
+  /* Alerts (0.6.0): bells on rows that have a rule, the rule and incident dialogs, the incidents card */
+  [data-alert] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  [data-alert]:active { opacity: .7; }
+  .bell { display: inline-block; width: 15px; height: 15px; margin-left: 7px; vertical-align: -2px; opacity: .45; flex: none;
+    background: currentColor; -webkit-mask: var(--bell) center / contain no-repeat; mask: var(--bell) center / contain no-repeat; }
+  :root { --bell: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a6 6 0 0 0-6 6v4.5L4 16v1h16v-1l-2-3.5V8a6 6 0 0 0-6-6zm-2.5 17a2.5 2.5 0 0 0 5 0z'/%3E%3C/svg%3E"); }
+  .bell.custom { opacity: 1; color: var(--blue); }
+  .bell.fire { opacity: 1; color: var(--bad); }
+  .bell.off { opacity: .3; position: relative; }
+  .bell.off::after { content: ""; position: absolute; left: -1px; right: -1px; top: 50%; border-top: 2px solid var(--text); transform: rotate(-40deg); }
+  .inc { padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; }
+  .inc:first-of-type { border-top: 0; }
+  .inc .t { font-weight: 700; }
+  .inc .t.fire::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: var(--bad); vertical-align: 1px; }
+  .inc .t.acked::before { background: var(--warn); }
+  .alert-links { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 8px; }
+  dialog#dlg { width: min(560px, 100vw); max-width: 100vw; max-height: 88vh; margin: auto auto 0; padding: 0; border: 0; border-radius: 16px 16px 0 0;
+    background: var(--card); color: var(--text); overflow: auto; }
+  @media (min-width: 640px) { dialog#dlg { margin: auto; border-radius: 16px; } }
+  dialog#dlg::backdrop { background: rgba(0,0,0,.5); }
+  .dlg-in { padding: 18px 18px calc(env(safe-area-inset-bottom, 0px) + 18px); }
+  .dlg-in h3 { margin: 0 0 2px; font-size: 1.15rem; padding-right: 36px; }
+  .dlg-x { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; padding: 0; border-radius: 50%; background: var(--line); color: var(--text); font-size: 20px; line-height: 34px; }
+  .dlg-in h4 { margin: 18px 0 4px; font-size: .9rem; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+  .fl { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid rgba(127,127,127,.18); }
+  .fl:first-of-type { border-top: 0; }
+  .fl > label:first-child { flex: 1; }
+  .fl .switch { flex: none; }
+  .fl .sub { display: block; font-size: .85rem; color: var(--muted); }
+  .fl input[type=number] { flex: none; width: 5.2em; padding: 8px; text-align: right; }
+  .fl.dis { opacity: .45; pointer-events: none; }
+  .dlg-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .dlg-btns button.sec { background: none; color: var(--blue); border: 1px solid var(--line); }
+  .dlg-btns button.warnb { background: none; color: var(--bad); border: 1px solid var(--line); }
+  .now { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: rgba(127,127,127,.12); font-size: .9rem; }
+  .now.fire { background: rgba(224,87,79,.16); }
+  .ev { display: grid; grid-template-columns: 4.6em 1fr; gap: 3px 10px; font-size: .9rem; margin-top: 6px; }
+  .ev > :nth-child(odd) { color: var(--muted); font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -166,6 +204,7 @@
   <button type="button" class="link" id="logout">Log out</button>
 </div>
 <p id="msg" class="error" hidden></p>
+<div id="alerts"></div>
 <div id="settings"></div>
 <div id="debugRoute" hidden>
   <h2>Debug routes</h2>
@@ -180,6 +219,7 @@
 </div>
 <div id="routeView"></div>
 <div id="out"></div>
+<dialog id="dlg"><div class="dlg-in" id="dlgIn"></div></dialog>
 
 <script>
 const WORKER = "https://ionity.remco-dv.workers.dev"; // old Worker name until its secrets are moved
@@ -273,15 +313,15 @@ function qosHtml(d) {
     const okT = ok(t), okW = ok(w);
     const cls = (v) => (v == null ? "" : v < 95 ? " bad" : v < 99 ? " warn" : " good");
     const lf = w.lastFail ? `last failure ${new Date(w.lastFail.at).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })} (${esc(String(w.lastFail.status))})` : "no failures";
-    return `<div class="qos">
-      <div class="qos-h"><span class="name">${esc(QOS_NAMES[k] || k.replace(/^\w+:/, ""))}</span>
+    return `<div class="qos" data-alert="${esc(k)}">
+      <div class="qos-h"><span class="name">${esc(QOS_NAMES[k] || k.replace(/^\w+:/, ""))}<i class="bell"></i></span>
         <span class="qos-ok${cls(okT ?? okW)}">${okT != null ? `${okT}%` : "–"}<small> today</small></span></div>
       <div class="small muted">${t ? `${fmt(t.n)} today, typical ${qosMs(qosPct(t, .5))}, 9 in 10 ${qosMs(qosPct(t, .9))}, slowest ${qosMs(t.max)}` : "none today"}</div>
       <div class="small muted">7 days: ${fmt(w.n)}, ${okW}% worked, 9 in 10 ${qosMs(qosPct(w, .9))} · ${lf}</div>
     </div>`;
   }).join("");
   return `<h2>Service health</h2>${notice}<div class="card group">${rows}
-    <div class="small muted" style="margin-top:8px">“Worked” = answered without a server error. Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.</div></div>`;
+    <div class="small muted" style="margin-top:8px">Tap a row to set when it notifies you. “Worked” = answered without a server error (or a refused key or rate limit for outside services). Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.</div></div>`;
 }
 function render(d) {
   const todayRec = d.days.find((x) => x.day === d.today) || { calls: {}, ors: {} };
@@ -304,7 +344,8 @@ function render(d) {
     used.add(k);
     const lim = KNOWN_LIMITS[k];
     const n = calls[k] || 0;
-    return `<div class="line"><div class="row"><span class="name">${esc(label || LABELS[k] || k)}</span>
+    const ak = lim ? ` data-alert="limit:${esc(k)}"` : "";
+    return `<div class="line"${ak}><div class="row"><span class="name">${esc(label || LABELS[k] || k)}${lim ? '<i class="bell"></i>' : ""}</span>
       <span class="num">${fmt(n)}${lim ? ` / ${fmt(lim.limit)}` : ""}</span></div>${lim ? bar(n, lim.limit) : ""}</div>`;
   };
   // Fixed explanations (limits, resets) sit behind the ⓘ in the title; only what changes is in view.
@@ -341,7 +382,8 @@ function render(d) {
     if (!q && !(callKey && calls[callKey])) continue;
     const u = q && q.limit != null && q.remaining != null ? q.limit - q.remaining : null;
     const counted = callKey && calls[callKey] != null ? `counted by the Worker: ${fmt(calls[callKey])}` : "";
-    orsBody += `<div class="line"><div class="row"><span class="name">${esc(ORS_LABELS[svc])}</span>
+    const ak = svc !== "geocode/reverse" ? ` data-alert="limit:${esc(svc)}"` : "";
+    orsBody += `<div class="line"${ak}><div class="row"><span class="name">${esc(ORS_LABELS[svc])}${ak ? '<i class="bell"></i>' : ""}</span>
       <span class="num">${u != null ? `${fmt(u)} / ${fmt(q.limit)}` : q?.remaining != null ? `${fmt(q.remaining)} left` : callKey ? fmt(calls[callKey]) : "?"}</span></div>
       ${u != null ? bar(u, q.limit) : ""}
       <div class="small muted">${[q ? resetText(q.reset) : "", q ? `as of ${ago(q.at)}` : "no quota reported yet", u != null ? counted : ""].filter(Boolean).join(" · ")}</div></div>`;
@@ -410,6 +452,7 @@ function render(d) {
     each saves its own count, so Worker and source counts are close, not exact. OpenRouteService figures come from ORS itself.</p>`;
   html += qosHtml(d);
   $("out").innerHTML = html;
+  paintBells();
   // Tapping a bar shows that day's number under the row's bars; tapping it again hides it.
   $("out").onclick = (e) => {
     const nb = e.target.closest("[data-note]");
@@ -464,6 +507,8 @@ async function load(token = $("pw").value.trim()) {
     $("reqBadge").textContent = data.openRequests || "";
     $("reqBadge").title = `${data.openRequests} open request${data.openRequests === 1 ? "" : "s"}`;
     loadSettings(token);
+    settingsToken = token;
+    loadAlerts();
   } catch (e) {
     $("out").innerHTML = "";
     $("msg").textContent = e.message;
@@ -565,7 +610,7 @@ async function loadPush(msg = "", isError = false) {
       actions = `<div class="push-actions"><button type="button" id="pushOn">Turn on for this device</button></div>
         ${isIOS && !standalone ? `<div class="muted">On iPhone this works only in the home-screen app (Share › Add to Home Screen).</div>` : ""}`;
     }
-    box.innerHTML = `<div class="muted" style="margin-bottom:6px">A notification when a timer job fails or works again, when the route service goes down or comes back, or when a GitHub job fails.</div>
+    box.innerHTML = `<div class="muted" style="margin-bottom:6px">A notification when an alert rule goes off (see Alerts at the top: daily limits, service health, timer jobs, the route service, GitHub jobs), with reminders until you acknowledge it, and when it’s OK again.</div>
       ${list}${actions}${msg ? `<div class="${isError ? "error" : "muted"}" style="margin-top:8px">${esc(msg)}</div>` : ""}`;
     box.querySelectorAll("[data-unsub]").forEach((b) => b.onclick = () => pushOff(b.dataset.unsub));
     if ($("pushOn")) $("pushOn").onclick = () => pushOn(d.publicKey);
@@ -621,8 +666,12 @@ async function pushTest(endpoint) {
 }
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.addEventListener("message", (e) => {
-    if (e.data?.type === "push" && settingsToken) loadTimerInfo();
-    if (e.data?.type === "open") { location.hash = "timer"; $("timer")?.scrollIntoView(); if (settingsToken) loadTimerInfo(); }
+    if (e.data?.type === "push" && settingsToken) { loadTimerInfo(); loadAlerts(); }
+    if (e.data?.type === "open") {
+      const h = new URL(e.data.url || "admin.html#timer", location.href).hash;
+      if (h.startsWith("#incident=")) { location.hash = h; if (settingsToken) loadAlerts(); return; }
+      location.hash = "timer"; $("timer")?.scrollIntoView(); if (settingsToken) loadTimerInfo();
+    }
   });
 }
 // Last run of the GitHub job that fetches planned road closures (data/closures.json on this site).
@@ -654,13 +703,14 @@ async function loadTimerInfo(check = false) {
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(d.error || `Error ${res.status}`);
     const st = d.state || {};
-    const job = (name, j) => !j ? `<div>${name}: <span class="muted">no tick yet (within 5 minutes after a deploy)</span></div>`
-      : `<div>${name}: ${j.ok ? "<b>OK</b>" : `<b class="error">failing</b>`}, ${esc(j.msg || "")} <span class="muted">· since ${esc(ago(j.since))}${j.startedAt ? ` · last started ${esc(ago(j.startedAt))}` : ""}</span></div>`;
+    const job = (name, j, k) => !j ? `<div data-alert="job:${k}">${name}<i class="bell"></i>: <span class="muted">no tick yet (within 5 minutes after a deploy)</span></div>`
+      : `<div data-alert="job:${k}">${name}<i class="bell"></i>: ${j.ok ? "<b>OK</b>" : `<b class="error">failing</b>`}, ${esc(j.msg || "")} <span class="muted">· since ${esc(ago(j.since))}${j.startedAt ? ` · last started ${esc(ago(j.startedAt))}` : ""}</span></div>`;
     const check2 = check ? (d.ok ? `<div><b>Check OK</b>: ${d.steps.map(esc).join("; ")}.</div>`
       : `<div class="error"><b>Check failed</b>: ${esc(d.error || "?")}</div>`) : "";
-    box.innerHTML = `${check2}${job("Portugal live", st.pt)}${job("France live", st.fr)}${job("Road closures", st.closures)}
+    box.innerHTML = `${check2}${job("Portugal live", st.pt, "pt")}${job("France live", st.fr, "fr")}${job("Road closures", st.closures, "closures")}
       <div class="muted">Starts the GitHub jobs every 5 minutes as the GitHub App · <button type="button" class="link" id="timerCheck">Check now</button></div>`;
     $("timerCheck").onclick = () => loadTimerInfo(true);
+    paintBells();
   } catch (e) {
     box.innerHTML = `<span class="error">${esc(e.message)}</span>`;
   }
@@ -800,12 +850,225 @@ $("debugRoute").addEventListener("click", async (e) => {
   }
 });
 
+// ---- Alerts (0.6.0): rules per row (tap a row with a bell), defaults, incidents with acknowledge and a log.
+// The Worker evaluates the rules every 5 minutes (GET/POST /admin/alerts) and sends the push notifications.
+let AL = null; // the last /admin/alerts answer
+async function alertsApi(body) {
+  const res = await fetch(`${WORKER}/admin/alerts`, body
+    ? { method: "POST", headers: { Authorization: `Bearer ${settingsToken}`, "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : { headers: { Authorization: `Bearer ${settingsToken}` } });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || `Error ${res.status}`);
+  return d;
+}
+async function loadAlerts(body) {
+  try {
+    AL = await alertsApi(body);
+    renderAlerts();
+    paintBells();
+    const m = /^#incident=([\w-]+)/.exec(location.hash);
+    if (m && !$("dlg").open) {
+      history.replaceState(null, "", location.pathname + location.search);
+      showIncident(m[1]);
+    }
+    return true;
+  } catch (e) {
+    $("alerts").innerHTML = `<h2>Alerts</h2><div class="card small error">Alerts couldn’t be loaded: ${esc(e.message)}</div>`;
+    return false;
+  }
+}
+const tOnly = (ms) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+const whenT = (ms) => (sameDay(ms, Date.now()) ? tOnly(ms) : new Date(ms).toLocaleString("en-GB", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
+const durT = (ms) => { const m = Math.max(1, Math.round(ms / 60000)); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`; };
+const incName = (x) => x.name || AL?.targets.find((t) => t.key === x.key)?.name || x.key;
+function ackText(x) {
+  if (!x.ackAt) return "";
+  if (x.ackUntil === "resolved") return "acknowledged until resolved";
+  return x.ackUntil > Date.now() ? `acknowledged until ${whenT(x.ackUntil)}` : "";
+}
+function renderAlerts() {
+  const open = AL.open || [];
+  const rows = open.map((x) => {
+    const ack = ackText(x);
+    return `<div class="inc" data-inc="${esc(x.id)}"><div class="t fire${ack ? " acked" : ""}">${esc(x.title || incName(x))}</div>
+      <div class="small muted">${(x.title || "").startsWith(incName(x)) ? "" : `${esc(incName(x))} · `}since ${esc(whenT(x.opened))}${ack ? ` · ${esc(ack)}` : " · not acknowledged"}</div></div>`;
+  }).join("");
+  const n = AL.log.length;
+  $("alerts").innerHTML = `<h2>Alerts</h2><div class="card small">
+    ${open.length ? rows : `<div class="muted">No open incidents.${AL.quiet ? " Quiet hours now: forecasts wait until morning." : ""}</div>`}
+    <div class="alert-links"><button type="button" class="link" id="alLog">Log (${n})</button>
+      <button type="button" class="link" id="alDefaults">Default rules</button></div>
+    <div class="muted" style="margin-top:6px">Tap a row with a bell below (limits, service health, timer jobs) for its own rule.</div></div>`;
+  $("alLog").onclick = showLog;
+  $("alDefaults").onclick = showDefaults;
+  $("alerts").querySelectorAll("[data-inc]").forEach((el) => el.onclick = () => showIncident(el.dataset.inc));
+}
+// Bell per row: grey = default rule, blue = own rule, red = an open incident, crossed out = off.
+function paintBells() {
+  if (!AL) return;
+  document.querySelectorAll("[data-alert]").forEach((row) => {
+    const key = row.dataset.alert, b = row.querySelector(".bell");
+    if (!b) return;
+    const t = AL.targets.find((x) => x.key === key);
+    const rule = t?.rule || { ...AL.defaults[kindOf(key)], ...(AL.rules[key] || {}) };
+    b.className = "bell";
+    if (rule.on === false) b.classList.add("off");
+    else if (AL.open.some((x) => x.key === key)) b.classList.add("fire");
+    else if (AL.rules[key]) b.classList.add("custom");
+    b.title = rule.on === false ? "Notifications off" : AL.rules[key] ? "Own rule" : "Default rule";
+  });
+}
+const kindOf = (key) => (key.startsWith("limit:") ? "limit" : /^(svc|api):/.test(key) ? "service" : "job");
+document.addEventListener("click", (e) => {
+  const row = e.target.closest("[data-alert]");
+  if (!row || !AL || e.target.closest("a, button:not(.bell), input, select")) return;
+  showRule(row.dataset.alert);
+});
+// ---- the dialog
+function openDlg(html) {
+  $("dlgIn").innerHTML = `<button type="button" class="dlg-x" aria-label="Close">×</button>${html}`;
+  $("dlgIn").querySelector(".dlg-x").onclick = () => $("dlg").close();
+  if (!$("dlg").open) $("dlg").showModal();
+  $("dlg").scrollTop = 0;
+}
+$("dlg").addEventListener("click", (e) => { if (e.target === $("dlg")) $("dlg").close(); }); // tap outside
+// Fields per kind, as sentences. [field, label, sub-label]
+const RULE_UI = {
+  limit: [["on", "Notify me"], ["forecast", "Forecast: “at this rate over the limit at …”", "From the last hour’s pace; the limit resets at 01:00"],
+    ["horizonH", "…only when that’s within (hours)"], ["pct", "Also at this % of the limit", "0 = off. Always on top of the forecast, which needs some traffic"],
+    ["resolvedPush", "Notify when it’s OK again"]],
+  service: [["on", "Notify me"], ["fails", "Failures…", "0 = off; 1 = straight away"], ["failsMin", "…within (minutes)"],
+    ["noSuccess", "Only if none worked in between", "x failures in a row (across all Worker copies: none worked in that time)"],
+    ["rate", "Or worked below (%)", "0 = off"], ["rateMin", "…over (minutes)"], ["minCalls", "…with at least (calls)", "So 1 failure in 2 calls isn’t 50%"],
+    ["slowMs", "Or average slower than (ms)", "0 = off"], ["slowMin", "…over (minutes)"], ["resolvedPush", "Notify when it’s OK again"]],
+  job: [["on", "Notify me", "When it fails; reminders until you acknowledge it"], ["resolvedPush", "Notify when it’s OK again"]],
+  general: [["remindMin", "Remind every (minutes)", "While an incident is open and not acknowledged; 0 = never"],
+    ["resolveChecks", "Resolve after this many good checks", "One check every 5 minutes (timer and GitHub jobs: 1)"],
+    ["reopenMin", "Reopen the same incident within (minutes)", "When it fails again shortly after resolving"],
+    ["quietOn", "Quiet hours", "Then only outages and an exceeded limit notify; forecasts and % wait"],
+    ["quietFrom", "Quiet from (hour, Dutch time)"], ["quietTo", "Quiet until (hour)"]],
+};
+function fieldsHtml(kind, rule, prefix, disabled = false) {
+  const spec = AL.fields[kind];
+  return RULE_UI[kind].map(([f, label, sub]) => {
+    const s = spec[f], id = `${prefix}-${f}`;
+    const ctl = s === "bool"
+      ? `<label class="switch"><input type="checkbox" id="${id}" data-f="${f}" ${rule[f] ? "checked" : ""}><span></span></label>`
+      : `<input type="number" id="${id}" data-f="${f}" min="${s[0]}" max="${s[1]}" step="${s[2]}" inputmode="numeric" value="${esc(rule[f] ?? "")}">`;
+    return `<div class="fl${disabled ? " dis" : ""}" data-for="${prefix}"><label for="${id}">${esc(label)}${sub ? `<span class="sub">${esc(sub)}</span>` : ""}</label>${ctl}</div>`;
+  }).join("");
+}
+function readFields(prefix) {
+  const out = {};
+  document.querySelectorAll(`[data-for="${prefix}"] [data-f]`).forEach((el) => { out[el.dataset.f] = el.type === "checkbox" ? el.checked : el.value === "" ? null : Number(el.value); });
+  return out;
+}
+function showRule(key) {
+  const kind = kindOf(key);
+  const t = AL.targets.find((x) => x.key === key);
+  const own = AL.rules[key];
+  const rule = { ...AL.defaults[kind], ...(own || {}) };
+  const inc = AL.open.find((x) => x.key === key);
+  const name = t?.name || QOS_NAMES[key] || LABELS[key.replace(/^limit:/, "")] || ORS_LABELS[key.replace(/^limit:/, "")] || key.replace(/^\w+:/, "");
+  const now = t ? `<div class="now${t.failing ? " fire" : ""}">${t.failing ? `<b>Would notify now:</b> ${esc(t.title)}${t.body ? ` · ${esc(t.body)}` : ""}` : `<b>Now:</b> ${esc(t.detail || "fine")}`}</div>`
+    : `<div class="now">No figures in the last 3 hours.</div>`;
+  openDlg(`<h3>${esc(name)}</h3><div class="small muted">${esc(key)}</div>${now}
+    ${inc ? `<div class="small" style="margin-top:8px"><button type="button" class="link" id="rInc">Open incident since ${esc(whenT(inc.opened))}</button></div>` : ""}
+    <h4>Notifications</h4>
+    <div class="fl"><label for="rOwn">Own rule for this row<span class="sub">Off: uses the default rule for ${kind === "limit" ? "limits" : kind === "service" ? "services" : "jobs"}</span></label>
+      <label class="switch"><input type="checkbox" id="rOwn" ${own ? "checked" : ""}><span></span></label></div>
+    ${fieldsHtml(kind, rule, "r", !own)}
+    <div class="dlg-btns"><button type="button" id="rSave">Save</button><button type="button" class="sec" id="rCancel">Cancel</button>
+      <button type="button" class="sec" id="rDef">Edit defaults</button></div>
+    <div class="small muted" id="rMsg" style="margin-top:8px"></div>`);
+  $("rOwn").onchange = () => document.querySelectorAll('[data-for="r"]').forEach((el) => el.classList.toggle("dis", !$("rOwn").checked));
+  $("rCancel").onclick = () => $("dlg").close();
+  $("rDef").onclick = showDefaults;
+  if ($("rInc")) $("rInc").onclick = () => showIncident(inc.id);
+  $("rSave").onclick = async () => {
+    $("rMsg").textContent = "Saving…";
+    const ok = await loadAlerts({ action: "save-rule", key, rule: $("rOwn").checked ? readFields("r") : null });
+    if (ok) showRule(key); else $("rMsg").textContent = "Not saved.";
+    if (ok) $("rMsg").textContent = "Saved. The next check (within 5 minutes) uses it.";
+  };
+}
+function showDefaults() {
+  const sec = (kind, title) => `<h4>${title}</h4>${fieldsHtml(kind, AL.defaults[kind], `d-${kind}`)}`;
+  openDlg(`<h3>Default rules</h3><div class="small muted">For every row without its own rule.</div>
+    ${sec("general", "Incidents")}${sec("limit", "Daily limits")}${sec("service", "Services and endpoints")}${sec("job", "Timer jobs, route service, GitHub jobs")}
+    <div class="dlg-btns"><button type="button" id="dSave">Save</button><button type="button" class="sec" id="dCancel">Cancel</button>
+      <button type="button" class="warnb" id="dReset">Back to built-in</button></div>
+    <div class="small muted" id="dMsg" style="margin-top:8px"></div>`);
+  $("dCancel").onclick = () => $("dlg").close();
+  const save = async (reset) => {
+    $("dMsg").textContent = "Saving…";
+    let ok = true;
+    for (const kind of ["general", "limit", "service", "job"]) {
+      const v = reset ? null : readFields(`d-${kind}`);
+      const cur = AL.defaults[kind];
+      if (!reset && Object.keys(v).every((f) => v[f] === cur[f])) continue; // unchanged: no write
+      // Only what differs from the built-in values is kept, so a later change of those still applies.
+      const diff = v && Object.fromEntries(Object.entries(v).filter(([f, x]) => x !== AL.builtIn[kind][f]));
+      ok = (await loadAlerts({ action: "save-defaults", kind, values: diff })) && ok;
+    }
+    showDefaults();
+    $("dMsg").textContent = ok ? "Saved." : "Not everything was saved.";
+  };
+  $("dSave").onclick = () => save(false);
+  $("dReset").onclick = () => { if (confirmTwice($("dReset"))) save(true); };
+}
+// A destructive button asks once more on its own label instead of a browser dialog.
+function confirmTwice(btn) {
+  if (btn.dataset.sure) return true;
+  btn.dataset.sure = "1"; const was = btn.textContent; btn.textContent = "Tap again to confirm";
+  setTimeout(() => { delete btn.dataset.sure; btn.textContent = was; }, 4000);
+  return false;
+}
+const EV_NAME = { open: "Opened", reopen: "Failing again", push: "Notified", remind: "Reminder", still: "Still failing", worse: "Worse", ack: "Acknowledged", unack: "Unacknowledged", resolve: "Resolved" };
+function showIncident(id) {
+  const inc = AL.open.find((x) => x.id === id) || AL.log.find((x) => x.id === id);
+  if (!inc) { openDlg(`<h3>Incident</h3><p class="muted">Not found any more (older than 30 days or the log was cleared).</p>`); return; }
+  const isOpen = !inc.resolvedAt, ack = ackText(inc);
+  const state = isOpen ? `Open since ${whenT(inc.opened)}${ack ? ` · ${ack}` : " · not acknowledged"}`
+    : `Resolved ${whenT(inc.resolvedAt)}, after ${durT(inc.resolvedAt - inc.opened)}`;
+  const ev = (inc.events || []).map((e) => `<span>${esc(sameDay(e.at, Date.now()) ? tOnly(e.at) : whenT(e.at))}</span><span><b>${esc(EV_NAME[e.t] || e.t)}</b>${e.text ? ` · ${esc(e.text)}` : ""}</span>`).join("");
+  openDlg(`<h3>${esc(inc.title || incName(inc))}</h3><div class="small muted">${esc(incName(inc))}</div>
+    <div class="now${isOpen ? " fire" : ""}">${esc(state)}${inc.body ? `<br>${esc(inc.body)}` : ""}</div>
+    ${inc.link ? `<div class="small" style="margin-top:8px"><a href="${esc(inc.link)}" target="_blank" rel="noopener">Log on GitHub</a></div>` : ""}
+    ${isOpen ? `<h4>Acknowledge: no notifications for</h4><div class="dlg-btns" style="margin-top:6px">
+        <button type="button" data-ack="30">30 min</button><button type="button" data-ack="120">2 h</button>
+        <button type="button" data-ack="resolved">Until resolved</button><button type="button" data-ack="tomorrow">Until tomorrow</button></div>
+      <div class="small muted" style="margin-top:6px">Still failing when that runs out: one notification, then reminders again. It resolves by itself once it works again.</div>` : ""}
+    <h4>Log</h4><div class="ev">${ev}</div>
+    <div class="dlg-btns">${isOpen && ack ? `<button type="button" class="sec" id="iUnack">Take back acknowledgement</button>` : ""}
+      ${isOpen ? `<button type="button" class="warnb" id="iClose">Close now</button>` : ""}
+      <button type="button" class="sec" id="iRule">Rule for this</button></div>
+    <div class="small muted" id="iMsg" style="margin-top:8px"></div>`);
+  const act = async (body) => { $("iMsg").textContent = "Saving…"; if (await loadAlerts(body)) showIncident(id); else $("iMsg").textContent = "Not saved."; };
+  $("dlgIn").querySelectorAll("[data-ack]").forEach((b) => b.onclick = () => act({ action: "ack", id, until: b.dataset.ack }));
+  if ($("iUnack")) $("iUnack").onclick = () => act({ action: "unack", id });
+  if ($("iClose")) $("iClose").onclick = () => { if (confirmTwice($("iClose"))) act({ action: "resolve", id }); };
+  $("iRule").onclick = () => showRule(inc.key);
+}
+function showLog() {
+  const rows = AL.log.map((x) => `<div class="inc" data-inc="${esc(x.id)}"><div class="t">${esc(x.worstText || x.title || incName(x))}</div>
+    <div class="small muted">${esc(incName(x))} · ${esc(whenT(x.opened))}, ${esc(durT(x.resolvedAt - x.opened))}${x.pushes ? ` · ${x.pushes} notification${x.pushes === 1 ? "" : "s"}` : ""}</div></div>`).join("");
+  openDlg(`<h3>Log</h3><div class="small muted">Resolved incidents, newest first, kept 30 days.</div>
+    <div style="margin-top:8px">${rows || `<div class="muted">Nothing yet.</div>`}</div>
+    ${rows ? `<div class="dlg-btns"><button type="button" class="warnb" id="lClear">Clear log</button></div>` : ""}`);
+  $("dlgIn").querySelectorAll("[data-inc]").forEach((el) => el.onclick = () => showIncident(el.dataset.inc));
+  if ($("lClear")) $("lClear").onclick = async () => { if (confirmTwice($("lClear")) && await loadAlerts({ action: "clear-log" })) showLog(); };
+}
+window.addEventListener("hashchange", () => { if (/^#incident=/.test(location.hash) && settingsToken) loadAlerts(); });
+
 $("login").addEventListener("submit", (e) => { e.preventDefault(); load(); });
 $("refresh").addEventListener("click", () => load(savedToken()));
 $("logout").addEventListener("click", () => {
   try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch (_) {}
   $("out").innerHTML = "";
   $("settings").innerHTML = "";
+  $("alerts").innerHTML = "";
   $("routeView").innerHTML = "";
   showLoggedIn(false);
   $("pw").focus();

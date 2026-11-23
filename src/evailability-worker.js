@@ -28,6 +28,8 @@
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /admin/timer           the 5-minute timer that starts GitHub jobs: its state (POST: check the GitHub App now)
 //   GET  /admin/push            push notifications for the usage page: public key, subscriptions (POST: subscribe, unsubscribe, test)
+//   GET  /admin/alerts          alert rules, targets with their state, open incidents and the log
+//                               (POST: save-defaults, save-rule, ack, unack, resolve, clear-log); see "admin alerts"
 //   GET  /admin/settings        switches and values set on the usage page (same header)
 //   GET  /admin/users           access keys: label, status, dates, use per day (same header)
 //   POST /admin/users           {action:"create", label} | {action:"regenerate"|"disable"|"enable"|"delete", id}
@@ -68,7 +70,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.7.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.8.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -174,7 +176,29 @@ class HttpError extends Error {
 // Counts calls per data source and keeps the quota OpenRouteService reports with each answer.
 // Saved to KV (binding USAGE) at most every 2 minutes, to stay well within KV's free write limit.
 const USAGE_FLUSH_MS = 2 * 60 * 1000;
-const usage = { pending: {}, users: {}, qos: {}, ors: {}, orsHeaders: {}, lastFlush: Date.now(), kvWrites: 0 };
+const usage = { pending: {}, users: {}, qos: {}, ors: {}, orsHeaders: {}, slots: {}, lastFlush: Date.now(), kvWrites: 0 };
+// 5-minute slots for the admin alerts (Worker 0.8.0): per slot (number = epoch ms / 5 min) the calls of the
+// sources with a daily limit (c) and per service/endpoint [calls, failures, total ms] (q). Saved in the
+// same usage record (no extra writes), only the last 3 hours, so the timer can see rates and windows.
+const SLOT_MS = 5 * 60 * 1000, SLOT_KEEP = 36;
+const SLOT_SOURCES = new Set(["Worker requests", "KV reads", "KV writes", "Routing", "Matrix", "Geocoder"]);
+function slotOf(at = Date.now()) {
+  const k = Math.floor(at / SLOT_MS);
+  return usage.slots[k] || (usage.slots[k] = { c: {}, q: {} });
+}
+function mergeSlots(into, from) {
+  for (const [k, v] of Object.entries(from || {})) {
+    const t = into[k] || (into[k] = { c: {}, q: {} });
+    for (const [s, n] of Object.entries(v.c || {})) t.c[s] = (t.c[s] || 0) + n;
+    for (const [s, a] of Object.entries(v.q || {})) {
+      const x = t.q[s] || (t.q[s] = [0, 0, 0]);
+      x[0] += a[0]; x[1] += a[1]; x[2] += a[2] || 0;
+    }
+  }
+  const min = Math.floor(Date.now() / SLOT_MS) - SLOT_KEEP;
+  for (const k of Object.keys(into)) if (Number(k) < min) delete into[k];
+  return into;
+}
 // Quality of service, per outside service and per endpoint of this Worker: calls, failures, total and
 // slowest time, a time histogram and the last failure. Saved with the counts (no extra writes); the
 // usage page shows it under "Service health".
@@ -183,7 +207,9 @@ function noteQos(key, ms, ok, status) {
   const q = usage.qos[key] || (usage.qos[key] = { n: 0, fail: 0, ms: 0, max: 0, b: [0, 0, 0, 0, 0, 0] });
   q.n++; q.ms += ms; q.max = Math.max(q.max, ms);
   q.b[QOS_BUCKETS.findIndex((x) => ms < x) === -1 ? 5 : QOS_BUCKETS.findIndex((x) => ms < x)]++;
-  if (!ok) { q.fail++; q.lastFail = { at: Date.now(), status }; }
+  if (!ok) { q.fail++; q.lastFail = { at: Date.now(), status }; usage.failed = true; }
+  const sq = slotOf().q, x = sq[key] || (sq[key] = [0, 0, 0]);
+  x[0]++; if (!ok) x[1]++; x[2] += ms;
 }
 function mergeQos(into, q) {
   for (const [k, v] of Object.entries(q)) {
@@ -215,7 +241,10 @@ function deviceKind(request) {
     : /Macintosh/.test(ua) ? (/Mobile\//.test(ua) ? "iPad" : "Mac") : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "Other";
 }
 const today = () => new Date().toISOString().slice(0, 10);
-function countCall(source, n = 1) { usage.pending[source] = (usage.pending[source] || 0) + n; }
+function countCall(source, n = 1) {
+  usage.pending[source] = (usage.pending[source] || 0) + n;
+  if (SLOT_SOURCES.has(source)) { const c = slotOf().c; c[source] = (c[source] || 0) + n; }
+}
 // Every KV read counts against the free plan's 100,000 a day, so it's counted like a call.
 function kvGet(env, key) { countCall("KV reads"); return env.USAGE.get(key); }
 
@@ -250,9 +279,9 @@ async function readUsageDay(env, day) {
 async function flushUsage(env, force = false) {
   if (!env.USAGE) return;
   if (!force && Date.now() - usage.lastFlush < USAGE_FLUSH_MS) return;
-  const pending = usage.pending, ors = usage.ors, users = usage.users, qos = usage.qos;
+  const pending = usage.pending, ors = usage.ors, users = usage.users, qos = usage.qos, slots = usage.slots;
   if (!Object.keys(pending).length && !Object.keys(ors).length && !Object.keys(users).length && !Object.keys(qos).length) return;
-  usage.pending = {}; usage.users = {}; usage.qos = {}; usage.lastFlush = Date.now();
+  usage.pending = {}; usage.users = {}; usage.qos = {}; usage.slots = {}; usage.lastFlush = Date.now(); usage.failed = false;
   const day = today();
   const rec = (await readUsageDay(env, day)) || { day, calls: {}, ors: {} };
   for (const [k, n] of Object.entries(pending)) rec.calls[k] = (rec.calls[k] || 0) + n;
@@ -261,6 +290,7 @@ async function flushUsage(env, force = false) {
   for (const [id, u] of Object.entries(users)) mergeUser(rec.users[id] || (rec.users[id] = { n: 0, last: 0 }), u);
   rec.qos = rec.qos || {};
   mergeQos(rec.qos, qos);
+  rec.slots = mergeSlots(rec.slots || {}, slots);
   rec.orsHeaders = { ...(rec.orsHeaders || {}), ...usage.orsHeaders };
   rec.calls["KV writes"] = (rec.calls["KV writes"] || 0) + 1;
   try {
@@ -270,6 +300,7 @@ async function flushUsage(env, force = false) {
     for (const [k, n] of Object.entries(pending)) countCall(k, n);
     for (const [id, u] of Object.entries(users)) mergeUser(usage.users[id] || (usage.users[id] = { n: 0, last: 0 }), u);
     mergeQos(usage.qos, qos);
+    mergeSlots(usage.slots, slots);
     console.log("Usage save failed", e.message);
   }
 }
@@ -380,7 +411,7 @@ async function handleUsage(request, env) {
   for (let i = 0; i < 7; i++) {
     const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
     const rec = await readUsageDay(env, d);
-    if (rec) days.push(rec);
+    if (rec) { delete rec.slots; days.push(rec); } // the 5-minute slots are for the alerts only
   }
   // Workers Paid: Cloudflare's allowances are per billing period (a month ending on the "paid until"
   // date), so add up the days of the current period for Cloudflare's own counters.
@@ -426,7 +457,9 @@ async function fetchJson(url, init = {}, label = "upstream") {
     const t0 = Date.now();
     try { res = await fetch(url, init); }
     catch (e) { noteQos(`svc:${label}`, Date.now() - t0, false, "network"); throw e; }
-    noteQos(`svc:${label}`, Date.now() - t0, res.ok, res.status);
+    // Worked = no server error, like the endpoints; a 4xx is the request's fault (e.g. no route between two
+    // points), except a refused key (401/403) or being rate limited (429).
+    noteQos(`svc:${label}`, Date.now() - t0, res.ok || (res.status < 500 && ![401, 403, 429].includes(res.status)), res.status);
     noteQuota(url, res);
     text = await res.text();
     if (res.ok || res.status < 500 || attempt >= retries.length) break;
@@ -2932,7 +2965,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/admin/timer", "/admin/push", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/admin/timer", "/admin/push", "/admin/alerts", "/closures/schedule"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -3512,6 +3545,7 @@ async function route(request, env) {
   if (path === "/admin/users" && (request.method === "GET" || request.method === "POST")) return handleUsers(request, env);
   if (path === "/admin/timer" && (request.method === "GET" || request.method === "POST")) return handleTimer(request, env);
   if (path === "/admin/push" && (request.method === "GET" || request.method === "POST")) return handlePush(request, env);
+  if (path === "/admin/alerts" && (request.method === "GET" || request.method === "POST")) return handleAlerts(request, env);
   if (path === "/plan" && request.method === "POST") return handlePlan(request, env);
   if (path === "/status" && request.method === "POST") return handleStatus(request, env);
   if (path === "/fr-status" && request.method === "POST") {
@@ -3863,7 +3897,6 @@ const TIMER_JOBS = { pt: "Portugal live", fr: "France live", closures: "Road clo
 async function runTimer(env, at = Date.now()) {
   await loadSettings(env);
   const state = await loadTimer(env);
-  const wasOk = Object.fromEntries(Object.keys(TIMER_JOBS).map((k) => [k, state[k]?.ok])); // for push messages
   const msgs = [];
   let save = false;
   try {
@@ -3900,28 +3933,14 @@ async function runTimer(env, at = Date.now()) {
       console.log("Timer: Road closures", e.message);
     }
     // Failed GitHub runs (also ones the timer didn't start: deploys, pushes, GitHub's own schedule).
-    try { save = (await checkWorkflowRuns(env, state, msgs)) || save; }
+    try { save = (await checkWorkflowRuns(env, state)) || save; }
     catch (e) { console.log("Timer: workflow runs", e.message); }
   }
-  // Push: a timer job that turned failing or OK again (not a first tick, not a different error text).
-  for (const [k, name] of Object.entries(TIMER_JOBS)) {
-    const j = state[k];
-    if (!j || wasOk[k] === undefined || wasOk[k] === j.ok) continue;
-    msgs.push(j.ok ? { title: `${name}: OK again`, body: `The timer can start ${name} again.`, tag: `timer-${k}` }
-      : { title: `${name}: failing`, body: String(j.msg || "Unknown error").slice(0, 180), tag: `timer-${k}` });
-  }
-  // Route service (the start-screen notice): down or back.
-  try {
-    const h = await loadHealth(env);
-    const down = !!(h.ors?.down && Date.now() - (h.ors.lastFail || 0) < HEALTH_STALE_MS);
-    if (state.orsDown === undefined) { state.orsDown = down; save = true; }
-    else if (state.orsDown !== down) {
-      state.orsDown = down; save = true;
-      msgs.push(down ? { title: "Route service failing", body: "openrouteservice fails; drivers see the notice on the start screen.", tag: "ors" }
-        : { title: "Route service works again", body: "openrouteservice answers again; the start-screen notice is gone.", tag: "ors" });
-    }
-  } catch (e) { console.log("Timer: health", e.message); }
   if (save) await saveTimer(env, state);
+  // Push notifications: incidents from the alert rules (timer jobs, route service, GitHub jobs, daily
+  // limits, service health), see "admin alerts".
+  try { msgs.push(...(await runAlerts(env, at, state, 5 - msgs.length))); }
+  catch (e) { console.log("Timer: alerts", e.message); }
   for (const m of msgs.slice(0, 5)) {
     try { await notifyAdmin(env, m); } catch (e) { console.log("Push failed", e.message); }
   }
@@ -3949,6 +3968,379 @@ async function handleTimer(request, env) {
   } catch (e) {
     return json(request, { ok: false, steps, error: e.message, state });
   }
+}
+
+// ---------------------------------------------------------------- admin alerts (Worker 0.8.0)
+// Rules for push notifications to the usage page, changed there (tap a row › Notifications), and
+// incidents: a rule that goes off opens an incident with one push; it can be acknowledged with a
+// quiet period (no pushes for it meanwhile), resolves by itself once the rule is fine again for a few
+// checks, and stays in a log. Evaluated by the 5-minute timer (runTimer) from the usage record's
+// 5-minute slots (see usage counting), so it costs no extra KV writes except on incident changes.
+//   KV "alerts":     {defaults: {general, limit, service, job}, rules: {<target key>: partial rule}}
+//   KV "alerts-log": {started, open: {<target key>: incident}, log: [closed incidents, newest first]}
+// Target keys: limit:<source> (daily limits), svc:<service> / api:<endpoint> (service health),
+// job:pt|fr|closures (timer jobs), ors (route service notice), gh:<workflow name> (GitHub jobs).
+const ALERT_TZ = "Europe/Amsterdam";
+const ALERT_DEFAULTS = {
+  general: { remindMin: 30, resolveChecks: 2, reopenMin: 30, quietOn: true, quietFrom: 23, quietTo: 7 },
+  limit: { on: true, forecast: true, horizonH: 3, pct: 80, resolvedPush: true },
+  service: { on: true, fails: 1, failsMin: 5, noSuccess: false, rate: 90, rateMin: 15, minCalls: 10, slowMs: 0, slowMin: 15, resolvedPush: true },
+  job: { on: true, resolvedPush: true },
+};
+// [min, max, step] for numbers; "bool" for switches.
+const ALERT_FIELDS = {
+  general: { remindMin: [0, 1440, 5], resolveChecks: [1, 12, 1], reopenMin: [0, 240, 5], quietOn: "bool", quietFrom: [0, 23, 1], quietTo: [0, 23, 1] },
+  limit: { on: "bool", forecast: "bool", horizonH: [1, 24, 1], pct: [0, 100, 1], resolvedPush: "bool" },
+  service: { on: "bool", fails: [0, 1000, 1], failsMin: [5, 180, 5], noSuccess: "bool", rate: [0, 100, 1], rateMin: [5, 180, 5],
+    minCalls: [1, 1000, 1], slowMs: [0, 60000, 50], slowMin: [5, 180, 5], resolvedPush: "bool" },
+  job: { on: "bool", resolvedPush: "bool" },
+};
+const ALERT_NAMES = {
+  "api:/plan": "Plan a route", "api:/alternatives": "Compare routes", "api:/status": "Live status",
+  "api:/fr-status": "Live status France (old)", "api:/be-status": "Belgium: sites", "api:/be-evse": "Belgium: one stall",
+  "api:/geocode": "Address search", "api:/detours": "Detour minutes", "api:/places": "Place names", "api:/ndw-sites": "Extra NL chargers",
+  "api:/where": "Street and town", "svc:Routing": "openrouteservice: routes", "svc:Geocoder": "openrouteservice: addresses",
+  "svc:Matrix": "openrouteservice: detours", "job:pt": "Portugal live", "job:fr": "France live", "job:closures": "Road closures",
+  ors: "Route service notice",
+};
+const LIMIT_TARGETS = [
+  { key: "limit:Worker requests", name: "Worker requests", src: "Worker requests", fixed: 100000, cf: true },
+  { key: "limit:KV reads", name: "KV reads", src: "KV reads", fixed: 100000, cf: true },
+  { key: "limit:KV writes", name: "KV writes", src: "KV writes", fixed: 1000, cf: true },
+  { key: "limit:directions", name: "openrouteservice routes", src: "Routing", ors: "directions" },
+  { key: "limit:matrix", name: "openrouteservice detours", src: "Matrix", ors: "matrix" },
+  { key: "limit:geocode/search", name: "openrouteservice place search", src: "Geocoder", ors: "geocode/search" },
+];
+const alertKind = (key) => (key.startsWith("limit:") ? "limit" : /^(svc|api):/.test(key) ? "service" : "job");
+const alertName = (key) => ALERT_NAMES[key] || LIMIT_TARGETS.find((t) => t.key === key)?.name || key.replace(/^(svc|api|gh|job):/, "");
+const validAlertKey = (key) => typeof key === "string" && key.length < 120 && /^(limit:|svc:|api:|job:|gh:|ors$)/.test(key);
+
+function cleanRule(kind, r) {
+  const out = {};
+  for (const [f, spec] of Object.entries(ALERT_FIELDS[kind] || {})) {
+    const v = r?.[f];
+    if (v === undefined || v === null || v === "") continue;
+    if (spec === "bool") { out[f] = v === true || v === "true" || v === 1; continue; }
+    const n = Number(v);
+    if (!Number.isFinite(n)) continue;
+    out[f] = Math.min(spec[1], Math.max(spec[0], Math.round(n / spec[2]) * spec[2]));
+  }
+  return out;
+}
+async function loadAlerts(env, fresh = false) {
+  let c = fresh ? undefined : memoGet("alerts");
+  if (c === undefined) {
+    try { c = JSON.parse((await kvGet(env, "alerts")) || "{}"); } catch (_) { c = {}; }
+    c.defaults = c.defaults || {}; c.rules = c.rules || {};
+    memoSet("alerts", c, 60 * 1000);
+  }
+  return c;
+}
+const alertDefaults = (cfg, kind) => ({ ...ALERT_DEFAULTS[kind], ...(cfg.defaults[kind] || {}) });
+const alertRule = (cfg, key) => ({ ...alertDefaults(cfg, alertKind(key)), ...(cfg.rules[key] || {}) });
+async function loadAlertLog(env) {
+  let l;
+  try { l = JSON.parse((await kvGet(env, "alerts-log")) || "{}"); } catch (_) { l = {}; }
+  l.open = l.open || {}; l.log = l.log || [];
+  return l;
+}
+
+// Local time in the Netherlands, for texts and quiet hours.
+function tzParts(at) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: ALERT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(at)).map((x) => [x.type, x.value]));
+  return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute };
+}
+// The moment of local time y-mo-d h:00 (offset taken from that day; fine outside the DST switch hour).
+function tzAt(y, mo, d, h) {
+  const guess = Date.UTC(y, mo - 1, d, h);
+  const p = tzParts(guess);
+  return guess - (Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi) - guess);
+}
+function localWhen(at, now) {
+  const a = tzParts(at), n = tzParts(now), two = (x) => String(x).padStart(2, "0");
+  const time = `${two(a.h)}:${two(a.mi)}`;
+  return a.y === n.y && a.mo === n.mo && a.d === n.d ? `at ${time}` : `on ${two(a.d)}-${two(a.mo)} at ${time}`;
+}
+const fmtN = (n) => Math.round(n).toLocaleString("en-GB");
+function fmtDur(ms) {
+  const m = Math.max(1, Math.round(ms / 60000));
+  return m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`;
+}
+function isQuiet(g, now) {
+  if (!g.quietOn || g.quietFrom === g.quietTo) return false;
+  const h = tzParts(now).h;
+  return g.quietFrom > g.quietTo ? h >= g.quietFrom || h < g.quietTo : h >= g.quietFrom && h < g.quietTo;
+}
+
+// Today's counts and the last 3 hours of slots: saved record(s) plus this copy's unsaved tally.
+async function alertData(env, now) {
+  const day = new Date(now).toISOString().slice(0, 10);
+  const rec = (await readUsageDay(env, day)) || {};
+  const slots = mergeSlots({}, rec.slots);
+  if (new Date(now).getUTCHours() < 3) {
+    const y = await readUsageDay(env, new Date(now - 86400000).toISOString().slice(0, 10));
+    if (y) mergeSlots(slots, y.slots);
+  }
+  mergeSlots(slots, usage.slots);
+  const calls = { ...(rec.calls || {}) };
+  for (const [k, n] of Object.entries(usage.pending)) calls[k] = (calls[k] || 0) + n;
+  const ors = { ...(rec.ors || {}) };
+  for (const [k, v] of Object.entries(usage.ors)) if (!ors[k] || ors[k].at < v.at) ors[k] = v;
+  return { calls, ors, slots };
+}
+// Sum of a service's slots over the last `mins` minutes (whole slots plus the current one).
+function slotWindow(slots, key, mins, now) {
+  const cur = Math.floor(now / SLOT_MS), from = cur - Math.ceil(mins / 5);
+  const a = { n: 0, fail: 0, ms: 0 };
+  for (let k = from; k <= cur; k++) { const x = slots[k]?.q?.[key]; if (x) { a.n += x[0]; a.fail += x[1]; a.ms += x[2] || 0; } }
+  return a;
+}
+function evalService(key, rule, slots, now) {
+  const reasons = [];
+  if (rule.fails > 0) {
+    const a = slotWindow(slots, key, rule.failsMin, now);
+    if (a.fail >= rule.fails && (!rule.noSuccess || a.fail === a.n)) reasons.push(`${fmtN(a.fail)} of ${fmtN(a.n)} failed in ${rule.failsMin} min`);
+  }
+  if (rule.rate > 0) {
+    const a = slotWindow(slots, key, rule.rateMin, now);
+    const ok = a.n ? ((a.n - a.fail) / a.n) * 100 : 100;
+    if (a.n >= rule.minCalls && ok < rule.rate) reasons.push(`${Math.round(ok)}% worked in ${rule.rateMin} min (${fmtN(a.n)} calls, threshold ${rule.rate}%)`);
+  }
+  if (rule.slowMs > 0) {
+    const a = slotWindow(slots, key, rule.slowMin, now);
+    if (a.n >= 3 && a.ms / a.n > rule.slowMs) reasons.push(`average ${fmtN(a.ms / a.n)} ms in ${rule.slowMin} min (threshold ${fmtN(rule.slowMs)} ms)`);
+  }
+  const w = slotWindow(slots, key, 15, now);
+  const name = alertName(key);
+  return { key, kind: "service", name, failing: reasons.length > 0, level: 1,
+    title: `${name}: failing`, body: reasons.join("; "),
+    detail: w.n ? `last 15 min: ${fmtN(w.n)} calls, ${fmtN(w.fail)} failed${w.n ? `, average ${fmtN(w.ms / w.n)} ms` : ""}` : "no calls in the last 15 min" };
+}
+function evalLimit(t, rule, data, now) {
+  let used, limit, resetAt;
+  const nextUtcMidnight = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate() + 1);
+  if (t.cf) { used = data.calls[t.src] || 0; limit = t.fixed; resetAt = nextUtcMidnight; }
+  else {
+    const q = data.ors[t.ors];
+    if (!q || q.limit == null || q.remaining == null) return null;
+    used = q.limit - q.remaining; limit = q.limit;
+    const r = q.reset ? (q.reset > 1e12 ? q.reset : q.reset * 1000) : 0;
+    resetAt = r > now ? r : nextUtcMidnight;
+  }
+  // Rate: the last hour of slots (needs at least half an hour of slots and 5 calls, else no forecast).
+  const cur = Math.floor(now / SLOT_MS);
+  const have = Object.keys(data.slots).map(Number).filter((k) => k >= cur - 12);
+  let n = 0;
+  for (let k = cur - 12; k <= cur; k++) n += data.slots[k]?.c?.[t.src] || 0;
+  const mins = 60 + (now - cur * SLOT_MS) / 60000;
+  const rate = have.length >= 6 && n >= 5 ? n / mins : null; // per minute
+  const pct = limit ? (used / limit) * 100 : 0;
+  const reset = `at ${localWhen(resetAt, now).replace(/^.* at /, "")}`; // always the next reset, so the time is enough
+  const perHour = rate != null ? `, about ${fmtN(rate * 60)} an hour` : "";
+  let crossAt = null;
+  if (rate && used < limit) {
+    const at = now + ((limit - used) / rate) * 60000;
+    if (at < resetAt) crossAt = at;
+  }
+  const base = { key: t.key, kind: "limit", name: t.name, failing: false, level: 0,
+    detail: `${fmtN(used)} of ${fmtN(limit)} used (${Math.round(pct)}%)${perHour}${crossAt ? `; at this rate over the limit ${localWhen(crossAt, now)}` : rate != null ? "; stays under the limit at this rate" : "; too little traffic for a forecast"}` };
+  const body = `${fmtN(used)} of ${fmtN(limit)} used today${perHour}. Resets ${reset}.`;
+  if (used >= limit) return { ...base, failing: true, level: 3, title: `${t.name} is over the daily limit`, body: `${fmtN(used)} of ${fmtN(limit)} used; further calls fail until the reset ${reset}.` };
+  if (rule.pct > 0 && pct >= rule.pct) return { ...base, failing: true, level: 2, title: `${t.name} at ${Math.floor(pct)}% of the daily limit`,
+    body: `${body}${crossAt ? ` At this rate over the limit ${localWhen(crossAt, now)}.` : ""}` };
+  if (rule.forecast && crossAt && crossAt - now <= rule.horizonH * 3600000) {
+    return { ...base, failing: true, level: 1, title: `At this rate, ${t.name} will go over the limit ${localWhen(crossAt, now)}`, body };
+  }
+  return base;
+}
+// Every target with its current state. all=true also returns targets whose rule is off (for the page).
+function evaluateAlerts(env, cfg, data, timerState, health, now, all = false) {
+  const out = [];
+  const add = (r) => { if (!r) return; r.rule = alertRule(cfg, r.key); r.custom = !!cfg.rules[r.key]; if (all || r.rule.on) out.push(r); };
+  for (const t of LIMIT_TARGETS) { if (t.cf && isPaid(env)) continue; add(evalLimit(t, alertRule(cfg, t.key), data, now)); }
+  const svcKeys = new Set();
+  for (const s of Object.values(data.slots)) for (const k of Object.keys(s.q || {})) svcKeys.add(k);
+  for (const k of Object.keys(cfg.rules)) if (alertKind(k) === "service") svcKeys.add(k);
+  for (const k of svcKeys) add(evalService(k, alertRule(cfg, k), data.slots, now));
+  const job = (key, failing, body, detail, link) => {
+    const name = alertName(key);
+    add({ key, kind: "job", name, failing, level: 1, title: `${name}: failing`, body, detail, link });
+  };
+  for (const [k, name] of Object.entries(TIMER_JOBS)) {
+    if (k === "fr" && !setting(env, "frLive")) continue;
+    const j = timerState[k];
+    job(`job:${k}`, j?.ok === false, String(j?.msg || "Unknown error").slice(0, 180), j ? (j.ok ? `OK: ${j.msg || ""}` : `failing: ${j.msg || ""}`) : "no tick yet");
+  }
+  const down = !!(health?.ors?.down && now - (health.ors.lastFail || 0) < HEALTH_STALE_MS);
+  job("ors", down, "openrouteservice fails; drivers see the notice on the start screen.", down ? "notice showing" : "no notice");
+  for (const [name, st] of Object.entries(timerState.gh?.seen || {})) {
+    job(`gh:${name}`, st === "failure", `GitHub job “${name}” failed. The log is on GitHub Actions.`, `newest finished run: ${st}`, timerState.gh?.link?.[name]);
+  }
+  return out;
+}
+
+const pushTag = (key) => `a-${key}`.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32);
+function incEvent(inc, t, text, at) {
+  inc.events = [...(inc.events || []), { at, t, text: String(text || "").slice(0, 240) }].slice(-14);
+}
+function closeIncident(log, inc, at, how) {
+  delete log.open[inc.key];
+  inc.resolvedAt = at;
+  incEvent(inc, "resolve", how, at);
+  log.log.unshift(inc);
+}
+function pruneAlertLog(log, now) {
+  log.log = log.log.filter((x) => now - (x.resolvedAt || x.opened) < 30 * 86400000).slice(0, 150);
+}
+// The timer's part: open, push, remind and resolve incidents. Returns the push messages.
+async function runAlerts(env, now, timerState, budget = 5) {
+  const cfg = await loadAlerts(env);
+  const g = alertDefaults(cfg, "general");
+  const data = await alertData(env, now);
+  const results = evaluateAlerts(env, cfg, data, timerState, await loadHealth(env), now);
+  const log = await loadAlertLog(env);
+  const first = !log.started;
+  const quiet = isQuiet(g, now);
+  const ackRead = Object.fromEntries(Object.values(log.open).map((x) => [x.id, x.ackAt || null])); // to spot a change made meanwhile
+  const msgs = [];
+  let changed = first;
+  const failing = new Map(results.filter((r) => r.failing).map((r) => [r.key, r]));
+  for (const r of failing.values()) {
+    let inc = log.open[r.key], fresh = false;
+    if (!inc) {
+      const i = g.reopenMin ? log.log.findIndex((x) => x.key === r.key && now - x.resolvedAt < g.reopenMin * 60000) : -1;
+      if (i >= 0) {
+        inc = log.log.splice(i, 1)[0];
+        Object.assign(inc, { resolvedAt: null, okTicks: 0, ackAt: null, ackUntil: null, pushes: 0, pushedLevel: 0 });
+        incEvent(inc, "reopen", r.title, now);
+      } else {
+        inc = { id: `${now.toString(36)}${Math.random().toString(36).slice(2, 6)}`, key: r.key, kind: r.kind, opened: now, pushes: 0, lastPush: 0, okTicks: 0, events: [] };
+        incEvent(inc, "open", `${r.title}${r.body ? ` · ${r.body}` : ""}`, now);
+      }
+      fresh = true;
+      // Old failures found at the first run (GitHub jobs that failed before this existed): quiet.
+      if (first && r.key.startsWith("gh:")) { inc.ackAt = now; inc.ackUntil = "resolved"; incEvent(inc, "ack", "Found at the start; no push", now); }
+      log.open[r.key] = inc; changed = true;
+    }
+    if (inc.okTicks) { inc.okTicks = 0; changed = true; }
+    Object.assign(inc, { name: r.name, title: r.title, body: r.body, link: r.link || inc.link || null });
+    if ((r.level || 0) > (inc.worst || 0)) { inc.worst = r.level; inc.worstText = r.title; }
+    const acked = !!inc.ackAt && (inc.ackUntil === "resolved" || inc.ackUntil > now);
+    const held = quiet && r.kind === "limit" && r.level < 3; // quiet hours: only outages and over-limit
+    let push = null;
+    if (!held) {
+      if (!inc.pushes && !acked) push = fresh && inc.events.some((e) => e.t === "reopen") ? "reopen" : "open";
+      else if (inc.pushes && r.level > (inc.pushedLevel || 0) && (!acked || r.level === 3)) push = "worse";
+      else if (!acked && inc.ackAt && inc.ackUntil !== "resolved") push = "still"; // quiet period over
+      else if (!acked && inc.pushes && g.remindMin > 0 && now - inc.lastPush >= g.remindMin * 60000) push = "remind";
+    }
+    if (push && msgs.length >= budget) push = null; // at most 5 a tick; the rest follows next tick
+    if (push) {
+      const since = localWhen(inc.opened, now).replace(/^at /, "");
+      const msg = push === "open" || push === "worse" ? { title: r.title, body: r.body }
+        : push === "reopen" ? { title: `${r.name}: failing again`, body: r.body }
+        : { title: r.kind === "limit" ? r.title : `${r.name}: still failing`, body: `Since ${since}. ${r.body}` };
+      msgs.push({ ...msg, tag: pushTag(r.key), url: `admin.html#incident=${inc.id}` });
+      if (push === "still") { inc.ackAt = null; inc.ackUntil = null; }
+      inc.pushes = (inc.pushes || 0) + 1; inc.lastPush = now; inc.pushedLevel = Math.max(inc.pushedLevel || 0, r.level || 0);
+      incEvent(inc, push === "open" || push === "reopen" ? "push" : push, push === "open" ? "Notification sent" : msg.title, now);
+      changed = true;
+    }
+  }
+  // Fine again (or no longer watched): resolve after enough good checks.
+  for (const inc of Object.values(log.open)) {
+    if (failing.has(inc.key)) continue;
+    const rule = alertRule(cfg, inc.key);
+    const watched = rule.on && results.some((r) => r.key === inc.key);
+    inc.okTicks = (inc.okTicks || 0) + 1; changed = true;
+    const need = inc.kind === "job" ? 1 : g.resolveChecks;
+    if (watched && inc.okTicks < need) continue;
+    closeIncident(log, inc, now, watched ? `OK again after ${fmtDur(now - inc.opened)}` : "No longer watched (rule off or gone)");
+    if (watched && rule.resolvedPush && inc.pushes && msgs.length < budget) {
+      msgs.push({ title: `${inc.name || alertName(inc.key)}: OK again`, body: `Resolved after ${fmtDur(now - inc.opened)}.`, tag: pushTag(inc.key), url: `admin.html#incident=${inc.id}` });
+    }
+  }
+  if (first) log.started = now;
+  if (changed) {
+    pruneAlertLog(log, now);
+    // An acknowledgement or a manual close on the usage page meanwhile wins over this tick's copy.
+    const kv = await loadAlertLog(env);
+    for (const [k, inc] of Object.entries(log.open)) {
+      const f = kv.open[k];
+      if (f && f.id === inc.id && (f.ackAt || null) !== (ackRead[inc.id] ?? null)) {
+        inc.ackAt = f.ackAt; inc.ackUntil = f.ackUntil;
+        const mine = new Set(inc.events.map((e) => `${e.at}${e.t}`));
+        inc.events = [...inc.events, ...f.events.filter((e) => !mine.has(`${e.at}${e.t}`))].sort((a, b) => a.at - b.at).slice(-14);
+      }
+      const closed = !f && kv.log.find((x) => x.id === inc.id && x.resolvedAt >= now);
+      if (closed) { delete log.open[k]; log.log.unshift(closed); }
+    }
+    await saveAlertLog(env, log);
+  }
+  return msgs;
+}
+async function saveAlertLog(env, log) {
+  try { await env.USAGE.put("alerts-log", JSON.stringify(log)); countCall("KV writes"); } catch (e) { console.log("Alerts save failed", e.message); }
+}
+// The usage page: GET rules, targets with their current state, open incidents and the log; POST changes.
+async function handleAlerts(request, env) {
+  checkAdmin(request, env);
+  const now = Date.now();
+  if (request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    if (body.action === "save-defaults" || body.action === "save-rule") {
+      const cfg = await loadAlerts(env, true);
+      if (body.action === "save-defaults") {
+        if (!ALERT_FIELDS[body.kind]) throw new HttpError(400, "Unknown kind");
+        cfg.defaults[body.kind] = body.values ? cleanRule(body.kind, body.values) : {};
+      } else {
+        if (!validAlertKey(body.key)) throw new HttpError(400, "Unknown target");
+        if (body.rule) cfg.rules[body.key] = cleanRule(alertKind(body.key), body.rule);
+        else delete cfg.rules[body.key];
+      }
+      await env.USAGE.put("alerts", JSON.stringify(cfg)); countCall("KV writes");
+      memoSet("alerts", cfg, 60 * 1000);
+    } else if (["ack", "unack", "resolve"].includes(body.action)) {
+      const log = await loadAlertLog(env);
+      const inc = Object.values(log.open).find((x) => x.id === body.id);
+      if (!inc) throw new HttpError(404, "That incident is already resolved");
+      if (body.action === "ack") {
+        let until, text;
+        if (body.until === "resolved") { until = "resolved"; text = "until resolved"; }
+        else if (body.until === "tomorrow") {
+          const g = alertDefaults(await loadAlerts(env), "general");
+          const p = tzParts(now + 86400000);
+          until = tzAt(p.y, p.mo, p.d, g.quietTo || 7); text = `until ${localWhen(until, now).replace(/^(at|on) /, "")}`;
+        } else {
+          const m = Math.min(7 * 1440, Math.max(5, Number(body.until) || 30));
+          until = now + m * 60000; text = `for ${fmtDur(m * 60000)}`;
+        }
+        Object.assign(inc, { ackAt: now, ackUntil: until });
+        incEvent(inc, "ack", `Acknowledged; no pushes ${text}`, now);
+      } else if (body.action === "unack") {
+        Object.assign(inc, { ackAt: null, ackUntil: null });
+        incEvent(inc, "unack", "Acknowledgement taken back", now);
+      } else closeIncident(log, inc, now, "Closed by you");
+      await saveAlertLog(env, log);
+    } else if (body.action === "clear-log") {
+      const log = await loadAlertLog(env);
+      log.log = [];
+      await saveAlertLog(env, log);
+    } else throw new HttpError(400, "Unknown action");
+  }
+  const cfg = await loadAlerts(env);
+  const data = await alertData(env, now);
+  const targets = evaluateAlerts(env, cfg, data, await loadTimer(env), await loadHealth(env), now, true)
+    .map(({ key, kind, name, failing, level, title, body, detail, rule, custom, link }) => ({ key, kind, name, failing, level, title, body, detail, rule, custom, link }));
+  const log = await loadAlertLog(env);
+  const g = alertDefaults(cfg, "general");
+  return json(request, {
+    defaults: Object.fromEntries(Object.keys(ALERT_DEFAULTS).map((k) => [k, alertDefaults(cfg, k)])),
+    builtIn: ALERT_DEFAULTS, savedDefaults: cfg.defaults, rules: cfg.rules, fields: ALERT_FIELDS, targets,
+    open: Object.values(log.open).sort((a, b) => b.opened - a.opened), log: log.log.slice(0, 100),
+    quiet: isQuiet(g, now), now,
+  });
 }
 
 // ---------------------------------------------------------------- push notifications (usage page)
@@ -4084,9 +4476,10 @@ async function handlePush(request, env) {
   }
   throw new HttpError(400, "Unknown action");
 }
-// GitHub workflows: the newest finished run per workflow (one API call); a failure is announced once,
-// and its recovery once. state.gh = {seen: {<workflow name>: "failure"|"success"}}.
-async function checkWorkflowRuns(env, state, out) {
+// GitHub workflows: the newest finished run per workflow (one API call), kept in state.gh =
+// {seen: {<workflow name>: "failure"|"success"}, link: {<name>: run URL}}; the alerts turn a failure into
+// an incident (gh:<name>) and its success into a resolve. True when something changed.
+async function checkWorkflowRuns(env, state) {
   const token = await installToken(env);
   const r = await ghCall(`/repos/${GH_REPO}/actions/runs?status=completed&per_page=40`, token);
   if (!r.ok) throw new Error(`GitHub ${r.status} listing runs`);
@@ -4095,18 +4488,13 @@ async function checkWorkflowRuns(env, state, out) {
     if (!["success", "failure", "timed_out", "startup_failure"].includes(run.conclusion)) continue;
     if (!newest[run.name]) newest[run.name] = run; // runs come newest first
   }
-  const first = !state.gh;
-  const seen = (state.gh = state.gh || { seen: {} }).seen;
-  let changed = first;
+  const gh = (state.gh = state.gh || { seen: {} });
+  gh.link = gh.link || {};
+  let changed = false;
   for (const [name, run] of Object.entries(newest)) {
     const now = run.conclusion === "success" ? "success" : "failure";
-    if (seen[name] === now) continue;
-    if (!first && (now === "failure" || seen[name] === "failure")) {
-      out.push(now === "failure"
-        ? { title: `${name}: failed`, body: `GitHub job “${name}” failed (${run.event}, ${new Date(run.updated_at).toISOString().slice(11, 16)} UTC). Tap for the usage page; the log is on GitHub Actions.`, tag: `gh-${name}`, url: "admin.html#timer", link: run.html_url }
-        : { title: `${name}: works again`, body: `GitHub job “${name}” succeeded again.`, tag: `gh-${name}` });
-    }
-    seen[name] = now; changed = true;
+    if (gh.seen[name] === now) continue;
+    gh.seen[name] = now; gh.link[name] = run.html_url; changed = true;
   }
   return changed;
 }
@@ -4137,7 +4525,9 @@ export default {
       console.log("Error", status, e.message);
       return json(request, e.reason ? { error: e.message, reason: e.reason, ...(e.extra || {}) } : { error: e.message }, status);
     } finally {
-      ctx?.waitUntil?.(flushUsage(env, urgent).catch(() => {}));
+      // A failure is saved after a minute instead of two, so the alerts see it sooner.
+      const failFlush = usage.failed && Date.now() - usage.lastFlush > 60 * 1000;
+      ctx?.waitUntil?.(flushUsage(env, urgent || failFlush).catch(() => {}));
     }
   },
 };

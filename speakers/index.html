@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.2.0"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.2.1"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Speaker-keuzehulp</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
@@ -84,9 +84,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </head>
 <body>
 <div class="wrap">
-<h1>Welke speaker past bij jou?</h1>
-<p class="sub">Verschuif de schuiven naar wat jij belangrijk vindt. De ranking en het koopadvies veranderen direct mee. Tik bij een product op “Waarom?” voor uitleg, of kies er twee om te vergelijken.</p>
-<p><a class="lnk" href="rapport.html">Lees het volledige rapport met alle bronnen &rarr;</a></p>
 <div class="card ob" id="ob">
 <h2>Eerst even kennismaken</h2>
 <p class="note">Drie korte vragen, dan stel ik de weging voor je in. Je kunt daarna alles nog zelf aanpassen.</p>
@@ -96,9 +93,14 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <button type="button" data-v="zuinig">Liefst zo goedkoop mogelijk</button><button type="button" data-v="gewoon">Een nette prijs is prima</button><button type="button" data-v="ruim">Kwaliteit mag kosten</button></div></fieldset>
 <fieldset><legend>Hoe wil je hem bedienen?</legend><div class="btns" data-q="ease">
 <button type="button" data-v="simpel">Aanzetten en klaar</button><button type="button" data-v="leuk">Ik stel graag zelf in</button></div></fieldset>
+<p style="margin-top:6px"><a class="lnk" href="rapport.html">Wil je het algemene rapport meteen lezen? &rarr;</a></p>
 <div class="btns"><button type="button" id="obgo" disabled>Toon mijn advies</button><button type="button" id="obskip">Overslaan</button></div>
 </div>
-<div class="grid" id="main" hidden>
+<div id="main" hidden>
+<h1>Welke speaker past bij jou?</h1>
+<p class="sub">Verschuif de schuiven naar wat jij belangrijk vindt. De ranking en het koopadvies veranderen direct mee. Tik bij een product op “Waarom?” voor uitleg, of kies er twee om te vergelijken.</p>
+<p><a class="lnk" href="rapport.html">Lees het volledige rapport met alle bronnen &rarr;</a></p>
+<div class="grid">
 <div>
 <div class="card advice" id="advice" aria-live="polite"></div>
 <div class="card cmp" id="cmp" hidden></div>
@@ -125,6 +127,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </div>
 </div>
 <p class="note" style="margin-top:8px">Gebaseerd op tests van o.a. What Hi-Fi?, TechRadar, SoundGuys, RTINGS en Tom’s Guide. Prijzen zijn indicatief (nov. 2026).</p>
+</div>
 </div>
 <script>
 var CRIT=[

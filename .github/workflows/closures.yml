@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main   # a queued run must start from the newest main, not the commit it was triggered on
       - name: Fetch and filter closures
         env:
           FORCE: ${{ github.event_name != 'schedule' }}
@@ -31,5 +33,17 @@ jobs:
           git config user.name "closures-bot"
           git config user.email "actions@users.noreply.github.com"
           git commit -m "Road closures update"
-          for i in 1 2 3; do git pull --rebase -q && git push -q && exit 0; sleep 5; done
+          # Our files were just built, so on a clash with another run's closures commit keep ours (-X theirs = the commit being replayed).
+          for i in 1 2 3; do
+            if ! git pull --rebase -X theirs -q; then
+              # Last resort: put our freshly built files on top of the newest main.
+              git rebase --abort 2>/dev/null || true
+              rm -rf /tmp/cl && mkdir /tmp/cl && cp -r data/closures.json data/closures-local.json data/closures-probe /tmp/cl/ 2>/dev/null || true
+              git fetch -q origin main && git reset -q --hard origin/main
+              cp -r /tmp/cl/* data/ && git add data/closures.json data/closures-local.json data/closures-probe 2>/dev/null || true
+              git diff --cached --quiet && exit 0
+              git commit -q -m "Road closures update"
+            fi
+            git push -q && exit 0; sleep 5
+          done
           exit 1

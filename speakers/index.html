@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.2.2"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.3.0"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Speaker-keuzehulp</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
@@ -75,6 +75,13 @@ summary span{font-weight:400;color:var(--mute);font-size:.9rem}
 button:disabled{opacity:.45;cursor:not-allowed}
 .grid[hidden]{display:none}
 #gloss dt{font-weight:700;margin-top:10px}#gloss dd{margin:2px 0 0;color:var(--mute)}
+.wcard{padding:10px 14px}
+.wcard .btns{margin:0 0 4px;gap:6px}
+.wcard .btns button{min-height:38px;padding:2px 10px;font-size:.9rem}
+.wc{display:grid;grid-template-columns:minmax(84px,34%) 1fr 40px;align-items:center;gap:8px}
+.wc label{font-weight:700;font-size:.92rem;line-height:1.2}
+.wc input[type=range]{height:30px;margin:0}
+.wc .val{text-align:right;font-size:.9rem}
 .ob h2{font-size:1.25rem}
 .ob fieldset{border:0;padding:0;margin:14px 0 0}
 .ob legend{font-weight:700;padding:0;margin-bottom:2px}
@@ -99,7 +106,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </div>
 <div id="main" hidden>
 <h1>Welke speaker past bij jou?</h1>
-<p class="sub">Verschuif de schuiven naar wat jij belangrijk vindt. De ranking en het koopadvies veranderen direct mee. Tik bij een product op “Waarom?” voor uitleg, of kies er twee om te vergelijken.</p>
+<p class="sub">Zo werkt het: met elk schuifje geef je aan hoe belangrijk iets voor jou is. Hoe verder naar rechts, hoe zwaarder het meetelt. Het hoeft niet op 100 uit te komen. Ranking en advies veranderen direct mee. Tik bij een speaker op “Waarom?” voor uitleg, of kies er twee om te vergelijken.</p>
+<div class="card wcard"><div class="btns" id="presets"></div><div id="weights"></div></div>
 <p><a class="lnk" href="rapport.html">Lees het volledige rapport met alle bronnen &rarr;</a></p>
 <div class="grid">
 <div>
@@ -113,12 +121,6 @@ button:disabled{opacity:.45;cursor:not-allowed}
 </div>
 </div>
 <div class="side">
-<div class="card">
-<h2>Wat vind je belangrijk?</h2>
-<p class="note">Kies een profiel of stel zelf in. Het hoeft niet op 100 uit te komen.</p>
-<div class="btns" id="presets"></div>
-<div id="weights"></div>
-</div>
 <div class="card">
 <h2>Ben je het niet eens met mijn cijfers?</h2>
 <p class="note">Tik een product open en pas de cijfers (0 tot 10) aan.</p>
@@ -208,7 +210,7 @@ function render(){
   if(!tot(W))m='<p class="big">Zet minstens één schuif boven nul.</p>';
   ba.innerHTML=m;renderCmp2();
   var t=tot(W);
-  for(var i=0;i<4;i++){document.getElementById("wv"+i).textContent=t?f(W[i]/t*100)+'% van het totaal':'0%'}
+  for(var i=0;i<4;i++){document.getElementById("wv"+i).textContent=t?f(W[i]/t*100)+'%':'0%'}
   P.forEach(function(p){var el=document.getElementById("m_"+p.id);if(el){var mod=S[p.id].join()!==p.s.join();el.innerHTML=mod?'<b class="mod">aangepast</b> ':'';document.getElementById("t_"+p.id).textContent=f(score(p,W))+' punten'}});
 }
 function why2(p,top,rank){
@@ -296,7 +298,7 @@ function act(e){
   if(id){var n=document.querySelector('#list [data-act="'+a+'"][data-id="'+id+'"]');if(n)n.focus()}
 }
 function buildW(){
-  var h2="";CRIT.forEach(function(c,i){h2+='<div class="ctl"><label for="w'+i+'"><span>'+c.k+'<small>'+c.h+'</small></span><span class="val" id="wv'+i+'"></span></label><input type="range" id="w'+i+'" min="0" max="100" step="5" value="'+W[i]+'"></div>'});
+  var h2="";CRIT.forEach(function(c,i){h2+='<div class="wc" title="'+h(c.h)+'"><label for="w'+i+'">'+c.k+'</label><input type="range" id="w'+i+'" min="0" max="100" step="5" value="'+W[i]+'" aria-label="'+h(c.k+": "+c.h)+'"><span class="val" id="wv'+i+'"></span></div>'});
   document.getElementById("weights").innerHTML=h2;
   CRIT.forEach(function(c,i){document.getElementById("w"+i).addEventListener("input",function(e){W[i]=+e.target.value;markPreset();render()})});
 }

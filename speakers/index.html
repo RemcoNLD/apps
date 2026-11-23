@@ -2,7 +2,7 @@
 <html lang="nl">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.3.3"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.3.4"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Speaker-keuzehulp</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
@@ -88,10 +88,13 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .ob legend{font-weight:700;padding:0;margin-bottom:2px}
 .ob .btns{margin:6px 0 0}
 .alt{display:inline-block;font-size:.78rem;font-weight:700;color:var(--acc);background:var(--accbg);border-radius:6px;padding:1px 7px;margin-left:6px;vertical-align:middle}
-.lnk{display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:10px 16px;border-radius:12px;font-weight:700;font-size:1.02rem;text-align:center;text-decoration:none;color:#fff;background:#1a7f3c;box-shadow:0 2px 0 rgba(0,0,0,.18)}
-.lnk:hover{background:#17702f}.lnk:active{transform:translateY(1px);box-shadow:none}
+.lnk{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:8px 16px;border-radius:12px;font-weight:700;text-align:center;text-decoration:none;color:#17702f;background:#e4f3e8;border:1px solid #a9d6b5}
+.lnk:hover{background:#d6ecdc}.lnk:active{transform:translateY(1px)}
 .lnk:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
-@media(prefers-color-scheme:dark){.lnk{background:#2a9d4f}.lnk:hover{background:#25904a}}
+@media(prefers-color-scheme:dark){.lnk{color:#7fd89c;background:#17301f;border-color:#2a5a38}.lnk:hover{background:#1d3b27}}
+#obgo{flex:1 1 100%;min-height:54px;font-size:1.08rem;font-weight:700}
+#obgo:not(:disabled){background:var(--acc);border-color:var(--acc);color:#fff;box-shadow:0 2px 0 rgba(0,0,0,.2)}
+@media(prefers-color-scheme:dark){#obgo:not(:disabled){color:#0f1a20}}
 </style>
 </head>
 <body>
@@ -106,7 +109,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <button type="button" data-v="zuinig">Liefst zo goedkoop mogelijk</button><button type="button" data-v="gewoon">Een nette prijs is prima</button><button type="button" data-v="ruim">Kwaliteit mag kosten</button></div></fieldset>
 <fieldset><legend>Hoe wil je hem bedienen?</legend><div class="btns" data-q="ease">
 <button type="button" data-v="simpel">Aanzetten en klaar</button><button type="button" data-v="leuk">Ik stel graag zelf in</button></div></fieldset>
-<div class="btns"><button type="button" id="obgo" disabled>Toon mijn advies</button><button type="button" id="obskip">Overslaan</button></div>
+<div class="btns"><button type="button" id="obgo" disabled>Toon resultaat</button><button type="button" id="obskip">Overslaan</button></div>
 <p style="margin-top:10px"><a class="lnk" href="rapport.html">Wil je het algemene rapport meteen lezen? &rarr;</a></p>
 </div>
 <div id="main" hidden>

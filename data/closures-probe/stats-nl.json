@@ -1,16 +1,16 @@
 {
- "planningsfeed_wegwerkzaamheden_en_evenementen.xml.gz:bytes": 189314392,
- "type:carriagewayClosures": 15158,
- "skip:time": 6137,
- "type:useOfSpecifiedLanesOrCarriagewaysAllowed": 5273,
- "type:laneClosures": 740,
- "skip:no-main-line": 1185,
- "type:roadClosed": 1280,
- "skip:vehicles": 2229,
+ "planningsfeed_wegwerkzaamheden_en_evenementen.xml.gz:bytes": 190413281,
+ "type:carriagewayClosures": 15280,
+ "skip:time": 6053,
+ "type:useOfSpecifiedLanesOrCarriagewaysAllowed": 5288,
+ "type:laneClosures": 750,
+ "skip:no-main-line": 1197,
+ "type:roadClosed": 1289,
+ "skip:vehicles": 2240,
  "type:lanesDeviated": 114,
- "type:other": 73,
+ "type:other": 92,
  "type:narrowLanes": 2,
- "tijdelijke_verkeersmaatregelen_afsluitingen.xml.gz:bytes": 2068712,
- "kept": 6852,
- "duplicates": 35
+ "tijdelijke_verkeersmaatregelen_afsluitingen.xml.gz:bytes": 2082561,
+ "kept": 7043,
+ "duplicates": 36
 }

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.37.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.38.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2228,7 +2228,7 @@ const HELP_I18N = {
     <li>Je <b>viapunten</b> (een wit bolletje met een blauwe rand) en <b>grenzen</b> (de vlag van het nieuwe land) staan op de lijn, met de afstand en tijd ernaartoe. Grenzen alleen als alle wegen getoond worden; viapunten altijd.</li>
     <li><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent.</li>
     <li><b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps, Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
-    <li>Voor Ionity in Nederland, Frankrijk en Portugal toont dezelfde kaart <b>vrije laders door de dag</b>: een groene lijn voor vandaag en een stippellijn voor dezelfde dag vorige week, met het drukste en het meest vrije uur van die dag. Zo zie je wanneer een locatie meestal rustig is.</li>
+    <li>Voor Ionity en Fastned in Nederland, Duitsland, Frankrijk en Portugal toont dezelfde kaart <b>vrije laders door de dag</b>: een groene lijn voor vandaag en een stippellijn voor dezelfde dag vorige week, met het drukste en het meest vrije uur van die dag. Zo zie je wanneer een locatie meestal rustig is.</li>
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
     <li>Het scherm blijft aan tijdens het rijden. ${screenAwake() ? "" : "Op dit moment kan het uitgaan: tik tijdens het rijden één keer op het scherm. "}Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
     <li>Als je aankomt, is er een klein feestje.</li>
@@ -2313,7 +2313,7 @@ const HELP_I18N = {
     <li>Os seus <b>pontos intermédios</b> (um ponto branco com contorno azul) e as <b>fronteiras</b> (a bandeira do novo país) aparecem na linha, com a distância e o tempo até lá. As fronteiras só aparecem com todas as estradas visíveis; os pontos intermédios sempre.</li>
     <li><b>Toque no destino</b> para comparar outros percursos a partir de onde está.</li>
     <li><b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
-    <li>Para a Ionity nos Países Baixos, em França e em Portugal, o mesmo cartão mostra os <b>carregadores livres ao longo do dia</b>: uma linha verde para hoje e uma linha tracejada para o mesmo dia da semana passada, com a hora mais ocupada e a mais livre desse dia. Assim vê quando um local costuma estar calmo.</li>
+    <li>Para a Ionity e a Fastned nos Países Baixos, na Alemanha, em França e em Portugal, o mesmo cartão mostra os <b>carregadores livres ao longo do dia</b>: uma linha verde para hoje e uma linha tracejada para o mesmo dia da semana passada, com a hora mais ocupada e a mais livre desse dia. Assim vê quando um local costuma estar calmo.</li>
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
     <li>O ecrã mantém-se ligado enquanto conduz. ${screenAwake() ? "" : "Neste momento pode desligar-se: toque uma vez no ecrã durante a condução. "}Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
     <li>Quando chega, há uma pequena celebração.</li>
@@ -3440,6 +3440,7 @@ async function refreshMe() {
       me.name ? localStorage.setItem(ACCESS_NAME_KEY, me.name) : localStorage.removeItem(ACCESS_NAME_KEY);
       me.trial ? localStorage.setItem(TRIAL_KEY, JSON.stringify(me.trial)) : localStorage.removeItem(TRIAL_KEY);
       if (Array.isArray(me.occBrands)) localStorage.setItem(OCC_BRANDS_KEY, JSON.stringify(me.occBrands));
+      if (Array.isArray(me.occCountries)) localStorage.setItem(OCC_COUNTRIES_KEY, JSON.stringify(me.occCountries));
       if (typeof me.deletePending === "boolean") me.deletePending ? localStorage.setItem(DELETE_PENDING, "1") : localStorage.removeItem(DELETE_PENDING);
       if (!me.trial && localStorage.getItem(UPGRADE_ASKED)) { localStorage.removeItem(UPGRADE_ASKED); localStorage.removeItem(ASK_KEY); }
     } catch (_) {}
@@ -5274,10 +5275,14 @@ function openNavSheet(ids) {
 // 15 minutes today (green, up to now) against the same day last week (dashed, the whole day), like
 // ParkPilot's "previous weeks" line. The data comes from the GitHub job Occupancy (every 15 min, kept 8
 // days) through the Worker's GET /occupancy; only for the brands the usage page follows (from /me) in
-// NL, FR and PT. Kept in memory and on the device (evailability-occ, 24 h); refetched after 10 min.
+// the countries the job covers (from /me: NL, DE, FR, PT). Kept in memory and on the device (evailability-occ, 24 h); refetched after 10 min.
 const OCC_BRANDS_KEY = "evailability-occ-brands";
 const OCC_KEY = "evailability-occ";
-const OCC_COUNTRIES = ["NL", "FR", "PT"];
+const OCC_COUNTRIES_KEY = "evailability-occ-countries";
+function occCountries() {
+  try { const v = JSON.parse(localStorage.getItem(OCC_COUNTRIES_KEY) || "null"); if (Array.isArray(v)) return v; } catch (_) {}
+  return ["NL", "DE", "FR", "PT"];
+}
 const OCC_FRESH_MS = 10 * 60000;
 const OCC_ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz";
 const occMem = new Map(); // key -> {at, data, ok, loading}
@@ -5401,7 +5406,7 @@ function occHtml(m, entry, many) {
 function renderOcc(members, ids) {
   const box = $("navOcc");
   const follow = occBrands();
-  const list = members.filter((m) => follow.includes(brandKey(m)) && OCC_COUNTRIES.includes(m.country) && !m.liveDup);
+  const list = members.filter((m) => follow.includes(brandKey(m)) && occCountries().includes(m.country) && !m.liveDup);
   if (!list.length) { box.hidden = true; box.innerHTML = ""; return; }
   let anyOld = false;
   const parts = list.map((m) => {
@@ -6914,6 +6919,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.38", date: "2026-11-24", title: { en: "Through the day: Fastned and Germany", nl: "Door de dag: Fastned en Duitsland", pt: "Ao longo do dia: Fastned e Alemanha" },
+    items: { en: ["Free chargers through the day now also for Fastned, and in Germany too (Ionity and Fastned). Press and hold a charger to see it. For sites that are new to this, the dashed line for last week fills in over the coming week."],
+      nl: ["Vrije laders door de dag nu ook voor Fastned, en ook in Duitsland (Ionity en Fastned). Houd een lader ingedrukt om het te zien. Bij locaties die er nieuw bij zijn, vult de stippellijn van vorige week zich de komende week."],
+      pt: ["Carregadores livres ao longo do dia agora também para a Fastned, e também na Alemanha (Ionity e Fastned). Mantenha premido um carregador para ver. Nos locais que são novos nisto, a linha tracejada da semana passada vai ficando completa ao longo da próxima semana."] } },
   { v: "0.37", date: "2026-11-24", title: { en: "Free chargers through the day", nl: "Vrije laders door de dag", pt: "Carregadores livres ao longo do dia" },
     items: { en: ["Press and hold an Ionity charger in the Netherlands, France or Portugal: the card shows how many chargers were free every 15 minutes today, against the same day last week as a dashed line, and the busiest and most free hour. The line for last week fills in over the coming week."],
       nl: ["Houd een Ionity-lader in Nederland, Frankrijk of Portugal ingedrukt: de kaart toont hoeveel laders er vandaag elk kwartier vrij waren, met dezelfde dag vorige week als stippellijn, en het drukste en meest vrije uur. De lijn van vorige week vult zich de komende week."],
@@ -7164,7 +7173,7 @@ function helpHtml() {
     <li>Your <b>via points</b> (a white dot with a blue ring) and <b>borders</b> (the new country's flag) sit on the line, with the distance and time to them. Borders only show with every road shown; via points always.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
     <li><b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps, Waze or Flitsmeister, or copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
-    <li>For Ionity in the Netherlands, France and Portugal, the same card shows <b>free chargers through the day</b>: a green line for today and a dashed line for the same day last week, with the busiest and most free hour of that day. It tells you when a site is usually quiet.</li>
+    <li>For Ionity and Fastned in the Netherlands, Germany, France and Portugal, the same card shows <b>free chargers through the day</b>: a green line for today and a dashed line for the same day last week, with the busiest and most free hour of that day. It tells you when a site is usually quiet.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${screenAwake() ? "" : "Right now it may turn off: tap the screen once while driving. "}If it still turns off, check that Low Power Mode is off.</li>
     <li>When you arrive, there's a small celebration.</li>

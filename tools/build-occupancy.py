@@ -481,7 +481,7 @@ def main():
         try:
             doc = json.load(open(path))
             sites = doc.get("sites", {})
-            if (doc.get("at") or "") < "2026-11-24T18:30:00Z":
+            if (doc.get("at") or "") < "2026-11-24T18:20:00Z":
                 # the first German test run (24 Nov 18:18 UTC) kept Swiss sites too, all marked DE
                 sites = {k: v for k, v in sites.items() if not k.startswith("de:")}
             sites_by_tile[os.path.basename(path)] = sites

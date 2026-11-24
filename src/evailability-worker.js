@@ -72,7 +72,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.10.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.11.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -348,9 +348,9 @@ const SETTINGS = [
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
     help: "Empty: found automatically. Only fill in if that lookup fails." },
   { key: "occupancy", type: "bool", label: "Occupancy through the day", def: () => true,
-    help: "On: the GitHub job Occupancy (occupancy.yml) notes every 15 minutes how many chargers are free at the followed brands' sites (NL from NDW, FR and PT from their snapshots) and keeps 8 days on the branch occ; the app's charger card shows today against the same day last week. No KV writes. Off: the timer stops starting it and the job writes nothing (the stored days stay)." },
-  { key: "occupancyBrands", type: "text", label: "Occupancy: brands", def: () => "ionity",
-    help: "Brand keys to follow, separated by commas (e.g. ionity, fastned, tesla), or all. More brands means more NDW calls per run (one small call per Dutch site area) and more data; KV writes stay zero." },
+    help: "On: the GitHub job Occupancy (occupancy.yml) notes every 15 minutes how many chargers are free at the followed brands' sites (NL from NDW, DE from MobiData BW, FR and PT from their snapshots) and keeps 8 days on the branch occ; the app's charger card shows today against the same day last week. No KV writes. Off: the timer stops starting it and the job writes nothing (the stored days stay)." },
+  { key: "occupancyBrands", type: "text", label: "Occupancy: brands", def: () => "ionity, fastned",
+    help: "Brand keys to follow, separated by commas (e.g. ionity, fastned, tesla), or all. More brands means more NDW calls per run (one small call per Dutch site area, or one full scan of NL once that is cheaper) and one MobiData BW call per brand for Germany; KV writes stay zero." },
   { key: "closuresHours", type: "choice", options: [6, 12, 24, 48], label: "Road closures: hours between updates", def: () => 12,
     help: "How often the GitHub job fetches planned closures (NL, DE). It wakes every 6 hours and skips until this much time has passed; Run workflow on GitHub always updates." },
 ];
@@ -1220,10 +1220,11 @@ async function ndwFeaturesNear(lat, lon, dLat = 0.004, dLon = 0.006) {
 // "." = no reading). Read like the France and Portugal snapshots: the branch's commit from git's ref
 // list, then the raw file at that commit, at most once per 5 minutes per tile per Worker copy. No KV.
 const OCC_KEEP_DAYS = 8;
+const OCC_COUNTRIES = ["NL", "DE", "FR", "PT"]; // where the job takes readings (told to the app by /me)
 const OCC_RAW_AT = (sha, tile) => `https://raw.githubusercontent.com/RemcoNLD/apps/${sha}/${tile}`;
 function occBrands(env) {
   if (!setting(env, "occupancy")) return [];
-  const raw = String(setting(env, "occupancyBrands") || "ionity").toLowerCase();
+  const raw = String(setting(env, "occupancyBrands") || "ionity, fastned").toLowerCase();
   if (raw.trim() === "all") return BRANDS.map((b) => b.key);
   const keys = raw.split(/[\s,;]+/).filter((k) => BRAND[k]);
   return keys.length ? [...new Set(keys)] : ["ionity"];
@@ -3584,7 +3585,7 @@ async function route(request, env) {
     const deletePending = who && who.id !== "legacy" && who.id !== "admin"
       ? (await loadMessages(env)).some((m) => !m.done && m.kind === "delete" && m.userId === who.id) : false;
     return json(request, { name: who?.name || null, debug: !!who?.debug, legacy: who?.id === "legacy", deletePending,
-      trial: who?.trial ? trialInfo(who.trial) : null, occBrands: occBrands(env) });
+      trial: who?.trial ? trialInfo(who.trial) : null, occBrands: occBrands(env), occCountries: OCC_COUNTRIES });
   }
 
   if (path === "/" && request.method === "GET") {

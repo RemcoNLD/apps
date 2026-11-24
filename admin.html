@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.8.2"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.8.3"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -143,7 +143,9 @@
   #routeView .hl { color: var(--warn); font-weight: 700; }
   .reqbadge { display: inline-block; min-width: 20px; height: 20px; margin-left: 6px; padding: 0 6px; border-radius: 10px;
     background: var(--bad, #e0574f); color: #fff; font-size: .78rem; font-weight: 800; line-height: 20px; text-align: center; text-decoration: none; vertical-align: 1px; }
-  .qos { padding: 7px 0; border-top: 1px solid var(--line); }
+  .qos { padding: 6px 0; border-top: 1px solid var(--line); }
+  .qos .qi .info { margin-left: 6px; }
+  .qos-d { margin-top: 3px; }
   .qos:first-of-type { border-top: 0; }
   .qos-h { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
   .qos-h .name { font-weight: 700; }
@@ -359,6 +361,7 @@ function qosHtml(d) {
   const h = d.health?.ors;
   const notice = h?.down && Date.now() - (h.lastFail || 0) < 15 * 60000
     ? `<div class="card note small"><b>Route service notice is showing</b> in the app since ${new Date(h.since).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}; last failure ${new Date(h.lastFail).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}.</div>` : "";
+  let qN = 0;
   if (!keys.length) return `<h2>Service health</h2>${notice}<div class="card small muted">No timings yet (collected from Worker .125 on).</div>`;
   const row = (k) => {
     const t = today[k], w = week[k];
@@ -366,11 +369,11 @@ function qosHtml(d) {
     const okT = ok(t), okW = ok(w);
     const cls = (v) => (v == null ? "" : v < 95 ? " bad" : v < 99 ? " warn" : " good");
     const lf = w.lastFail ? `last failure ${new Date(w.lastFail.at).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })} (${esc(String(w.lastFail.status))})` : "no failures";
+    const id = `qd-${qN++}`; // details behind the row's ⓘ (0.8.3)
     return `<div class="qos" data-alert="${esc(k)}">
-      <div class="qos-h"><span class="name">${esc(QOS_NAMES[k] || k.replace(/^\w+:/, ""))}<i class="bell"></i></span>
-        <span class="qos-ok${cls(okT ?? okW)}">${okT != null ? `${okT}%` : "–"}<small> today</small></span></div>
-      <div class="small muted">${t ? `${fmt(t.n)} today, typical ${qosMs(qosPct(t, .5))}, 9 in 10 ${qosMs(qosPct(t, .9))}, slowest ${qosMs(t.max)}` : "none today"}</div>
-      <div class="small muted">7 days: ${fmt(w.n)}, ${okW}% worked, 9 in 10 ${qosMs(qosPct(w, .9))} · ${lf}</div>
+      <div class="qos-h"><span class="name">${esc(QOS_NAMES[k] || k.replace(/^\w+:/, ""))}<button type="button" class="gtitle qi" data-note="${id}" aria-expanded="false" aria-label="Details"><span class="info" aria-hidden="true">i</span></button><i class="bell"></i></span>
+        <span class="qos-ok${cls(okT ?? okW)}">${okT != null ? `${okT}%<small> today</small>` : okW != null ? `${okW}%<small> 7 d</small>` : "–"}</span></div>
+      <div class="small muted qos-d" id="${id}" hidden>${t ? `${fmt(t.n)} today, typical ${qosMs(qosPct(t, .5))}, 9 in 10 ${qosMs(qosPct(t, .9))}, slowest ${qosMs(t.max)}` : "none today"}<br>7 days: ${fmt(w.n)}, ${okW}% worked, 9 in 10 ${qosMs(qosPct(w, .9))} · ${lf}</div>
     </div>`;
   };
   const listed = new Set(QOS_GROUPS.flatMap((g) => g.keys));
@@ -379,7 +382,7 @@ function qosHtml(d) {
     const ks = g.keys.filter((k) => week[k]);
     return ks.length ? `<div class="card group"><h3>${esc(g.title)}</h3>${ks.map(row).join("")}</div>` : "";
   }).join("");
-  return `${infoH2("Service health", "Tap a row to set when it notifies you. “Worked” = answered without a server error (or a refused key or rate limit for outside services). Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.")}${notice}${cards}`;
+  return `${infoH2("Service health", "Tap a row to set when it notifies you; its ⓘ shows counts and times (typical, 9 in 10, slowest) and the last failure. “Worked” = answered without a server error (or a refused key or rate limit for outside services). Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.")}${notice}${cards}`;
 }
 function render(d) {
   const todayRec = d.days.find((x) => x.day === d.today) || { calls: {}, ors: {} };
@@ -990,7 +993,7 @@ function paintBells() {
 const kindOf = (key) => (key.startsWith("limit:") ? "limit" : /^(svc|api):/.test(key) ? "service" : "job");
 document.addEventListener("click", (e) => {
   const row = e.target.closest("[data-alert]");
-  if (!row || !AL || e.target.closest("a, button:not(.bell), input, select")) return;
+  if (!row || !AL || e.target.closest("a, button:not(.bell), input, select, .qos-d")) return;
   showRule(row.dataset.alert);
 });
 // ---- the dialog

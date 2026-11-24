@@ -18,7 +18,8 @@ Sources (no keys needed):
       sites (nl-sites.json); the other runs ask a small box around each known site.
   FR  the France live snapshot (branch live-fr) with data/fr-fast-sites.json.
   PT  the Portugal live snapshot (branch live) with data/pt-fast-sites.json.
-  DE  MobiData BW's Open ChargePoint DataBase (the Worker's German source, AFIR data, all of Germany):
+  DE  MobiData BW's Open ChargePoint DataBase (the Worker's German source, AFIR data; Germany, and
+      the Austrian sites it holds):
       one call per followed brand with operator_name=<brand>, so the whole country in a few calls.
 
 Files written (in STATE_DIR):
@@ -57,6 +58,8 @@ SCAN_CALLS = 288                          # calls of a full NL scan (measured 24
                                           # full scan each run is cheaper (all 1,556 fast sites = 1,184 boxes)
 OCPDB = "https://api.mobidata-bw.de/ocpdb/api/public/v1/locations"
 OCPDB_MAX = 1000                          # the API's largest page
+DE_COUNTRIES = {"DE", "AT"}               # OCPDB also holds some sites abroad (AFIR feeds of whole networks);
+                                          # keep Germany, and Austria while E-Control isn't read here
 # What to ask OCPDB's operator_name for, per brand key (a part of the operator's name); others: the key.
 DE_OPERATOR = {"ionity": "IONITY", "fastned": "Fastned", "enbw": "EnBW", "aral": "Aral", "tesla": "Tesla",
                "shell": "Shell", "total": "Total", "allego": "Allego", "electra": "Electra",
@@ -333,6 +336,15 @@ def de_brand_of(loc, brands):
     return None
 
 
+ISO3 = {"DEU": "DE", "AUT": "AT", "CHE": "CH", "NLD": "NL", "BEL": "BE", "FRA": "FR", "LUX": "LU",
+        "DNK": "DK", "POL": "PL", "CZE": "CZ", "ITA": "IT", "LIE": "LI"}
+
+
+def de_country(loc):
+    c = str(loc.get("country") or loc.get("country_code") or "").upper()
+    return ISO3.get(c, c[:2] if len(c) == 2 else c)
+
+
 def de_coords(loc):
     c = loc.get("coordinates") or {}
     try:
@@ -360,16 +372,18 @@ def de_sites(brands):
             log(f"DE {b['key']}: answer keys {sorted(data.keys())}, total {data.get('total_count', data.get('count'))}")
         if len(items) >= OCPDB_MAX:
             log(f"DE {b['key']}: {len(items)} locations, at the page limit: some may be missing")
-        ops = {}
+        ops, ccs = {}, {}
         mine = 0
         for loc in items:
             op = str((loc.get("operator") or {}).get("name") or "")
             ops[op] = ops.get(op, 0) + 1
-            if de_brand_of(loc, [b]) and de_coords(loc):
+            cc = de_country(loc)
+            ccs[cc] = ccs.get(cc, 0) + 1
+            if de_brand_of(loc, [b]) and de_coords(loc) and cc in DE_COUNTRIES:
                 locs[str(loc.get("id"))] = (b["key"], loc)
                 mine += 1
         log(f"DE {b['key']} (operator_name={term}): {len(items)} locations, {mine} of the brand; operators:",
-            json.dumps(sorted(ops.items(), key=lambda x: -x[1])[:8], ensure_ascii=False))
+            json.dumps(sorted(ops.items(), key=lambda x: -x[1])[:8], ensure_ascii=False), "countries:", json.dumps(ccs))
 
     # Group into sites: locations of one brand within 80 m, not on opposite sides of the road.
     def live_count(loc):
@@ -406,7 +420,7 @@ def de_sites(brands):
             continue
         free = sum(1 for p in pts if p["st"] == "AVAILABLE")
         key = "de:" + min((lid for lid, _ in members), key=lambda x: (len(x), x))
-        out[key] = ({"b": b, "cc": "DE", "lat": round(lat, 5), "lon": round(lon, 5), "n": name}, (free, len(pts)))
+        out[key] = ({"b": b, "cc": de_country(members[0][1]), "lat": round(lat, 5), "lon": round(lon, 5), "n": name}, (free, len(pts)))
     return out, calls
 
 
@@ -465,7 +479,12 @@ def main():
     sites_by_tile = {}
     for path in glob.glob(os.path.join(state, "t_*.json")):
         try:
-            sites_by_tile[os.path.basename(path)] = json.load(open(path)).get("sites", {})
+            doc = json.load(open(path))
+            sites = doc.get("sites", {})
+            if (doc.get("at") or "") < "2026-11-24T18:30:00Z":
+                # the first German test run (24 Nov 18:18 UTC) kept Swiss sites too, all marked DE
+                sites = {k: v for k, v in sites.items() if not k.startswith("de:")}
+            sites_by_tile[os.path.basename(path)] = sites
         except Exception as e:
             log("Unreadable", path, e)
     try:
@@ -533,7 +552,9 @@ def main():
     with open(os.path.join(state, "nl-sites.json"), "w") as f:
         json.dump(nl, f, ensure_ascii=False, separators=(",", ":"))
     meta = {"at": at, "secs": round(time.time() - t0, 1), "brands": brand_sig, "keepDays": keep_days,
-            "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt), "DE": len(de)}, "ndwCalls": PACE.calls,
+            "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt),
+                         "DE": sum(1 for i, _ in de.values() if i["cc"] == "DE"),
+                         "AT": sum(1 for i, _ in de.values() if i["cc"] == "AT")}, "ndwCalls": PACE.calls,
             "ocpdbCalls": de_calls,
             "discovery": discovered, "nlSites": len(nl.get("sites") or {}),
             "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values())}

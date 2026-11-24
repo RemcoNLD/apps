@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.8.1"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.8.2"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -34,7 +34,7 @@
   .apps-back { display: inline-block; margin: 0 0 10px; font-weight: 700; text-decoration: none; color: inherit; opacity: .65; }
   .apps-back:active { opacity: 1; }
   h1 { font-size: 1.6rem; margin: 0 0 4px; }
-  h2 { font-size: 1.15rem; margin: 26px 0 10px; }
+  h2 { font-size: 1.15rem; margin: 20px 0 8px; }
   .muted { color: var(--muted); }
   .login { display: flex; gap: 8px; margin: 14px 0; }
   input {
@@ -49,15 +49,17 @@
   .remember input { width: 20px; height: 20px; flex: none; }
   .session { display: flex; gap: 18px; margin: 12px 0 4px; }
   .link { padding: 0; background: none; color: var(--blue); font-weight: 600; text-decoration: underline; }
-  .card { background: var(--card); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .card { background: var(--card); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
   .gtitle { font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
   .gtitle .info, .set-name .info { display: inline-flex; align-items: center; justify-content: center; width: 1.15em; height: 1.15em; margin-left: 7px;
     border: 1.5px solid currentColor; border-radius: 50%; font-size: .8em; font-style: italic; font-family: Georgia, serif; text-transform: none; vertical-align: 1px; }
   .gtitle[aria-expanded="true"] .info { background: var(--muted); color: var(--card); border-color: var(--muted); }
   .gnote { margin: -2px 0 6px; }
+  h2 .gtitle { font-weight: inherit; }
+  .card.gnote { margin: 0 0 8px; }
   .cl-row { display: flex; gap: 22px; font-size: 1.25rem; margin-bottom: 4px; }
   .group h3 { margin: 0 0 4px; font-size: .95rem; letter-spacing: .02em; text-transform: uppercase; color: var(--muted, #93a0a8); }
-  .group .line { padding: 6px 0; }
+  .group .line { padding: 5px 0; }
   .group .line + .line { border-top: 1px solid rgba(127,127,127,.18); }
 
   .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
@@ -75,16 +77,16 @@
   .push-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .push-actions button.sec { background: none; color: var(--blue); border: 1px solid var(--line); }
   /* Last 7 days: a row per source with today's number and the week as bars */
-  .week { padding: 4px 16px; }
-  .wk { display: flex; align-items: center; gap: 14px; padding: 12px 0; }
+  .week { padding: 4px 14px; }
+  .wk { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
   .wk + .wk { border-top: 1px solid rgba(127,127,127,.18); }
   .week h3 { margin: 10px 0 0; }
   .group .line.zero .name, .group .line.zero .num { color: var(--muted); font-weight: 600; }
   .wk-l { flex: 1; min-width: 0; }
-  .wk-l .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .wk-r { text-align: right; flex: none; min-width: 5.5em; }
-  .wk-r .num { font-size: 1.9rem; line-height: 1.1; }
-  .spark { position: relative; display: flex; align-items: flex-end; gap: 4px; height: 34px; margin-top: 8px; max-width: 230px; }
+  .wk-l .name { font-size: .95rem; line-height: 1.25; overflow-wrap: anywhere; } /* wraps: long labels stay readable (0.8.2) */
+  .wk-r { text-align: right; flex: none; min-width: 4.5em; }
+  .wk-r .num { font-size: 1.45rem; line-height: 1.1; }
+  .spark { position: relative; display: flex; align-items: flex-end; gap: 4px; height: 26px; margin-top: 6px; max-width: 230px; }
   .spark .col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
   .spark span { width: 100%; background: var(--muted); opacity: .45; border-radius: 3px 3px 1px 1px; }
   .spark span.today { background: var(--ok); opacity: 1; }
@@ -141,7 +143,7 @@
   #routeView .hl { color: var(--warn); font-weight: 700; }
   .reqbadge { display: inline-block; min-width: 20px; height: 20px; margin-left: 6px; padding: 0 6px; border-radius: 10px;
     background: var(--bad, #e0574f); color: #fff; font-size: .78rem; font-weight: 800; line-height: 20px; text-align: center; text-decoration: none; vertical-align: 1px; }
-  .qos { padding: 10px 0; border-top: 1px solid var(--line); }
+  .qos { padding: 7px 0; border-top: 1px solid var(--line); }
   .qos:first-of-type { border-top: 0; }
   .qos-h { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
   .qos-h .name { font-weight: 700; }
@@ -190,8 +192,8 @@
 </head>
 <body>
 <a class="apps-back" href="./">‹ Apps</a>
-<h1>Usage</h1>
-<p class="muted">How much of the free tiers EVailability uses, per data source, and the app’s server settings.</p>
+<h1><button type="button" class="gtitle" data-note="introNote" aria-expanded="false">Usage<span class="info" aria-hidden="true">i</span></button></h1>
+<div class="card small muted gnote" id="introNote" hidden>How much of the free tiers EVailability uses, per data source, and the app’s server settings.</div>
 
 <form id="login">
   <div class="login">
@@ -209,14 +211,15 @@
 <div id="alerts"></div>
 <div id="settings"></div>
 <div id="debugRoute" hidden>
-  <h2>Debug routes</h2>
+  <h2><button type="button" class="gtitle" data-note="routeNote" aria-expanded="false">Debug routes<span class="info" aria-hidden="true">i</span></button></h2>
+  <div class="card small muted gnote" id="routeNote" hidden>Routes planned in debug mode (Help &gt; Debug mode; only for keys with Debug on) are kept 30 days. The id is after # on the app’s debug line.</div>
   <div class="card group">
     <div class="row"><input id="routeId" type="text" placeholder="Route id, e.g. k3x9q2" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Route id" style="flex:1"></div>
     <div class="session">
       <button type="button" class="link" id="routeShow">Show</button>
       <button type="button" class="link" data-part="">Download</button>
     </div>
-    <div class="small muted" id="routeMsg">Routes planned in debug mode (Help &gt; Debug mode; only for keys with Debug on) are kept 30 days. The id is after # on the app’s debug line.</div>
+    <div class="small muted" id="routeMsg"></div>
   </div>
 </div>
 <div id="routeView"></div>
@@ -254,29 +257,43 @@ const LABELS = {
 // works everywhere, then per country (live status, index loads and extra chargers side by side), then
 // names, then the background jobs. [counter key, label]; a key not listed here lands in "Other".
 const COUNTER_GROUPS = [
-  { title: "Chargers everywhere", items: [["Open Charge Map", "Open Charge Map: chargers along the route"], ["OCM split box", "Open Charge Map: busy boxes split"], ["Logo fetch", "Brand logos"]],
-    note: "Open Charge Map is the first list of chargers in every country; it has no daily limit but blocks bursts. The country lists below fill in what it misses." },
-  { title: "🇳🇱 Netherlands", items: [["NDW", "NDW: live status"], ["NDW sites", "NDW: extra chargers (map tiles)"]],
+  { title: "Chargers everywhere", items: [["Open Charge Map", "Open Charge Map"], ["OCM split box", "OCM: split boxes"], ["Logo fetch", "Brand logos"]],
+    note: "Open Charge Map: chargers along the route, the first list in every country; no daily limit but it blocks bursts (busy boxes are split). The country lists below fill in what it misses." },
+  { title: "🇳🇱 Netherlands", items: [["NDW", "NDW: live status"], ["NDW sites", "NDW: extra chargers"]],
     note: "NDW is open data (about 10 calls a second at most). Extra chargers: tiles along the route, cached a day for everyone (one KV write per new tile). Until Worker 0.13.0 both were counted together as NDW." },
-  { title: "🇧🇪 Belgium", items: [["Eco-Movement BE", "Eco-Movement: stalls checked"], ["Belgium last known", "Last known stalls saved (KV writes)"], ["BE index", "Index loads (sites and extra chargers)"]],
-    note: "Eco-Movement allows about one call per 10 s. The index is a file in the repo, loaded at most once a day per Worker copy." },
-  { title: "🇩🇪 Germany", items: [["MobiData BW", "MobiData BW: live status"], ["DE index", "Index loads (extra chargers)"]],
-    note: "MobiData BW (OCPDB) is open data. The index is built weekly by the GitHub job DE index from the same source." },
+  { title: "🇧🇪 Belgium", items: [["Eco-Movement BE", "Eco-Movement: stalls"], ["Belgium last known", "Last known saved"], ["BE index", "Index loads"]],
+    note: "Eco-Movement: stalls checked, about one call per 10 s allowed. Last known: stall answers saved in KV (KV writes). Index loads: the file with sites and stall ids, also used for extra chargers, loaded at most once a day per Worker copy." },
+  { title: "🇩🇪 Germany", items: [["MobiData BW", "MobiData BW: live status"], ["DE index", "Index loads"]],
+    note: "MobiData BW (OCPDB) is open data. Index loads: the extra-chargers list, built weekly by the GitHub job DE index from the same source." },
   { title: "🇦🇹 Austria", items: [["E-Control", "E-Control: live status"]],
     note: "At most 4 Austrian sites per call. Austria has no second list of chargers yet: only Open Charge Map." },
-  { title: "🇫🇷 France", items: [["FR live", "Snapshot reads (live status)"], ["PAN FR index", "Index loads (sites and extra chargers)"], ["PAN FR", "Old whole-file read (debug only)"]],
-    note: "The snapshot is made every 5 minutes by the GitHub job France live; each Worker copy reads it at most once a minute. The old whole-file read (~9.5 MB) costs more CPU than the free plan allows per request." },
-  { title: "🇵🇹 Portugal", items: [["PT live", "Snapshot reads (live status)"], ["PT index", "Index loads (sites and extra chargers)"]],
-    note: "Snapshot from the GitHub job Portugal live, read at most once a minute per Worker copy." },
-  { title: "Names and search", items: [["Overpass", "Overpass: service-area names"], ["Overpass errors", "Overpass: refused"], ["Nominatim", "Nominatim (backup search)"]],
-    note: "Public OpenStreetMap services without a key; their mirrors sometimes refuse Cloudflare addresses." },
-  { title: "Background and admin", items: [["GitHub API", "GitHub API (timer)"], ["GitHub raw", "GitHub raw files"], ["Occupancy", "Occupancy: tile reads (branch occ)"], ["Push", "Push notifications sent"]],
-    note: "The 5-minute timer starts the GitHub jobs; raw files are snapshots, closures and occupancy." },
+  { title: "🇫🇷 France", items: [["FR live", "Live snapshot reads"], ["PAN FR index", "Index loads"], ["PAN FR", "Old whole-file read"]],
+    note: "The live snapshot is made every 5 minutes by the GitHub job France live; each Worker copy reads it at most once a minute. Index loads: sites and charge points, also used for extra chargers. The old whole-file read (~9.5 MB, debug only) costs more CPU than the free plan allows per request." },
+  { title: "🇵🇹 Portugal", items: [["PT live", "Live snapshot reads"], ["PT index", "Index loads"]],
+    note: "Live snapshot from the GitHub job Portugal live, read at most once a minute per Worker copy. Index loads: sites, also used for extra chargers." },
+  { title: "Names and search", items: [["Overpass", "Overpass: names"], ["Overpass errors", "Overpass: refused"], ["Nominatim", "Nominatim"]],
+    note: "Overpass: service-area names. Nominatim: backup address search. Public OpenStreetMap services without a key; their mirrors sometimes refuse Cloudflare addresses." },
+  { title: "Background and admin", items: [["GitHub API", "GitHub API"], ["GitHub raw", "GitHub raw files"], ["Occupancy", "Occupancy reads"], ["Push", "Pushes sent"]],
+    note: "GitHub API: the 5-minute timer starting the jobs. Raw files: snapshots, closures and occupancy. Occupancy reads: tiles from the branch occ for the day chart." },
 ];
 const COUNTER_LABEL = Object.fromEntries(COUNTER_GROUPS.flatMap((g) => g.items));
 const ORS_LABELS = { directions: "Routes", matrix: "Detours (matrix)", "geocode/search": "Place search", "geocode/reverse": "Place names" };
 
 const $ = (id) => document.getElementById(id);
+// A section title with its explanation behind an ⓘ (0.8.2): the text opens under the title on a tap.
+let h2N = 0;
+const infoH2 = (title, note, attrs = "") => {
+  const id = `h2note-${h2N++}`;
+  return `<h2${attrs}><button type="button" class="gtitle" data-note="${id}" aria-expanded="false">${title}<span class="info" aria-hidden="true">i</span></button></h2><div class="card small muted gnote" id="${id}" hidden>${note}</div>`;
+};
+// Any ⓘ on the page (cards, section titles, also in sections drawn later).
+document.addEventListener("click", (e) => {
+  const nb = e.target.closest("[data-note]");
+  if (!nb) return;
+  const n = document.getElementById(nb.dataset.note);
+  if (!n) return;
+  n.hidden = !n.hidden; nb.setAttribute("aria-expanded", String(!n.hidden));
+});
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (n) => Number(n).toLocaleString("en-GB");
 
@@ -362,8 +379,7 @@ function qosHtml(d) {
     const ks = g.keys.filter((k) => week[k]);
     return ks.length ? `<div class="card group"><h3>${esc(g.title)}</h3>${ks.map(row).join("")}</div>` : "";
   }).join("");
-  return `<h2>Service health</h2>${notice}${cards}
-    <div class="card small muted">Tap a row to set when it notifies you. “Worked” = answered without a server error (or a refused key or rate limit for outside services). Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.</div>`;
+  return `${infoH2("Service health", "Tap a row to set when it notifies you. “Worked” = answered without a server error (or a refused key or rate limit for outside services). Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.")}${notice}${cards}`;
 }
 function render(d) {
   const todayRec = d.days.find((x) => x.day === d.today) || { calls: {}, ors: {} };
@@ -438,7 +454,7 @@ function render(d) {
             ? Object.entries(hdr[k].headers).map(([h, v]) => `${esc(h)} = ${esc(v)}`).join(", ") : "no quota headers"}`).join("<br>")}</div>`
       : `<div class="small muted">Nothing yet today. The quota appears after the next route is planned.</div>`;
   }
-  if (calls["Route from cache"]) orsBody += line("Route from cache", "Routes from the Worker's cache (no call)");
+  if (calls["Route from cache"]) orsBody += line("Route from cache", "Routes from cache");
   html += group("OpenRouteService", orsBody, "Limits as OpenRouteService reports them.");
 
   // Sources without a daily limit, grouped (COUNTER_GROUPS). A group shows its first line always and the
@@ -492,28 +508,24 @@ function render(d) {
     const counted = new Set(keys.filter((k) => total(k) > 0));
     const wkGroups = [
       { title: "Cloudflare", items: [["Worker requests"], ["KV reads"], ["KV writes"]] },
-      { title: "OpenRouteService", items: [["Routing", "Routes"], ["Matrix", "Detours (matrix)"], ["Geocoder", "Place search & names"], ["Route from cache", "Routes from the Worker's cache"]] },
+      { title: "OpenRouteService", items: [["Routing", "Routes"], ["Matrix", "Detours (matrix)"], ["Geocoder", "Place search & names"], ["Route from cache", "Routes from cache"]] },
       ...COUNTER_GROUPS,
     ];
     const listed = new Set(wkGroups.flatMap((g) => g.items.map(([k]) => k)));
     const other = [...counted].filter((k) => !listed.has(k)).sort((a, b) => total(b) - total(a)).map((k) => [k]);
     if (other.length) wkGroups.push({ title: "Other", items: other });
-    html += `<h2>Last 7 days</h2>${wkGroups.map((g) => {
+    html += `${infoH2("Last 7 days", `Bars: one per day, ${esc(dayName(days[0]))} to today (green), each source on its own scale. A red line is the daily limit: a bar turns orange from 80% of it and red over it; then the scale grows and the line moves down. Tap a bar for its number.<br><br>Days run in UTC. Cloudflare can run several copies of the Worker; each saves its own count, so Worker and source counts are close, not exact. OpenRouteService figures come from ORS itself.`)}${wkGroups.map((g) => {
       const rows = g.items.filter(([k]) => counted.has(k)).map(([k, label]) => wkRow(k, label)).join("");
       return rows ? `<div class="card week group"><h3>${esc(g.title)}</h3>${rows}</div>` : "";
     }).join("")}
-    <p class="small muted">Bars: one per day, ${esc(dayName(days[0]))} to today (green), each source on its own scale. A red line is the daily limit:
-      a bar turns orange from 80% of it and red over it; then the scale grows and the line moves down. Tap a bar for its number.</p>`;
+`;
   }
-  html += `<p class="small muted" style="margin-top:18px">Days run in UTC. Cloudflare can run several copies of the Worker;
-    each saves its own count, so Worker and source counts are close, not exact. OpenRouteService figures come from ORS itself.</p>`;
   html += qosHtml(d);
   $("out").innerHTML = html;
   paintBells();
   // Tapping a bar shows that day's number under the row's bars; tapping it again hides it.
   $("out").onclick = (e) => {
-    const nb = e.target.closest("[data-note]");
-    if (nb) { const n = $(nb.dataset.note); n.hidden = !n.hidden; nb.setAttribute("aria-expanded", String(!n.hidden)); return; }
+    if (e.target.closest("[data-note]")) return; // handled by the page-wide ⓘ listener
     const col = e.target.closest(".spark .col[data-tip]");
     if (!col) return;
     const bar = col.querySelector("span");
@@ -609,7 +621,7 @@ function renderSettings(data, msg = "") {
   $("settings").innerHTML = `<h2>Settings</h2><div class="card group">${rows}
     <div class="small muted" id="setMsg">${esc(msg || data.note || "")}</div></div>
     <h2>Road closures</h2><div class="card small" id="closInfo">Loading…</div>
-    <h2 id="timer">GitHub timer</h2><div class="card small" id="timerInfo">Loading…</div>
+    ${infoH2("GitHub timer", "Starts the GitHub jobs every 5 minutes as the GitHub App (Portugal and France live, occupancy, road closures when due).", ' id="timer"')}<div class="card small" id="timerInfo">Loading…</div>
     <h2 id="notifications">Notifications</h2><div class="card small" id="pushInfo">Loading…</div>`;
   loadClosuresInfo(Number(data.settings.find((x) => x.key === "closuresHours")?.value));
   loadTimerInfo();
@@ -765,7 +777,7 @@ async function loadTimerInfo(check = false) {
     const check2 = check ? (d.ok ? `<div><b>Check OK</b>: ${d.steps.map(esc).join("; ")}.</div>`
       : `<div class="error"><b>Check failed</b>: ${esc(d.error || "?")}</div>`) : "";
     box.innerHTML = `${check2}${job("Portugal live", st.pt, "pt")}${job("France live", st.fr, "fr")}${job("Road closures", st.closures, "closures")}${job("Occupancy", st.occ, "occ")}
-      <div class="muted">Starts the GitHub jobs every 5 minutes as the GitHub App · <button type="button" class="link" id="timerCheck">Check now</button></div>`;
+      <div><button type="button" class="link" id="timerCheck">Check now</button></div>`;
     $("timerCheck").onclick = () => loadTimerInfo(true);
     paintBells();
   } catch (e) {
@@ -952,11 +964,10 @@ function renderAlerts() {
       <div class="small muted">${(x.title || "").startsWith(incName(x)) ? "" : `${esc(incName(x))} · `}since ${esc(whenT(x.opened))}${ack ? ` · ${esc(ack)}` : " · not acknowledged"}</div></div>`;
   }).join("");
   const n = AL.log.length;
-  $("alerts").innerHTML = `<h2>Alerts</h2><div class="card small">
+  $("alerts").innerHTML = `${infoH2("Alerts", "Tap a row with a bell below (limits, service health, timer jobs) for its own rule.")}<div class="card small">
     ${open.length ? rows : `<div class="muted">No open incidents.${AL.quiet ? " Quiet hours now: forecasts wait until morning." : ""}</div>`}
     <div class="alert-links"><button type="button" class="link" id="alLog">Log (${n})</button>
-      <button type="button" class="link" id="alDefaults">Default rules</button></div>
-    <div class="muted" style="margin-top:6px">Tap a row with a bell below (limits, service health, timer jobs) for its own rule.</div></div>`;
+      <button type="button" class="link" id="alDefaults">Default rules</button></div></div>`;
   $("alLog").onclick = showLog;
   $("alDefaults").onclick = showDefaults;
   $("alerts").querySelectorAll("[data-inc]").forEach((el) => el.onclick = () => showIncident(el.dataset.inc));

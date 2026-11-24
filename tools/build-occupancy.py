@@ -25,6 +25,7 @@ Files written (in STATE_DIR):
       0-9 then a-z = number of free chargers (fast ones, the site's own count), "." = no reading.
       t = the site's latest total. Tiles of 1 x 1 degree keep each file small for the Worker.
   nl-sites.json  {at, brands, sites: {ndwId: [brand, lat, lon, name]}}
+      (with 200+ followed NL sites every run is a full scan: 288 calls instead of a box per site)
   meta.json      {at, secs, sites per country, NDW calls, discovery or not}
 """
 import concurrent.futures
@@ -47,6 +48,9 @@ NDW = "https://dotnl.ndw.nu/api/rest/geojson/dynamic-road-status/charge-point-da
 NL_BOX = (3.3, 50.7, 7.3, 53.6)          # lon/lat of the Netherlands, generously
 NDW_MAX = 1000                            # NDW answers at most this many features per call
 DISCOVER_H = 20                           # rescan the Netherlands for sites after this many hours
+SCAN_FROM = 200                           # following this many NL sites or more: a full scan each run is
+                                          # cheaper than a box per site (measured 24 Nov 2026: the whole
+                                          # country = 288 calls, all 1,556 fast sites = 1,184 boxes)
 SLOT_MIN = 15
 SLOTS = 24 * 60 // SLOT_MIN
 ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -158,9 +162,16 @@ def nl_scan(brands):
             lon += 0.5
         lat += 0.5
 
+    failed = [0]
+
     def one(job):
         box, depth = job
-        return box, depth, ndw(box)
+        try:
+            return box, depth, ndw(box)
+        except Exception as e:  # one tile failing shouldn't cost the whole country
+            failed[0] += 1
+            log("NDW tile failed:", box, e)
+            return box, depth, []
 
     with concurrent.futures.ThreadPoolExecutor(4) as ex:
         while todo:
@@ -186,7 +197,7 @@ def nl_scan(brands):
                     found[str(f["id"])] = ([b, round(lat, 5), round(lon, 5), p.get("address") or ""], c)
     if depth_hit:
         log(f"NL scan: {depth_hit} tiles still at the cap at the deepest level")
-    return found
+    return found, failed[0]
 
 
 def nl_status(sites):
@@ -349,14 +360,16 @@ def main():
         age_h = (now - datetime.datetime.fromisoformat(nl["at"].replace("Z", "+00:00"))).total_seconds() / 3600
     discovered = False
     try:
-        if age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites"):
-            found = nl_scan(brands)
-            if found or not nl.get("sites"):
+        if age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites") or len(nl["sites"]) >= SCAN_FROM:
+            found, failed = nl_scan(brands)
+            if found and not failed and (age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites")):
                 nl = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "brands": brand_sig,
                       "sites": {sid: site for sid, (site, _) in found.items()}}
                 discovered = True
+            elif found:  # readings only (or an incomplete scan): add sites that showed up, drop none
+                nl["sites"].update({sid: site for sid, (site, _) in found.items()})
             got = {sid: c for sid, (_, c) in found.items()}
-            log(f"NL scan: {len(found)} sites of {brand_sig}")
+            log(f"NL scan: {len(found)} sites of {brand_sig}, {failed} tiles failed")
         else:
             got = nl_status(nl["sites"])
         for sid, c in got.items():

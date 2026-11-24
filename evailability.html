@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.40.2"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.41.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2260,7 +2260,7 @@ const HELP_I18N = {
   <div class="credits">
     <h3>Gegevens en bronnen</h3>
     <p>Routes en plaatsen: <b>openrouteservice</b> van HeiGIT. Kaartgegevens © <b>OpenStreetMap</b>-bijdragers (ODbL).</p>
-    <p>Laders: <b>Open Charge Map</b> (CC BY 4.0). Live status: <b>NDW</b> (Nederland), <b>MobiData BW</b> (Duitsland), <b>E-Control</b> (Oostenrijk), <b>transport.data.gouv.fr</b> (Frankrijk, Licence Ouverte 2.0), <b>Eco-Movement</b> via het Belgische toegangspunt (België), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
+    <p>Laders: <b>Open Charge Map</b> (CC BY 4.0), aangevuld met de locaties uit de bronnen voor live status. Live status: <b>NDW</b> (Nederland), <b>MobiData BW</b> (Duitsland), <b>E-Control</b> (Oostenrijk), <b>transport.data.gouv.fr</b> (Frankrijk, Licence Ouverte 2.0), <b>Eco-Movement</b> via het Belgische toegangspunt (België), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
     <p>Wegafsluitingen: <b>NDW</b> en <b>Die Autobahn GmbH des Bundes</b>.</p>
     <p>Merknamen en logo's zijn van hun eigenaren. EVailability is onafhankelijk en niet verbonden aan een laadnetwerk of gegevensleverancier. <a href="privacy.html?back=help">Privacybeleid</a></p>
   </div>`,
@@ -2345,7 +2345,7 @@ const HELP_I18N = {
   <div class="credits">
     <h3>Dados e créditos</h3>
     <p>Percursos e locais: <b>openrouteservice</b> da HeiGIT. Dados do mapa © contribuidores do <b>OpenStreetMap</b> (ODbL).</p>
-    <p>Carregadores: <b>Open Charge Map</b> (CC BY 4.0). Estado em direto: <b>NDW</b> (Países Baixos), <b>MobiData BW</b> (Alemanha), <b>E-Control</b> (Áustria), <b>transport.data.gouv.fr</b> (França, Licence Ouverte 2.0), <b>Eco-Movement</b> através do ponto de acesso belga (Bélgica), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
+    <p>Carregadores: <b>Open Charge Map</b> (CC BY 4.0), completado com os locais das fontes de estado em direto. Estado em direto: <b>NDW</b> (Países Baixos), <b>MobiData BW</b> (Alemanha), <b>E-Control</b> (Áustria), <b>transport.data.gouv.fr</b> (França, Licence Ouverte 2.0), <b>Eco-Movement</b> através do ponto de acesso belga (Bélgica), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
     <p>Cortes de estrada: <b>NDW</b> e <b>Die Autobahn GmbH des Bundes</b>.</p>
     <p>Os nomes e logótipos das marcas pertencem aos respetivos proprietários. O EVailability é independente e não está associado a nenhuma rede de carregamento nem fornecedor de dados. <a href="privacy.html?back=help">Política de privacidade</a></p>
   </div>`,
@@ -3393,6 +3393,7 @@ async function plan(fromLonLat, brands = state.planBrands || state.brands) {
   state.viaReached = false;
   save();
   addNdwSites(data.ndwTiles || [], state.planBrands); // in the background: the route shows straight away
+  addExtraSites(data.extraPts || [], state.planBrands); // the same outside NL, from the country indexes
   roadsFromMap(); // and the road numbers checked against the map
   loadClosures().then(() => { render(); if (!state.avoiding) showClosureNote(); }); // closures on the route, in the background
   // Names follow once rows are on screen (refreshStatus after the first render).
@@ -3873,29 +3874,53 @@ async function addNdwSites(tiles, brands) {
     try { r = await api("/ndw-sites", { tiles: batch, brands }); } catch (e) { reportError(`Extra Dutch chargers (NDW): ${e.message}`); break; }
     if (run !== ndwRun || !state.route) return;
     queue.push(...(r.split || []));
-    for (const x of r.sites || []) {
-      const id = `ndw-${x.id}`;
-      if (state.stations.some((s) => s.id === id || s.status?.liveId === x.id)) continue;
-      // Already there from Open Charge Map (same brand, same place): the live matching handles it.
-      // But Open Charge Map sometimes lists a fast site with only slow sockets or no power at all
-      // (Fastned Blommendaal at Meerkerk), which hid it behind the power filter, and a hidden row
-      // never gets the live status that would correct it. NDW's power counts for it right away.
-      const twin = state.stations.find((s) => brandKey(s) === x.brand && distKm(s, x) <= 0.25);
-      if (twin) {
-        if (x.maxKw > (twin.maxKw || 0)) { twin.maxKw = x.maxKw; added++; }
-        if (!twin.points && x.points) twin.points = x.points;
-        continue;
-      }
-      const pr = projectPoint(x.lat, x.lon);
-      if (!pr || pr.d > NDW_CORRIDOR_KM || pr.km < state.user.km - PASSED_KM) continue;
-      state.stations.push({
-        id, brand: x.brand, name: (BRAND[x.brand] || {}).name || "Charger", liveName: x.name, address: [x.name, x.address].filter(Boolean).join(", "),
-        country: "NL", lat: x.lat, lon: x.lon, maxKw: x.maxKw, points: x.points, source: "NDW",
-        alongKm: Math.round(pr.km * 10) / 10, alongMin: Math.round(pr.min), offRouteKm: Math.round(pr.d * 100) / 100,
-        status: null, statusAt: null,
-      });
-      added++;
+    for (const x of r.sites || []) if (addFoundSite(x, `ndw-${x.id}`, "NL", "NDW")) added++;
+    if (added) { state.stations.sort((a, b) => a.alongKm - b.alongKm); save(); render(); refreshWhenSettled(); }
+  }
+}
+// One site from a second source (NDW, or a country index): added unless the list already has it.
+// Returns true when something changed.
+function addFoundSite(x, id, country, source) {
+  if (state.stations.some((s) => s.id === id || (source === "NDW" && s.status?.liveId === x.id))) return false;
+  // Already there from Open Charge Map (same brand, same place): the live matching handles it.
+  // But Open Charge Map sometimes lists a fast site with only slow sockets or no power at all
+  // (Fastned Blommendaal at Meerkerk), which hid it behind the power filter, and a hidden row
+  // never gets the live status that would correct it. The second source's power counts for it right away.
+  const twin = state.stations.find((s) => brandKey(s) === x.brand && distKm(s, x) <= 0.25);
+  if (twin) {
+    let changed = false;
+    if (x.maxKw > (twin.maxKw || 0)) { twin.maxKw = x.maxKw; changed = true; }
+    if (!twin.points && x.points) twin.points = x.points;
+    return changed;
+  }
+  const pr = projectPoint(x.lat, x.lon);
+  if (!pr || pr.d > NDW_CORRIDOR_KM || pr.km < state.user.km - PASSED_KM) return false;
+  state.stations.push({
+    id, brand: x.brand, name: (BRAND[x.brand] || {}).name || "Charger", liveName: x.name, address: [x.name, x.address].filter(Boolean).join(", "),
+    country, lat: x.lat, lon: x.lon, maxKw: x.maxKw, points: x.points, source,
+    alongKm: Math.round(pr.km * 10) / 10, alongMin: Math.round(pr.min), offRouteKm: Math.round(pr.d * 100) / 100,
+    status: null, statusAt: null,
+  });
+  return true;
+}
+
+// Second source outside the Netherlands (0.41): the Worker's country lists (Belgium, France, Portugal,
+// Germany with part of Austria) for sites Open Charge Map misses, such as Fastned Brecht Oost on the E19.
+// The Worker sends points along the route (one per km); they go back in pieces of 150 (the Worker's CPU limit).
+let extraRun = 0;
+const EXTRA_CHUNK = 150;
+async function addExtraSites(pts, brands) {
+  const run = ++extraRun; // a newer route stops an older lookup
+  for (let i = 0; i < pts.length && run === extraRun && state.route; i += EXTRA_CHUNK) {
+    let r = null;
+    for (let tries = 0; tries < 2 && !r; tries++) {
+      try { r = await api("/extra-sites", { pts: pts.slice(i, i + EXTRA_CHUNK), brands }); }
+      catch (e) { if (tries) reportError(`Extra chargers: ${e.message}`); else await new Promise((ok) => setTimeout(ok, 3000)); }
     }
+    if (!r || run !== extraRun || !state.route) continue;
+    if (r.failed?.length) reportError(`Extra chargers: no list for ${r.failed.join(", ")}`);
+    let added = 0;
+    for (const x of r.sites || []) if (addFoundSite(x, x.id, x.country, "index")) added++;
     if (added) { state.stations.sort((a, b) => a.alongKm - b.alongKm); save(); render(); refreshWhenSettled(); }
   }
 }
@@ -7027,6 +7052,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.41", date: "2026-11-24", title: { en: "Fewer missing chargers abroad", nl: "Minder ontbrekende laders in het buitenland", pt: "Menos carregadores em falta no estrangeiro" },
+    items: { en: ["Chargers that weren't on the list in Belgium, France, Germany, Austria and Portugal now show up too, such as Fastned Brecht Oost on the E19. They're filled in from the same sources as the live status, as the Netherlands already was."],
+      nl: ["Laders die nog niet in de lijst stonden in België, Frankrijk, Duitsland, Oostenrijk en Portugal komen er nu ook bij, zoals Fastned Brecht Oost aan de E19. Ze worden aangevuld uit dezelfde bronnen als de live status, zoals in Nederland al gebeurde."],
+      pt: ["Os carregadores que ainda não estavam na lista na Bélgica, França, Alemanha, Áustria e Portugal também aparecem agora, como a Fastned Brecht Oost na E19. São completados a partir das mesmas fontes do estado em direto, como já acontecia nos Países Baixos."] } },
   { v: "0.40", date: "2026-11-24", title: { en: "When it was last full", nl: "Wanneer hij laatst vol was", pt: "Quando esteve cheio pela última vez" },
     items: { en: ["Under the day chart: when the site was last full and for how long, instead of the note about the dashed line."],
       nl: ["Onder de daggrafiek: wanneer de locatie laatst vol was en hoe lang, in plaats van de uitleg over de stippellijn."],
@@ -7304,7 +7333,7 @@ function helpHtml() {
   <div class="credits">
     <h3>Data and credits</h3>
     <p>Routes and places: <b>openrouteservice</b> by HeiGIT. Map data © <b>OpenStreetMap</b> contributors (ODbL).</p>
-    <p>Chargers: <b>Open Charge Map</b> (CC BY 4.0). Live status: <b>NDW</b> (Netherlands), <b>MobiData BW</b> (Germany), <b>E-Control</b> (Austria), <b>transport.data.gouv.fr</b> (France, Licence Ouverte 2.0), <b>Eco-Movement</b> via the Belgian access point (Belgium), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
+    <p>Chargers: <b>Open Charge Map</b> (CC BY 4.0), completed with the sites the live-status sources list. Live status: <b>NDW</b> (Netherlands), <b>MobiData BW</b> (Germany), <b>E-Control</b> (Austria), <b>transport.data.gouv.fr</b> (France, Licence Ouverte 2.0), <b>Eco-Movement</b> via the Belgian access point (Belgium), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
     <p>Road closures: <b>NDW</b> and <b>Die Autobahn GmbH des Bundes</b>.</p>
     <p>Brand names and logos belong to their owners. EVailability is independent and not affiliated with any charging network or data provider. <a href="privacy.html?back=help">Privacy policy</a></p>
   </div>`;

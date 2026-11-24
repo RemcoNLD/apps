@@ -1,0 +1,33 @@
+# Germany: rebuilds data/de-fast-sites.json (fast sites of the app's brands in Germany, plus the Austrian
+# sites MobiData BW holds) from MobiData BW's OCPDB, one call per brand. The Worker's /extra-sites uses it
+# for sites Open Charge Map misses. Weekly or by hand (not on push: it
+# needs the Worker's /occupancy/config?all=1, deployed by the same push).
+name: DE index
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: de-index
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Build the index
+        run: python3 tools/build-de-index.py
+      - name: Commit if changed
+        run: |
+          git add data/de-fast-sites.json
+          if git diff --cached --quiet; then echo "Nothing changed"; exit 0; fi
+          git config user.name "de-index-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "Germany index update"
+          for i in 1 2 3; do git pull --rebase -q -X theirs && git push -q && exit 0; sleep 5; done
+          exit 1

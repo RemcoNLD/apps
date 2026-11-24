@@ -25,7 +25,10 @@
 //                               ?part=request|app|ors for one part (ors = the routing service's raw answer)
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /closures/schedule     hours between road-closure updates (read by the GitHub job .github/workflows/closures.yml)
+//   POST /extra-sites           {pts:[[lon,lat],…] (max 150), brands} -> fast chargers of those brands within 1.5 km of the
+//                               points from the country indexes (BE, FR, PT, DE incl. AT), for sites Open Charge Map misses
 //   GET  /occupancy/config      public: occupancy on/off, followed brands and their name patterns (read by occupancy.yml)
+//                               ?all=1: every brand (read by de-index.yml)
 //   GET  /occupancy/at?part=     public: free/total at the followed brands' Austrian sites (E-Control), for occupancy.yml
 //   GET  /occupancy?lat=&lon=&brand=  free chargers per 15 min over the last 8 days at the nearest followed site (branch occ)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
@@ -73,7 +76,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.12.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.13.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -346,6 +349,8 @@ const SETTINGS = [
     help: "Off: French chargers show no live data. France comes from a 5-minute snapshot made by the GitHub job France live (fr-live.yml), started by the timer." },
   { key: "ndwDiscovery", type: "bool", label: "Netherlands: extra chargers from NDW", def: (env) => env.NDW_DISCOVERY !== "off",
     help: "Sites Open Charge Map doesn't have, found in NDW's live data along the route." },
+  { key: "indexDiscovery", type: "bool", label: "Other countries: extra chargers from the indexes", def: () => true,
+    help: "Sites Open Charge Map doesn't have, found in the country lists the Worker already keeps: Belgium, France and Portugal (their live-status indexes) and Germany with part of Austria (de-fast-sites.json, built weekly from MobiData BW by the GitHub job DE index). No calls to outside services, no KV writes." },
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
     help: "Empty: found automatically. Only fill in if that lookup fails." },
   { key: "occupancy", type: "bool", label: "Occupancy through the day", def: () => true,
@@ -2337,6 +2342,8 @@ async function handlePlan(request, env) {
     vias, // as used: a town via point moved onto its nearest main road
     // Map tiles along the Dutch part of the route, for the second source of chargers (NDW).
     ndwTiles: ndwTilesAlong(route, env),
+    // Points along the rest of the route (every km, outside NL), for the country indexes (POST /extra-sites).
+    extraPts: extraPtsAlong(route, env),
     generatedAt: new Date().toISOString(),
   };
   // Debug mode in the app: keep the whole routing result (request, the routing service's raw answer
@@ -2411,7 +2418,7 @@ async function ndwTile(env, key) {
     } catch (_) {}
   }
   const bbox = tileBox(key).map((v) => v.toFixed(5)).join(",");
-  countCall("NDW");
+  countCall("NDW sites"); // apart from "NDW" (live status) since Worker 0.13.0
   const res = await fetch(`${NDW_BBOX}?bbox=${bbox}`, { headers: { Accept: "application/json" } });
   if (!res.ok) throw new HttpError(502, `NDW returned ${res.status}`);
   const len = Number(res.headers.get("content-length") || 0);
@@ -2458,6 +2465,121 @@ async function handleNdwSites(request, env) {
     }
   }
   return json(request, { sites, split, done });
+}
+
+// ---------------------------------------------------------------- second source: the country indexes
+// (Worker 0.13.0) Outside the Netherlands Open Charge Map was the only list of where chargers are, so a
+// site it lacks (Fastned Brecht Oost on the E19, missing on 22 Nov) never showed. The Worker already
+// keeps a list of fast sites per country for live status: Belgium (Eco-Movement), France (IRVE),
+// Portugal (MOBI.E) and, since 0.13.0, Germany with part of Austria (MobiData BW's OCPDB, built weekly
+// by de-index.yml). /plan sends points along the route outside NL (every km); the app sends them in
+// pieces to /extra-sites, which answers the sites of the asked brands within 1.5 km. No outside calls
+// and no KV writes: the indexes are static files read at most once a day per Worker copy. The app adds
+// what it doesn't have yet (same rule as NDW's sites); live status then works through the usual paths.
+const EXTRA_STEP_KM = 1, EXTRA_NEAR_KM = 1.5, EXTRA_MAX_PTS = 150; // 150 points: ~3 ms CPU warm (measured in Node)
+const EXTRA_BOXES = { // [minLon, minLat, maxLon, maxLat]: only the indexes a point can be near are loaded
+  BE: [2.4, 49.4, 6.5, 51.6], FR: [-5.3, 41.2, 9.7, 51.2], PT: [-9.7, 36.8, -6.0, 42.3], DE: [5.7, 46.3, 17.3, 55.2],
+};
+const inExtraBox = (cc, [lon, lat]) => { const b = EXTRA_BOXES[cc]; return lon >= b[0] && lon <= b[2] && lat >= b[1] && lat <= b[3]; };
+function extraPtsAlong(route, env) {
+  if (!setting(env, "indexDiscovery")) return [];
+  const pts = [];
+  let lastKm = -Infinity;
+  for (let i = 0; i < route.coords.length; i++) {
+    if (route.km[i] - lastKm < EXTRA_STEP_KM && i !== route.coords.length - 1) continue;
+    lastKm = route.km[i];
+    if (isoAt(route, i) === "NL") continue; // NDW's tiles cover the Netherlands
+    const p = route.coords[i];
+    if (!Object.keys(EXTRA_BOXES).some((cc) => inExtraBox(cc, p))) continue;
+    pts.push([+p[0].toFixed(4), +p[1].toFixed(4)]);
+  }
+  return pts;
+}
+
+// Germany (and the Austrian sites OCPDB holds): data/de-fast-sites.json, fields [brand, cc, lat, lon, maxKw, name, n].
+const DE_INDEX_URL = "https://remconld.github.io/apps/data/de-fast-sites.json"; // tools/build-de-index.py, weekly
+const DE_CELL = 0.02;
+let deIndexState = null;
+async function deIndex() {
+  if (deIndexState && Date.now() - deIndexState.at < 24 * 3600 * 1000) return deIndexState.promise;
+  const promise = (async () => {
+    countCall("DE index");
+    const res = await fetch(DE_INDEX_URL, { cf: { cacheTtl: 3600 } });
+    if (!res.ok) throw new HttpError(502, `Germany index: HTTP ${res.status}`);
+    const data = await res.json();
+    const grid = new Map();
+    for (const [brand, cc, lat, lon, maxKw, name, n] of data.sites || []) {
+      if (!BRAND[brand]) continue;
+      const k = `${brand}|${Math.floor(lat / DE_CELL)}|${Math.floor(lon / DE_CELL)}`;
+      if (!grid.has(k)) grid.set(k, []);
+      grid.get(k).push({ brand, cc, lat, lon, maxKw, name, n });
+    }
+    return { built: data.built, grid, count: (data.sites || []).length };
+  })();
+  deIndexState = { at: Date.now(), promise };
+  promise.catch(() => { if (deIndexState?.promise === promise) deIndexState = null; });
+  return promise;
+}
+// Sites of a grid within km of any of the points. Each cell is looked at once (points a km apart share
+// cells), and a site only against the points in its own and the 8 surrounding cells (a cell is at
+// least 1.4 km wide here, so 1.5 km reaches no further). cb(site) per site found, once.
+function gridScan(grid, cell, gridKeys, pts, km, cb) {
+  const cellPts = new Map();
+  for (const p of pts) {
+    const k = `${Math.floor(p[1] / cell)}|${Math.floor(p[0] / cell)}`;
+    if (!cellPts.has(k)) cellPts.set(k, []);
+    cellPts.get(k).push(p);
+  }
+  const cells = new Set();
+  for (const k of cellPts.keys()) {
+    const [cy, cx] = k.split("|").map(Number);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) cells.add(`${cy + dy}|${cx + dx}`);
+  }
+  for (const c of cells) {
+    const [cy, cx] = c.split("|").map(Number);
+    let near = null; // the points that can reach this cell, gathered once per cell
+    for (const g of gridKeys) {
+      const list = grid.get(`${g}|${c}`);
+      if (!list) continue;
+      if (!near) {
+        near = [];
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) near.push(...(cellPts.get(`${cy + dy}|${cx + dx}`) || []));
+      }
+      for (const s of list) if (near.some((p) => haversineKm([s.lon, s.lat], p) <= km)) cb(s, g);
+    }
+  }
+}
+const extraId = (cc, brand, lat, lon) => `x-${cc.toLowerCase()}-${brand}-${lat.toFixed(4)}_${lon.toFixed(4)}`;
+
+async function handleExtraSites(request, env) {
+  const body = await request.json().catch(() => ({}));
+  if (!setting(env, "indexDiscovery")) return json(request, { sites: [], failed: [] });
+  const valid = (p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
+  const pts = (Array.isArray(body.pts) ? body.pts : []).filter(valid).slice(0, EXTRA_MAX_PTS);
+  const brands = [...new Set((Array.isArray(body.brands) ? body.brands : []).filter((k) => BRAND[k]))];
+  if (!pts.length || !brands.length) return json(request, { sites: [], failed: [] });
+  const want = new Set(brands);
+  const loaders = { BE: beIndex, FR: frIndex, PT: ptIndex, DE: deIndex };
+  const idx = {}, failed = [];
+  for (const cc of Object.keys(loaders)) {
+    if (!pts.some((p) => inExtraBox(cc, p))) continue;
+    try { idx[cc] = await loaders[cc](); } catch (e) { failed.push(cc); console.log("Extra sites:", cc, e.message); }
+  }
+  const out = new Map();
+  const add = (cc, brand, s, name, points) => {
+    const id = extraId(cc, brand, s.lat, s.lon);
+    if (!out.has(id)) out.set(id, { id, brand, country: cc, lat: s.lat, lon: s.lon, name: name || null, maxKw: s.maxKw || null, points: points || null });
+  };
+  const ptsIn = (cc) => pts.filter((p) => inExtraBox(cc, p));
+  // Belgium: every operator ("*" cells), so a site the index builder called "other" still counts when its stall ids are a brand's.
+  if (idx.BE) gridScan(idx.BE.grid, BE_CELL, ["*"], ptsIn("BE"), EXTRA_NEAR_KM, (s) => {
+    const brand = s.brand !== "other" && BRAND[s.brand] ? s.brand : brandOfSite(null, null, s.name, s.evseIds);
+    if (brand && want.has(brand)) add("BE", brand, s, s.name, s.evseIds?.length);
+  });
+  if (idx.FR) gridScan(idx.FR.grid, FR_CELL, brands, ptsIn("FR"), EXTRA_NEAR_KM, (s, b) => add("FR", b, s, s.name, s.ids?.length));
+  if (idx.PT) gridScan(idx.PT.grid, PT_CELL, brands, ptsIn("PT"), EXTRA_NEAR_KM, (s, b) => add("PT", b, s, s.name, s.n));
+  if (idx.DE) gridScan(idx.DE.grid, DE_CELL, brands, ptsIn("DE"), EXTRA_NEAR_KM, (s, b) => add(s.cc || "DE", b, s, s.name, s.n));
+  return json(request, { sites: [...out.values()], failed });
 }
 
 // The routing service only gives alternatives below 100 km, so we make our own: plan through
@@ -3657,7 +3779,8 @@ async function route(request, env) {
   }
   if (path === "/occupancy/config" && request.method === "GET") {
     // Public on purpose: on/off and brand name patterns only, for the GitHub job (no secrets there).
-    const keys = occBrands(env);
+    const all = url.searchParams.get("all") === "1"; // de-index.yml: every brand, whatever is followed
+    const keys = all ? BRANDS.map((b) => b.key) : occBrands(env);
     return json(request, { on: keys.length > 0, keepDays: OCC_KEEP_DAYS,
       brands: keys.map((k) => ({ key: k, live: BRAND[k].live.source, evse: BRAND[k].evse.source })) });
   }
@@ -3716,6 +3839,7 @@ async function route(request, env) {
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
   if (path === "/detours" && request.method === "POST") return handleDetours(request, env);
   if (path === "/ndw-sites" && request.method === "POST") return handleNdwSites(request, env);
+  if (path === "/extra-sites" && request.method === "POST") return handleExtraSites(request, env);
   if (path === "/places" && request.method === "POST") return handlePlaces(request, env);
   if (path === "/brands" && request.method === "GET") {
     return json(request, { brands: BRANDS.map(({ key, name, color }) => ({ key, name, color })) });
@@ -4132,6 +4256,8 @@ const ALERT_NAMES = {
   "api:/plan": "Plan a route", "api:/alternatives": "Compare routes", "api:/status": "Live status",
   "api:/fr-status": "Live status France (old)", "api:/be-status": "Belgium: sites", "api:/be-evse": "Belgium: one stall",
   "api:/geocode": "Address search", "api:/detours": "Detour minutes", "api:/places": "Place names", "api:/ndw-sites": "Extra NL chargers",
+  "api:/extra-sites": "Extra chargers (BE, FR, PT, DE)", "svc:NDW": "NDW live status (NL)", "svc:Open Charge Map": "Open Charge Map",
+  "svc:MobiData BW": "MobiData BW live status (DE)", "svc:E-Control": "E-Control live status (AT)", "svc:Nominatim": "Nominatim (backup search)",
   "api:/where": "Street and town", "svc:Routing": "openrouteservice: routes", "svc:Geocoder": "openrouteservice: addresses",
   "svc:Matrix": "openrouteservice: detours", "job:pt": "Portugal live", "job:fr": "France live", "job:closures": "Road closures", "job:occ": "Occupancy",
   ors: "Route service notice",
@@ -4647,7 +4773,7 @@ export default {
     const path0 = new URL(request.url).pathname;
     const urgent = /^\/(plan|alternatives)/.test(path0);
     // Time per endpoint that matters for the driver (QoS): from the request to the answer.
-    const timed = /^\/(plan|alternatives|status|fr-status|be-status|be-evse|geocode|detours|places|ndw-sites|where)$/.test(path0) && request.method !== "OPTIONS";
+    const timed = /^\/(plan|alternatives|status|fr-status|be-status|be-evse|geocode|detours|places|ndw-sites|extra-sites|where)$/.test(path0) && request.method !== "OPTIONS";
     const t0 = Date.now();
     try {
       const res = await route(request, env);

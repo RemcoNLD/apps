@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.7.0"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.8.0"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -78,6 +78,8 @@
   .week { padding: 4px 16px; }
   .wk { display: flex; align-items: center; gap: 14px; padding: 12px 0; }
   .wk + .wk { border-top: 1px solid rgba(127,127,127,.18); }
+  .week h3 { margin: 10px 0 0; }
+  .group .line.zero .name, .group .line.zero .num { color: var(--muted); font-weight: 600; }
   .wk-l { flex: 1; min-width: 0; }
   .wk-l .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .wk-r { text-align: right; flex: none; min-width: 5.5em; }
@@ -248,6 +250,30 @@ const LABELS = {
   "PT live": "Portugal live (snapshot from the GitHub job)", "PT index": "Portugal index (GitHub Pages)",
   "Worker requests": "Worker requests", "KV reads": "KV reads", "KV writes": "KV writes", "Logo fetch": "Brand logos",
 };
+// Counters that belong together, in one place, for "Today" and "Last 7 days" alike (0.8.0): first what
+// works everywhere, then per country (live status, index loads and extra chargers side by side), then
+// names, then the background jobs. [counter key, label]; a key not listed here lands in "Other".
+const COUNTER_GROUPS = [
+  { title: "Chargers everywhere", items: [["Open Charge Map", "Open Charge Map: chargers along the route"], ["OCM split box", "Open Charge Map: busy boxes split"], ["Logo fetch", "Brand logos"]],
+    note: "Open Charge Map is the first list of chargers in every country; it has no daily limit but blocks bursts. The country lists below fill in what it misses." },
+  { title: "🇳🇱 Netherlands", items: [["NDW", "NDW: live status"], ["NDW sites", "NDW: extra chargers (map tiles)"]],
+    note: "NDW is open data (about 10 calls a second at most). Extra chargers: tiles along the route, cached a day for everyone (one KV write per new tile). Until Worker 0.13.0 both were counted together as NDW." },
+  { title: "🇧🇪 Belgium", items: [["Eco-Movement BE", "Eco-Movement: stalls checked"], ["Belgium last known", "Last known stalls saved (KV writes)"], ["BE index", "Index loads (sites and extra chargers)"]],
+    note: "Eco-Movement allows about one call per 10 s. The index is a file in the repo, loaded at most once a day per Worker copy." },
+  { title: "🇩🇪 Germany", items: [["MobiData BW", "MobiData BW: live status"], ["DE index", "Index loads (extra chargers, also Austria)"]],
+    note: "MobiData BW (OCPDB) is open data. The index is built weekly by the GitHub job DE index from the same source." },
+  { title: "🇦🇹 Austria", items: [["E-Control", "E-Control: live status"]],
+    note: "At most 4 Austrian sites per call. Extra Austrian chargers come from the Germany index (the sites MobiData BW holds)." },
+  { title: "🇫🇷 France", items: [["FR live", "Snapshot reads (live status)"], ["PAN FR index", "Index loads (sites and extra chargers)"], ["PAN FR", "Old whole-file read (debug only)"]],
+    note: "The snapshot is made every 5 minutes by the GitHub job France live; each Worker copy reads it at most once a minute. The old whole-file read (~9.5 MB) costs more CPU than the free plan allows per request." },
+  { title: "🇵🇹 Portugal", items: [["PT live", "Snapshot reads (live status)"], ["PT index", "Index loads (sites and extra chargers)"]],
+    note: "Snapshot from the GitHub job Portugal live, read at most once a minute per Worker copy." },
+  { title: "Names and search", items: [["Overpass", "Overpass: service-area names"], ["Overpass errors", "Overpass: refused"], ["Nominatim", "Nominatim (backup search)"]],
+    note: "Public OpenStreetMap services without a key; their mirrors sometimes refuse Cloudflare addresses." },
+  { title: "Background and admin", items: [["GitHub API", "GitHub API (timer)"], ["GitHub raw", "GitHub raw files"], ["Occupancy", "Occupancy: tile reads (branch occ)"], ["Push", "Push notifications sent"]],
+    note: "The 5-minute timer starts the GitHub jobs; raw files are snapshots, closures and occupancy." },
+];
+const COUNTER_LABEL = Object.fromEntries(COUNTER_GROUPS.flatMap((g) => g.items));
 const ORS_LABELS = { directions: "Routes", matrix: "Detours (matrix)", "geocode/search": "Place search", "geocode/reverse": "Place names" };
 
 const $ = (id) => document.getElementById(id);
@@ -276,12 +302,22 @@ function ago(iso) {
 // how often it worked, typical and slow times (from a histogram), the slowest, the last failure.
 const QOS_EDGES = [250, 500, 1000, 2000, 5000];
 const QOS_NAMES = {
-  "api:/plan": "Plan a route", "api:/alternatives": "Compare routes", "api:/status": "Live status (NL, DE, AT)",
-  "api:/fr-status": "Live status France", "api:/be-status": "Belgium: sites", "api:/be-evse": "Belgium: one stall",
-  "api:/geocode": "Address search", "api:/detours": "Detour minutes", "api:/places": "Place names", "api:/ndw-sites": "Extra NL chargers",
-  "api:/where": "Street and town", "svc:Routing": "openrouteservice: routes", "svc:Geocoder": "openrouteservice: addresses",
-  "svc:Matrix": "openrouteservice: detours",
+  "api:/plan": "Plan a route", "api:/alternatives": "Compare routes", "api:/status": "Live status (all countries but BE)",
+  "api:/fr-status": "Live status France (old app copies)", "api:/be-status": "Belgium: sites", "api:/be-evse": "Belgium: one stall",
+  "api:/geocode": "Address search", "api:/detours": "Detour minutes", "api:/places": "Place names", "api:/ndw-sites": "Extra chargers NL (NDW)",
+  "api:/extra-sites": "Extra chargers BE, FR, PT, DE, AT", "api:/where": "Street and town",
+  "svc:Routing": "openrouteservice: routes", "svc:Geocoder": "openrouteservice: addresses", "svc:Matrix": "openrouteservice: detours",
+  "svc:Nominatim": "Nominatim (backup search)", "svc:Open Charge Map": "Open Charge Map", "svc:NDW": "NDW live status (NL)",
+  "svc:MobiData BW": "MobiData BW live status (DE)", "svc:E-Control": "E-Control live status (AT)",
 };
+// Rows that belong together (0.8.0): the app's own calls by what they're for, then the outside services
+// behind them. Keys not listed land in "Other".
+const QOS_GROUPS = [
+  { title: "App: route", keys: ["api:/plan", "api:/alternatives", "api:/detours", "api:/geocode", "api:/where", "api:/places"] },
+  { title: "App: chargers", keys: ["api:/status", "api:/ndw-sites", "api:/extra-sites", "api:/be-status", "api:/be-evse", "api:/fr-status"] },
+  { title: "Outside: route and search", keys: ["svc:Routing", "svc:Matrix", "svc:Geocoder", "svc:Nominatim"] },
+  { title: "Outside: chargers and live status", keys: ["svc:Open Charge Map", "svc:NDW", "svc:MobiData BW", "svc:E-Control"] },
+];
 function qosMerge(list) {
   const out = {};
   for (const q of list) for (const [k, v] of Object.entries(q || {})) {
@@ -302,12 +338,12 @@ function qosHtml(d) {
   const todayRec = d.days.find((x) => x.day === d.today) || {};
   const today = qosMerge([todayRec.qos, d.unsaved.qos]);
   const week = qosMerge([...d.days.map((x) => x.qos), d.unsaved.qos]);
-  const keys = Object.keys(week).sort((a, b) => (a.startsWith("api:") === b.startsWith("api:") ? week[b].n - week[a].n : a.startsWith("api:") ? -1 : 1));
+  const keys = Object.keys(week);
   const h = d.health?.ors;
   const notice = h?.down && Date.now() - (h.lastFail || 0) < 15 * 60000
     ? `<div class="card note small"><b>Route service notice is showing</b> in the app since ${new Date(h.since).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}; last failure ${new Date(h.lastFail).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}.</div>` : "";
   if (!keys.length) return `<h2>Service health</h2>${notice}<div class="card small muted">No timings yet (collected from Worker .125 on).</div>`;
-  const rows = keys.map((k) => {
+  const row = (k) => {
     const t = today[k], w = week[k];
     const ok = (q) => (q && q.n ? Math.round(((q.n - q.fail) / q.n) * 1000) / 10 : null);
     const okT = ok(t), okW = ok(w);
@@ -319,9 +355,15 @@ function qosHtml(d) {
       <div class="small muted">${t ? `${fmt(t.n)} today, typical ${qosMs(qosPct(t, .5))}, 9 in 10 ${qosMs(qosPct(t, .9))}, slowest ${qosMs(t.max)}` : "none today"}</div>
       <div class="small muted">7 days: ${fmt(w.n)}, ${okW}% worked, 9 in 10 ${qosMs(qosPct(w, .9))} · ${lf}</div>
     </div>`;
+  };
+  const listed = new Set(QOS_GROUPS.flatMap((g) => g.keys));
+  const groups = [...QOS_GROUPS, { title: "Other", keys: keys.filter((k) => !listed.has(k)).sort((a, b) => week[b].n - week[a].n) }];
+  const cards = groups.map((g) => {
+    const ks = g.keys.filter((k) => week[k]);
+    return ks.length ? `<div class="card group"><h3>${esc(g.title)}</h3>${ks.map(row).join("")}</div>` : "";
   }).join("");
-  return `<h2>Service health</h2>${notice}<div class="card group">${rows}
-    <div class="small muted" style="margin-top:8px">Tap a row to set when it notifies you. “Worked” = answered without a server error (or a refused key or rate limit for outside services). Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.</div></div>`;
+  return `<h2>Service health</h2>${notice}${cards}
+    <div class="card small muted">Tap a row to set when it notifies you. “Worked” = answered without a server error (or a refused key or rate limit for outside services). Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.</div>`;
 }
 function render(d) {
   const todayRec = d.days.find((x) => x.day === d.today) || { calls: {}, ors: {} };
@@ -345,7 +387,7 @@ function render(d) {
     const lim = KNOWN_LIMITS[k];
     const n = calls[k] || 0;
     const ak = lim ? ` data-alert="limit:${esc(k)}"` : "";
-    return `<div class="line"${ak}><div class="row"><span class="name">${esc(label || LABELS[k] || k)}${lim ? '<i class="bell"></i>' : ""}</span>
+    return `<div class="line${n || lim ? "" : " zero"}"${ak}><div class="row"><span class="name">${esc(label || LABELS[k] || k)}${lim ? '<i class="bell"></i>' : ""}</span>
       <span class="num">${fmt(n)}${lim ? ` / ${fmt(lim.limit)}` : ""}</span></div>${lim ? bar(n, lim.limit) : ""}</div>`;
   };
   // Fixed explanations (limits, resets) sit behind the ⓘ in the title; only what changes is in view.
@@ -396,16 +438,17 @@ function render(d) {
             ? Object.entries(hdr[k].headers).map(([h, v]) => `${esc(h)} = ${esc(v)}`).join(", ") : "no quota headers"}`).join("<br>")}</div>`
       : `<div class="small muted">Nothing yet today. The quota appears after the next route is planned.</div>`;
   }
+  if (calls["Route from cache"]) orsBody += line("Route from cache", "Routes from the Worker's cache (no call)");
   html += group("OpenRouteService", orsBody, "Limits as OpenRouteService reports them.");
 
-  // Sources without a daily limit: one card, a line each.
-  const free = [["Open Charge Map", "Open Charge Map"], ["NDW", "NDW (Netherlands live)"], ["MobiData BW", "MobiData BW (Germany live)"],
-    ["E-Control", "E-Control (Austria live)"], ["FR live", "France live: snapshot reads"], ["PAN FR index", "France index loads"],
-    ["PT live", "Portugal live: snapshot reads"], ["PT index", "Portugal index loads"], ["Occupancy", "Occupancy: tile reads (branch occ)"]];
-  const rest = ["Logo fetch", "Nominatim", ...Object.keys(calls)].filter((k, i, a) => a.indexOf(k) === i && !used.has(k)
-    && !free.some(([f]) => f === k) && calls[k] != null);
-  html += group("Other sources", free.map(([k, label]) => line(k, label)).join("") + rest.map((k) => line(k)).join(""),
-    "None of these publishes a daily limit. Open Charge Map blocks bursts of calls. France live: each read is the whole country (~9.5 MB) and costs more CPU than the Worker's free plan allows per request. NDW, MobiData BW and transport.data.gouv.fr are open data.");
+  // Sources without a daily limit, grouped (COUNTER_GROUPS). A group shows its first line always and the
+  // others when they counted something today, so a quiet day stays short.
+  for (const g of COUNTER_GROUPS) {
+    const lines = g.items.filter(([k], i) => i === 0 || calls[k]).map(([k, label]) => line(k, label)).join("");
+    html += group(g.title, lines, g.note);
+  }
+  const rest = Object.keys(calls).filter((k) => !used.has(k) && !COUNTER_LABEL[k] && calls[k]);
+  if (rest.length) html += group("Other", rest.map((k) => line(k)).join(""), "Counters this page doesn't know yet (a newer Worker).");
 
   if (d.days.length) {
     // Always 7 days, oldest left and today right; days before the first count are empty.
@@ -423,9 +466,8 @@ function render(d) {
     const limitOf = (k) => KNOWN_LIMITS[k]?.limit
       ?? { Routing: orsLimit("directions"), Matrix: orsLimit("matrix"), Geocoder: orsLimit("geocode/search") }[k] ?? null;
     const total = (k) => days.reduce((n, x) => n + (x.calls?.[k] || 0), 0);
-    keys.sort((a, b) => total(b) - total(a));
     const dayName = (x) => new Date(`${x.day}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric" });
-    html += `<h2>Last 7 days</h2><div class="card week">${keys.map((k) => {
+    const wkRow = (k, label) => {
       const vals = days.map((x) => (x.calls ? x.calls[k] || 0 : null));
       const lim = limitOf(k);
       // The scale is the limit, or the busiest day once that went over it: then the red line sits
@@ -440,11 +482,26 @@ function render(d) {
       }).join("");
       const line = lim ? `<i class="lim" data-pos="${((lim / top) * 100).toFixed(1)}" title="Limit ${fmt(lim)} a day"></i>` : "";
       return `<div class="wk">
-        <div class="wk-l"><div class="name">${esc(LABELS[k] || k)}</div><div class="spark">${bars}${line}</div><div class="wk-tip small muted" hidden></div></div>
+        <div class="wk-l"><div class="name">${esc(label || COUNTER_LABEL[k] || LABELS[k] || k)}</div><div class="spark">${bars}${line}</div><div class="wk-tip small muted" hidden></div></div>
         <div class="wk-r"><div class="num${lim && today > lim ? " error" : ""}">${today ? fmt(today) : "–"}</div>
           <div class="small muted">${fmt(total(k))}/w</div></div>
       </div>`;
-    }).join("")}</div>
+    };
+    // The same groups as "Today", in the same order; inside a group the catalogue's order. Only counters
+    // that counted something this week.
+    const counted = new Set(keys.filter((k) => total(k) > 0));
+    const wkGroups = [
+      { title: "Cloudflare", items: [["Worker requests"], ["KV reads"], ["KV writes"]] },
+      { title: "OpenRouteService", items: [["Routing", "Routes"], ["Matrix", "Detours (matrix)"], ["Geocoder", "Place search & names"], ["Route from cache", "Routes from the Worker's cache"]] },
+      ...COUNTER_GROUPS,
+    ];
+    const listed = new Set(wkGroups.flatMap((g) => g.items.map(([k]) => k)));
+    const other = [...counted].filter((k) => !listed.has(k)).sort((a, b) => total(b) - total(a)).map((k) => [k]);
+    if (other.length) wkGroups.push({ title: "Other", items: other });
+    html += `<h2>Last 7 days</h2>${wkGroups.map((g) => {
+      const rows = g.items.filter(([k]) => counted.has(k)).map(([k, label]) => wkRow(k, label)).join("");
+      return rows ? `<div class="card week group"><h3>${esc(g.title)}</h3>${rows}</div>` : "";
+    }).join("")}
     <p class="small muted">Bars: one per day, ${esc(dayName(days[0]))} to today (green), each source on its own scale. A red line is the daily limit:
       a bar turns orange from 80% of it and red over it; then the scale grows and the line moves down. Tap a bar for its number.</p>`;
   }

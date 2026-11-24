@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.40.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.40.2"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -954,7 +954,7 @@
   .occ .occ-grid { stroke: var(--muted); stroke-width: .6; opacity: .45; }
   .occ .occ-now { stroke: var(--line); stroke-width: 1; stroke-dasharray: 1 2; opacity: .8; }
   .occ .occ-arr { stroke: var(--sign-blue); stroke-width: 2; }
-  .occ .occ-arr-lbl { fill: var(--sign-blue); font-size: 9px; font-weight: 700; font-family: inherit; }
+  .occ .occ-arr-t { color: var(--sign-blue); font-weight: 700; }
   .occ .occ-lbl { fill: var(--muted); font-size: 9px; font-family: inherit; }
   .occ .occ-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: .8rem; color: var(--muted); }
   .occ .occ-legend i { display: inline-block; width: 16px; height: 0; margin-right: 5px; vertical-align: middle; border-top: 2.2px solid var(--free); }
@@ -5427,8 +5427,7 @@ function occSvg(today, week, total, nowSlot, slots, arr) {
   let arrive = "";
   if (arr && arr.slot > nowSlot && arr.slot < slots) {
     const ax = L + (arr.min / 1440) * (W - L - R);
-    const anchor = ax > W - 40 ? "end" : ax < L + 24 ? "start" : "middle";
-    arrive = `<line class="occ-arr" x1="${ax.toFixed(1)}" x2="${ax.toFixed(1)}" y1="${T - 2}" y2="${B}"/><text class="occ-arr-lbl" x="${ax.toFixed(1)}" y="${T - 5}" text-anchor="${anchor}">${arr.label}</text>`;
+    arrive = `<line class="occ-arr" x1="${ax.toFixed(1)}" x2="${ax.toFixed(1)}" y1="${T - 2}" y2="${B}"/>`; // the time is in the legend (0.40.2)
   }
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-hidden="true">${fullRuns(today, upto, T, B, "occ-full")}${fullRuns(week, slots, B + 1, B + 4, "occ-full-wk")}${grid}${ticks}<path class="occ-week" d="${steps(week, slots)}"/><path class="occ-today" d="${steps(today, upto)}"/>${now}${arrive}</svg>`;
 }
@@ -5487,7 +5486,7 @@ function occHtml(m, entry, etaMin) {
   if (otherTz) notes.push(`<span class="occ-note">Times are local time at the site.</span>`);
   const svg = occSvg(today, week, total, nowSlot, slots, arr);
   return head(t ? `${t.clock}` : "") + svg +
-    `<div class="occ-legend"><span><i></i>Today</span>${hasWeek ? `<span><i class="wk"></i>Same day last week</span>` : ""}${anyFull ? `<span><i class="full"></i>Full</span>` : ""}${svg.includes("occ-arr") ? `<span><i class="arr"></i>Arrival</span>` : ""}</div>` + notes.join("");
+    `<div class="occ-legend"><span><i></i>Today</span>${hasWeek ? `<span><i class="wk"></i>Same day last week</span>` : ""}${anyFull ? `<span><i class="full"></i>Full</span>` : ""}${svg.includes("occ-arr") ? `<span><i class="arr"></i>Arrival <b class="occ-arr-t">@${arr.label}</b></span>` : ""}</div>` + notes.join("");
 }
 // Which members of a row have a chart: followed brands in the countries the job covers.
 function occMembers(members) {

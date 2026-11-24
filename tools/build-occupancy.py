@@ -21,6 +21,8 @@ Sources (no keys needed):
   DE  MobiData BW's Open ChargePoint DataBase (the Worker's German source, AFIR data; Germany, and
       the Austrian sites it holds):
       one call per followed brand with operator_name=<brand>, so the whole country in a few calls.
+  AT  E-Control, through the Worker's GET /occupancy/at?part=N (its key is a Worker secret): the
+      followed brands' Austrian sites, a few per call.
 
 Files written (in STATE_DIR):
   t_<floor lat>_<floor lon>.json  {v, at, slotMin, sites: {key: {b, cc, tz, lat, lon, n, t, d: {date: slots}}}}
@@ -424,6 +426,30 @@ def de_sites(brands):
     return out, calls
 
 
+# ------------------------------------------------------------------ E-Control via the Worker (AT)
+
+def at_sites():
+    out, calls, part, parts = {}, 0, 0, 1
+    while part < parts and part < 40:
+        try:
+            data = get(f"{WORKER}/occupancy/at?part={part}", timeout=60, tries=2)
+            calls += 1
+        except Exception as e:
+            log(f"AT part {part} failed:", e)
+            part += 1
+            continue
+        if not data.get("ok"):
+            log("AT skipped:", data.get("reason"))
+            break
+        parts = int(data.get("parts") or 0)
+        for x in data.get("sites") or []:
+            out[f"at:{x['id']}"] = ({"b": x["b"], "cc": "AT", "lat": round(x["lat"], 5), "lon": round(x["lon"], 5),
+                                     "n": x.get("n") or ""}, (int(x["free"]), int(x["total"])))
+        part += 1
+    log(f"AT: {len(out)} readings from {calls} Worker calls ({parts} parts)")
+    return out, calls
+
+
 # ------------------------------------------------------------------ store
 
 def tile_of(lat, lon):
@@ -536,6 +562,12 @@ def main():
         log("DE failed:", e)
         de, de_calls = {}, 0
     readings.update(de)
+    try:
+        at, at_calls = at_sites()
+    except Exception as e:
+        log("AT failed:", e)
+        at, at_calls = {}, 0
+    readings.update(at)
 
     for key, (info, c) in readings.items():
         put(sites_by_tile, key, info, c, now, keep_days)
@@ -554,8 +586,8 @@ def main():
     meta = {"at": at, "secs": round(time.time() - t0, 1), "brands": brand_sig, "keepDays": keep_days,
             "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt),
                          "DE": sum(1 for i, _ in de.values() if i["cc"] == "DE"),
-                         "AT": sum(1 for i, _ in de.values() if i["cc"] == "AT")}, "ndwCalls": PACE.calls,
-            "ocpdbCalls": de_calls,
+                         "AT": len(at) + sum(1 for i, _ in de.values() if i["cc"] == "AT")}, "ndwCalls": PACE.calls,
+            "ocpdbCalls": de_calls, "workerAtCalls": at_calls,
             "discovery": discovered, "nlSites": len(nl.get("sites") or {}),
             "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values())}
     with open(os.path.join(state, "meta.json"), "w") as f:

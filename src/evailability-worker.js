@@ -26,6 +26,7 @@
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /closures/schedule     hours between road-closure updates (read by the GitHub job .github/workflows/closures.yml)
 //   GET  /occupancy/config      public: occupancy on/off, followed brands and their name patterns (read by occupancy.yml)
+//   GET  /occupancy/at?part=     public: free/total at the followed brands' Austrian sites (E-Control), for occupancy.yml
 //   GET  /occupancy?lat=&lon=&brand=  free chargers per 15 min over the last 8 days at the nearest followed site (branch occ)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /admin/timer           the 5-minute timer that starts GitHub jobs: its state (POST: check the GitHub App now)
@@ -72,7 +73,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.11.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.12.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -348,7 +349,7 @@ const SETTINGS = [
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
     help: "Empty: found automatically. Only fill in if that lookup fails." },
   { key: "occupancy", type: "bool", label: "Occupancy through the day", def: () => true,
-    help: "On: the GitHub job Occupancy (occupancy.yml) notes every 15 minutes how many chargers are free at the followed brands' sites (NL from NDW, DE from MobiData BW, FR and PT from their snapshots) and keeps 8 days on the branch occ; the app's charger card shows today against the same day last week. No KV writes. Off: the timer stops starting it and the job writes nothing (the stored days stay)." },
+    help: "On: the GitHub job Occupancy (occupancy.yml) notes every 15 minutes how many chargers are free at the followed brands' sites (NL from NDW, DE from MobiData BW, AT from E-Control through the Worker, FR and PT from their snapshots) and keeps 8 days on the branch occ; the app's charger card shows today against the same day last week. No KV writes. Off: the timer stops starting it and the job writes nothing (the stored days stay)." },
   { key: "occupancyBrands", type: "text", label: "Occupancy: brands", def: () => "ionity, fastned",
     help: "Brand keys to follow, separated by commas (e.g. ionity, fastned, tesla), or all. More brands means more NDW calls per run (one small call per Dutch site area, or one full scan of NL once that is cheaper) and one MobiData BW call per brand for Germany; KV writes stay zero." },
   { key: "closuresHours", type: "choice", options: [6, 12, 24, 48], label: "Road closures: hours between updates", def: () => 12,
@@ -1220,7 +1221,7 @@ async function ndwFeaturesNear(lat, lon, dLat = 0.004, dLon = 0.006) {
 // "." = no reading). Read like the France and Portugal snapshots: the branch's commit from git's ref
 // list, then the raw file at that commit, at most once per 5 minutes per tile per Worker copy. No KV.
 const OCC_KEEP_DAYS = 8;
-const OCC_COUNTRIES = ["NL", "DE", "FR", "PT"]; // where the job takes readings (told to the app by /me)
+const OCC_COUNTRIES = ["NL", "DE", "AT", "FR", "PT"]; // where the job takes readings (told to the app by /me)
 const OCC_RAW_AT = (sha, tile) => `https://raw.githubusercontent.com/RemcoNLD/apps/${sha}/${tile}`;
 function occBrands(env) {
   if (!setting(env, "occupancy")) return [];
@@ -1267,6 +1268,50 @@ async function handleOccupancy(request, env, url) {
   if (!best) return json(request, { ok: false, reason: "no data", at });
   const s = best.s;
   return json(request, { ok: true, at, slotMin, key: best.key, name: s.n, total: s.t, cc: s.cc, tz: s.tz, days: s.d });
+}
+
+// Austria for the occupancy job (Worker 0.12.0). E-Control's key is only a Worker secret, so the job
+// asks here: GET /occupancy/at?part=N (public, like /occupancy/config: counts of public data only).
+// Sites: the followed brands' Austrian sites from Open Charge Map (sitesInBox: kept a day in KV, so
+// about one KV write a day). Per part at most OCC_AT_PART sites (each E-Control answer is large, as in
+// MAX_AT_LOOKUPS), each part's answer kept 10 minutes per Worker copy, so repeated calls cost nothing.
+const OCC_AT_BOX = [9.5, 46.35, 17.2, 49.05];
+const OCC_AT_PART = 4;
+async function occAtSites(env, brands) {
+  const key = `occat:sites:${brands.join(",")}`;
+  const memo = memoGet(key);
+  if (memo !== undefined) return memo;
+  const list = (await sitesInBox(env, OCC_AT_BOX, brands))
+    .filter((p) => p.AddressInfo?.Country?.ISOCode === "AT" && Number.isFinite(p.AddressInfo?.Latitude))
+    .map((p) => ({ id: p.ID, b: p._brand, lat: p.AddressInfo.Latitude, lon: p.AddressInfo.Longitude, n: p.AddressInfo.Title || "" }))
+    .sort((a, b) => a.id - b.id);
+  memoSet(key, list, 60 * 60 * 1000);
+  return list;
+}
+async function handleOccupancyAt(request, env, url) {
+  const brands = occBrands(env);
+  if (!brands.length) return json(request, { ok: false, reason: "off" });
+  if (!env.ECONTROL_API_KEY) return json(request, { ok: false, reason: "no E-Control key" });
+  const part = Math.max(0, Math.floor(Number(url.searchParams.get("part")) || 0));
+  const key = `occat:${brands.join(",")}:${part}`;
+  const memo = memoGet(key);
+  if (memo !== undefined) return json(request, await memo);
+  const promise = (async () => {
+    const all = await occAtSites(env, brands);
+    const parts = Math.ceil(all.length / OCC_AT_PART);
+    const mine = all.slice(part * OCC_AT_PART, (part + 1) * OCC_AT_PART);
+    const sites = [];
+    for (const s of mine) {
+      let st = null;
+      try { st = await atStatus({ lat: s.lat, lon: s.lon }, env, BRAND[s.b] || BRAND.ionity); }
+      catch (e) { console.log("Occupancy AT failed", s.id, e.message); }
+      if (st && st.available != null && st.total) sites.push({ ...s, free: st.available, total: st.total });
+    }
+    return { ok: true, at: new Date().toISOString(), part, parts, count: all.length, sites };
+  })();
+  memoSet(key, promise, 10 * 60 * 1000);
+  promise.catch(() => memoSet(key, undefined, 1));
+  return json(request, await promise);
 }
 
 // ---------------------------------------------------------------- live status (AT)
@@ -3035,7 +3080,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/admin/timer", "/admin/push", "/admin/alerts", "/closures/schedule", "/occupancy/config"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/admin/timer", "/admin/push", "/admin/alerts", "/closures/schedule", "/occupancy/config", "/occupancy/at"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -3617,6 +3662,7 @@ async function route(request, env) {
       brands: keys.map((k) => ({ key: k, live: BRAND[k].live.source, evse: BRAND[k].evse.source })) });
   }
   if (path === "/occupancy" && request.method === "GET") return handleOccupancy(request, env, url);
+  if (path === "/occupancy/at" && request.method === "GET") return handleOccupancyAt(request, env, url);
   if (path === "/admin/usage" && request.method === "GET") return handleUsage(request, env);
   if (path === "/admin/settings" && (request.method === "GET" || request.method === "POST")) return handleSettings(request, env);
   if (path === "/admin/users" && (request.method === "GET" || request.method === "POST")) return handleUsers(request, env);

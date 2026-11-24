@@ -276,6 +276,18 @@ EXACT = {
 "Replanning…": ("Opnieuw plannen…", "A voltar a planear…"),
 # ---- nav sheet
 "Apple Maps": ("Apple Kaarten", "Mapas da Apple"),
+# ---- occupancy chart in the nav sheet (0.37)
+"Free chargers through the day": ("Vrije laders door de dag", "Carregadores livres ao longo do dia"),
+"Loading…": ("Laden…", "A carregar…"),
+"Not available right now.": ("Nu niet beschikbaar.", "Não disponível de momento."),
+"No readings for this site yet.": ("Nog geen metingen voor deze locatie.", "Ainda não há leituras para este local."),
+"Today": ("Vandaag", "Hoje"),
+"Same day last week": ("Zelfde dag vorige week", "Mesmo dia da semana passada"),
+"Same day last week:": ("Zelfde dag vorige week:", "Mesmo dia da semana passada:"),
+"The dashed line for the same day last week appears once a week of readings has been collected.": (
+  "De stippellijn voor dezelfde dag vorige week verschijnt zodra er een week aan metingen is verzameld.",
+  "A linha tracejada do mesmo dia da semana passada aparece quando houver uma semana de leituras."),
+"Times are local time at the site.": ("Tijden zijn de lokale tijd op de locatie.", "As horas são a hora local do posto."),
 # ---- help sheet chrome
 "How it works": ("Zo werkt het", "Como funciona"),
 "Version": ("Versie", "Versão"),
@@ -330,6 +342,8 @@ EXACT = {
 # Patterns for texts with numbers or names in them: (regex, Dutch, Portuguese). $1… are the groups;
 # {t:$1} means "translate group 1 as a text of its own".
 PATTERNS = [
+(r"^busiest around (\d\d:\d\d)$", "het drukst rond $1", "mais ocupado por volta das $1"),
+(r"^most free around (\d\d:\d\d)$", "het meest vrij rond $1", "mais livre por volta das $1"),
 (r"^Arrive (.+)$", "Aankomst $1", "Chegada $1"),
 (r"^Signed in as (.+)$", "Ingelogd als $1", "Sessão iniciada como $1"),
 (r"^(\d+) of (\d+) free\.$", "$1 van $2 vrij.", "$1 de $2 livres."),

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.36.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.37.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -930,6 +930,26 @@
   .namesrc .cand.skip { opacity: .6; }
   .namesrc .r { opacity: .75; font-weight: 400; font-size: .92em; }
   .navsheet .hist .tip { color: var(--free); font-size: .9rem; font-weight: 700; }
+  /* Occupancy through the day (0.37): today against the same day last week */
+  .navsheet { max-height: calc(var(--app-h, 100dvh) - 24px); overflow-y: auto; overscroll-behavior: contain; }
+  .navsheet .occ { display: block; }
+  .navsheet .occ .occ-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .navsheet .occ .occ-head b { font-size: .95rem; }
+  .navsheet .occ .occ-head .muted { font-size: .8rem; white-space: nowrap; flex-shrink: 0; }
+  .navsheet .occ svg { display: block; width: 100%; height: auto; }
+  .navsheet .occ .occ-today { fill: none; stroke: var(--free); stroke-width: 2.2; stroke-linejoin: round; }
+  .navsheet .occ .occ-area { fill: var(--free); opacity: .16; stroke: none; }
+  .navsheet .occ .occ-week { fill: none; stroke: var(--line); stroke-width: 1.4; stroke-dasharray: 3 3; opacity: .6; }
+  .navsheet .occ .occ-grid { stroke: var(--muted); stroke-width: .6; opacity: .45; }
+  .navsheet .occ .occ-now { stroke: var(--line); stroke-width: 1; stroke-dasharray: 1 2; opacity: .8; }
+  .navsheet .occ .occ-lbl { fill: var(--muted); font-size: 9px; font-family: inherit; }
+  .navsheet .occ .occ-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: .8rem; color: var(--muted); }
+  .navsheet .occ .occ-legend i { display: inline-block; width: 16px; height: 0; margin-right: 5px; vertical-align: middle; border-top: 2.2px solid var(--free); }
+  .navsheet .occ .occ-legend i.wk { border-top: 1.4px dashed var(--line); opacity: .7; }
+  .navsheet .occ .occ-note { display: block; margin-top: 4px; font-size: .85rem; color: var(--muted); line-height: 1.35; }
+  .navsheet .occ .occ-note b { color: var(--line); }
+  .navsheet .occ.old svg { opacity: .55; filter: grayscale(1); }
+  .navsheet .occ + .occ { margin-top: -4px; }
   /* Demo strip: real row styles on a small piece of road */
   .demo { position: relative; padding: 4px 0; }
   .demo::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 8px; background: var(--sign-blue); border-radius: 4px; }
@@ -1420,6 +1440,7 @@
   <div class="sub" id="navSub"></div>
   <div class="addr" id="navAddr" hidden></div>
   <div class="hist" id="navHist" hidden></div>
+  <div class="hist occ" id="navOcc" hidden></div>
   <div id="navSrc"></div>
   <div id="navList"></div>
   <button type="button" class="cancel" id="navCancel">Cancel</button>
@@ -1793,6 +1814,15 @@ const I18N_TEXT = {
 "Add and replan": "Toevoegen en opnieuw plannen",
 "Replanning…": "Opnieuw plannen…",
 "Apple Maps": "Apple Kaarten",
+"Free chargers through the day": "Vrije laders door de dag",
+"Loading…": "Laden…",
+"Not available right now.": "Nu niet beschikbaar.",
+"No readings for this site yet.": "Nog geen metingen voor deze locatie.",
+"Today": "Vandaag",
+"Same day last week": "Zelfde dag vorige week",
+"Same day last week:": "Zelfde dag vorige week:",
+"The dashed line for the same day last week appears once a week of readings has been collected.": "De stippellijn voor dezelfde dag vorige week verschijnt zodra er een week aan metingen is verzameld.",
+"Times are local time at the site.": "Tijden zijn de lokale tijd op de locatie.",
 "How it works": "Zo werkt het",
 "Version": "Versie",
 "Check for update": "Controleren op update",
@@ -2078,6 +2108,15 @@ const I18N_TEXT = {
 "Add and replan": "Adicionar e voltar a planear",
 "Replanning…": "A voltar a planear…",
 "Apple Maps": "Mapas da Apple",
+"Free chargers through the day": "Carregadores livres ao longo do dia",
+"Loading…": "A carregar…",
+"Not available right now.": "Não disponível de momento.",
+"No readings for this site yet.": "Ainda não há leituras para este local.",
+"Today": "Hoje",
+"Same day last week": "Mesmo dia da semana passada",
+"Same day last week:": "Mesmo dia da semana passada:",
+"The dashed line for the same day last week appears once a week of readings has been collected.": "A linha tracejada do mesmo dia da semana passada aparece quando houver uma semana de leituras.",
+"Times are local time at the site.": "As horas são a hora local do posto.",
 "How it works": "Como funciona",
 "Version": "Versão",
 "Check for update": "Procurar atualização",
@@ -2120,7 +2159,7 @@ const I18N_TEXT = {
 "Destination · 108 km": "Destino · 108 km"
 }
 };
-const I18N_PATTERNS = [["^Arrive (.+)$", "Aankomst $1", "Chegada $1"], ["^Signed in as (.+)$", "Ingelogd als $1", "Sessão iniciada como $1"], ["^(\\d+) of (\\d+) free\\.$", "$1 van $2 vrij.", "$1 de $2 livres."], ["^(\\d+) of (\\d+) free$", "$1 van $2 vrij", "$1 de $2 livres"], ["^(\\d+) in use, (\\d+) out of order\\.$", "$1 in gebruik, $2 buiten gebruik.", "$1 em uso, $2 avariados."], ["^(\\d+) in use\\.$", "$1 in gebruik.", "$1 em uso."], ["^(\\d+) out of order\\.$", "$1 buiten gebruik.", "$1 avariados."], ["^(\\d+) in use$", "$1 in gebruik", "$1 em uso"], ["^(\\d+) out of order$", "$1 buiten gebruik", "$1 avariados"], ["^Last known, checked at (.+) \\((.+)\\)$", "Laatst bekend, gecontroleerd om $1 ({t:$2})", "Último estado conhecido, verificado às $1 ({t:$2})"], ["^Last change at the site: (.+) \\((.+)\\)$", "Laatste wijziging op de locatie: $1 ({t:$2})", "Última alteração no local: $1 ({t:$2})"], ["^(\\d+) min ago$", "$1 min geleden", "há $1 min"], ["^(\\d+) h (\\d+) min ago$", "$1 u $2 min geleden", "há $1 h $2 min"], ["^(\\d+) h ago$", "$1 u geleden", "há $1 h"], ["^All in use since (.+)$", "Alles bezet sinds $1", "Tudo ocupado desde $1"], ["^\\((.+)\\)$", "({t:$1})", "({t:$1})"], ["^, no change since (.+) \\((.+)\\)$", ", geen wijziging sinds $1 ({t:$2})", ", sem alterações desde $1 ({t:$2})"], ["^Last full at (.+) \\((.+)\\)\\.$", "Laatst vol om $1 ({t:$2}).", "Esteve cheio pela última vez às $1 ({t:$2})."], ["^Checked (\\d+) s ago · next update in (.+)$", "$1 s geleden gecontroleerd · volgende update over $2", "Verificado há $1 s · próxima atualização daqui a $2"], ["^Checked (.+) ago · next update in (.+)$", "$1 geleden gecontroleerd · volgende update over $2", "Verificado há $1 · próxima atualização daqui a $2"], ["^Updated less than a minute ago · next in (.+)$", "Minder dan een minuut geleden bijgewerkt · volgende over $1", "Atualizado há menos de um minuto · próxima daqui a $1"], ["^France checked (.+) ago · next update in (.+)$", "Frankrijk {t:$1} geleden gecontroleerd · volgende update over $2", "França verificada há {t:$1} · próxima atualização daqui a $2"], ["^France paused after an error · next update in (.+)$", "Frankrijk gepauzeerd na een fout · volgende update over $1", "França em pausa após um erro · próxima atualização daqui a $1"], ["^France couldn’t be updated; paused for (\\d+) min$", "Frankrijk kon niet worden bijgewerkt; $1 min gepauzeerd", "Não foi possível atualizar a França; em pausa durante $1 min"], ["^Belgium: still checking (.+) · one site at a time$", "België: nog bezig met $1 · één locatie tegelijk", "Bélgica: ainda a verificar $1 · um local de cada vez"], ["^Belgium: checking (\\d+) stalls? · about (.+)$", "België: $1 laadpunt(en) controleren · ongeveer $2", "Bélgica: a verificar $1 posto(s) · cerca de $2"], ["^(\\d+) fast stalls · tap to check$", "$1 snellaadpunten · tik om te controleren", "$1 postos rápidos · toque para verificar"], ["^(\\d+) of (\\d+) stalls without live status$", "$1 van $2 laadpunten zonder live status", "$1 de $2 postos sem estado em direto"], ["^(\\d+) not checked$", "$1 niet gecontroleerd", "$1 não verificados"], ["^(\\d+) without live status$", "$1 zonder live status", "$1 sem estado em direto"], ["^(\\d+)(st|nd|rd|th) exit$", "$1e afslag", "$1.ª saída"], ["^(\\d+) min$", "$1 min", "$1 min"], ["^(\\d+) min old · tap to retry$", "$1 min oud · tik om opnieuw te proberen", "$1 min de idade · toque para tentar novamente"], ["^(.+) km off route$", "$1 km van de route", "$1 km fora do percurso"], ["^Trial: (\\d+) days? and (\\d+) routes? left · live status in the Netherlands only$", "Proef: nog $1 dag(en) en $2 route(s) · live status alleen in Nederland", "Experiência: faltam $1 dia(s) e $2 percurso(s) · estado em direto só nos Países Baixos"], ["^· (\\d+) days? · (\\d+) routes? left$", "· nog $1 dag(en) · $2 route(s)", "· faltam $1 dia(s) · $2 percurso(s)"], ["^· (\\d+) days? and (\\d+) routes? left$", "· nog $1 dag(en) en $2 route(s)", "· faltam $1 dia(s) e $2 percurso(s)"], ["^Live status in the Netherlands · full access via the start screen$", "Live status in Nederland · volledige toegang via het startscherm", "Estado em direto nos Países Baixos · acesso completo no ecrã inicial"], ["^Thanks for trying EVailability! You can extend it once by (\\d+) days? and (\\d+) routes, or ask for a full key\\.$", "Bedankt voor het proberen van EVailability! Je kunt de proefperiode één keer verlengen met $1 dag en $2 routes, of een volledige sleutel aanvragen.", "Obrigado por experimentar o EVailability! Pode prolongá-lo uma vez por $1 dia e $2 percursos, ou pedir uma chave completa."], ["^(.+) Your request for full access is waiting; this app opens again by itself once it’s approved\\.$", "{t:$1} Je aanvraag voor volledige toegang staat open; de app opent vanzelf weer zodra die is goedgekeurd.", "{t:$1} O seu pedido de acesso completo está pendente; a app volta a abrir sozinha quando for aprovado."], ["^(.+) Ask the person who gave it to you for a new one\\.$", "{t:$1} Vraag degene die hem je gaf om een nieuwe.", "{t:$1} Peça uma nova a quem lha deu."], ["^Couldn’t compare routes \\((.+)\\)\\. Planned the fastest\\.$", "Routes vergelijken mislukt ({t:$1}). De snelste is gepland.", "Não foi possível comparar percursos ({t:$1}). Foi planeado o mais rápido."], ["^Couldn’t replan: (.+)$", "Opnieuw plannen mislukt: {t:$1}", "Não foi possível voltar a planear: {t:$1}"], ["^Couldn’t reroute: (.+)$", "Nieuwe route mislukt: {t:$1}", "Não foi possível recalcular: {t:$1}"], ["^New route around (.+)\\.$", "Nieuwe route om {t:$1} heen.", "Novo percurso a contornar {t:$1}."], ["^Planning a route around (.+)…$", "Route om {t:$1} heen plannen…", "A planear um percurso a contornar {t:$1}…"], ["^No way around (.+) found\\. The route still goes through\\.$", "Geen weg om {t:$1} heen gevonden. De route gaat er nog doorheen.", "Não foi encontrada alternativa a {t:$1}. O percurso continua a passar por lá."], ["^Couldn’t plan a route around (.+)\\. Try again in a moment\\.$", "Kon geen route om {t:$1} heen plannen. Probeer het zo opnieuw.", "Não foi possível planear um percurso a contornar {t:$1}. Tente daqui a pouco."], ["^this closure$", "deze afsluiting", "este corte"], ["^these closures$", "deze afsluitingen", "estes cortes"], ["^the closure$", "de afsluiting", "o corte"], ["^(\\d+) closures$", "$1 afsluitingen", "$1 cortes"], ["^(.+) closed$", "$1 afgesloten", "$1 cortada"], ["^until (.+)$", "tot $1", "até $1"], ["^from (.+) to (.+)$", "van $1 tot $2", "de $1 até $2"], ["^Add (\\d+) and replan$", "$1 toevoegen en opnieuw plannen", "Adicionar $1 e voltar a planear"], ["^No more easy-to-reach chargers\\. (\\d+) that needs? a longer detour (?:is|are) hidden\\.$", "Geen makkelijk bereikbare laders meer. $1 met langer omrijden verborgen.", "Não há mais carregadores de fácil acesso. $1 com desvio maior ocultos."], ["^(\\d+) Ionity sites? along the way$", "$1 Ionity-locatie(s) onderweg", "$1 local(is) Ionity pelo caminho"], ["^Via (.+) \\(your via point\\)$", "Via $1 (jouw viapunt)", "Por $1 (o seu ponto intermédio)"], ["^The route service \\(openrouteservice\\) isn’t answering properly right now \\((\\d+)\\)\\. It’s usually back within a few minutes; try again then\\.$", "De routeservice (openrouteservice) reageert nu niet goed ($1). Meestal werkt het binnen een paar minuten weer; probeer het dan opnieuw.", "O serviço de rotas (openrouteservice) não está a responder bem neste momento ($1). Normalmente volta dentro de alguns minutos; tente nessa altura."], ["^Probably not live: no change at the site for (\\d+) h\\. Last reported (\\d+) of (\\d+) free$", "Waarschijnlijk niet live: $1 u geen wijziging op de locatie. Laatst gemeld $2 van $3 vrij", "Provavelmente não está em direto: sem alterações no local há $1 h. Último registo: $2 de $3 livres"], ["^The source last reported (\\d+) of (\\d+) free, but nothing has changed at the site since (.+) \\((.+)\\)\\. The real state is unknown\\.$", "De bron meldde laatst $1 van $2 vrij, maar er is sinds $3 ({t:$4}) niets veranderd op de locatie. De werkelijke stand is onbekend.", "A fonte registou por último $1 de $2 livres, mas nada mudou no local desde $3 ({t:$4}). O estado real é desconhecido."], ["^(.+)\\. Tap to update$", "$1. Tik om bij te werken", "$1. Toque para atualizar"], ["^Beyond an exit, on the (left|right)$", "Na een afrit, aan de {t:$1}", "Depois de uma saída, à {t:$1}"], ["^left$", "linkerkant", "esquerda"], ["^right$", "rechterkant", "direita"], ["^\\+(\\d+) min detour(.*)$", "+$1 min omrijden$2", "+$1 min de desvio$2"], ["^(\\d+) minutes extra to get there and back$", "$1 minuten extra heen en terug", "$1 minutos extra para ir e voltar"], ["^Detours: (.+)$", "Omrijden: $1", "Desvios: $1"], ["^(\\d+) of (\\d+)$", "$1 van $2", "$1 de $2"]];
+const I18N_PATTERNS = [["^busiest around (\\d\\d:\\d\\d)$", "het drukst rond $1", "mais ocupado por volta das $1"], ["^most free around (\\d\\d:\\d\\d)$", "het meest vrij rond $1", "mais livre por volta das $1"], ["^Arrive (.+)$", "Aankomst $1", "Chegada $1"], ["^Signed in as (.+)$", "Ingelogd als $1", "Sessão iniciada como $1"], ["^(\\d+) of (\\d+) free\\.$", "$1 van $2 vrij.", "$1 de $2 livres."], ["^(\\d+) of (\\d+) free$", "$1 van $2 vrij", "$1 de $2 livres"], ["^(\\d+) in use, (\\d+) out of order\\.$", "$1 in gebruik, $2 buiten gebruik.", "$1 em uso, $2 avariados."], ["^(\\d+) in use\\.$", "$1 in gebruik.", "$1 em uso."], ["^(\\d+) out of order\\.$", "$1 buiten gebruik.", "$1 avariados."], ["^(\\d+) in use$", "$1 in gebruik", "$1 em uso"], ["^(\\d+) out of order$", "$1 buiten gebruik", "$1 avariados"], ["^Last known, checked at (.+) \\((.+)\\)$", "Laatst bekend, gecontroleerd om $1 ({t:$2})", "Último estado conhecido, verificado às $1 ({t:$2})"], ["^Last change at the site: (.+) \\((.+)\\)$", "Laatste wijziging op de locatie: $1 ({t:$2})", "Última alteração no local: $1 ({t:$2})"], ["^(\\d+) min ago$", "$1 min geleden", "há $1 min"], ["^(\\d+) h (\\d+) min ago$", "$1 u $2 min geleden", "há $1 h $2 min"], ["^(\\d+) h ago$", "$1 u geleden", "há $1 h"], ["^All in use since (.+)$", "Alles bezet sinds $1", "Tudo ocupado desde $1"], ["^\\((.+)\\)$", "({t:$1})", "({t:$1})"], ["^, no change since (.+) \\((.+)\\)$", ", geen wijziging sinds $1 ({t:$2})", ", sem alterações desde $1 ({t:$2})"], ["^Last full at (.+) \\((.+)\\)\\.$", "Laatst vol om $1 ({t:$2}).", "Esteve cheio pela última vez às $1 ({t:$2})."], ["^Checked (\\d+) s ago · next update in (.+)$", "$1 s geleden gecontroleerd · volgende update over $2", "Verificado há $1 s · próxima atualização daqui a $2"], ["^Checked (.+) ago · next update in (.+)$", "$1 geleden gecontroleerd · volgende update over $2", "Verificado há $1 · próxima atualização daqui a $2"], ["^Updated less than a minute ago · next in (.+)$", "Minder dan een minuut geleden bijgewerkt · volgende over $1", "Atualizado há menos de um minuto · próxima daqui a $1"], ["^France checked (.+) ago · next update in (.+)$", "Frankrijk {t:$1} geleden gecontroleerd · volgende update over $2", "França verificada há {t:$1} · próxima atualização daqui a $2"], ["^France paused after an error · next update in (.+)$", "Frankrijk gepauzeerd na een fout · volgende update over $1", "França em pausa após um erro · próxima atualização daqui a $1"], ["^France couldn’t be updated; paused for (\\d+) min$", "Frankrijk kon niet worden bijgewerkt; $1 min gepauzeerd", "Não foi possível atualizar a França; em pausa durante $1 min"], ["^Belgium: still checking (.+) · one site at a time$", "België: nog bezig met $1 · één locatie tegelijk", "Bélgica: ainda a verificar $1 · um local de cada vez"], ["^Belgium: checking (\\d+) stalls? · about (.+)$", "België: $1 laadpunt(en) controleren · ongeveer $2", "Bélgica: a verificar $1 posto(s) · cerca de $2"], ["^(\\d+) fast stalls · tap to check$", "$1 snellaadpunten · tik om te controleren", "$1 postos rápidos · toque para verificar"], ["^(\\d+) of (\\d+) stalls without live status$", "$1 van $2 laadpunten zonder live status", "$1 de $2 postos sem estado em direto"], ["^(\\d+) not checked$", "$1 niet gecontroleerd", "$1 não verificados"], ["^(\\d+) without live status$", "$1 zonder live status", "$1 sem estado em direto"], ["^(\\d+)(st|nd|rd|th) exit$", "$1e afslag", "$1.ª saída"], ["^(\\d+) min$", "$1 min", "$1 min"], ["^(\\d+) min old · tap to retry$", "$1 min oud · tik om opnieuw te proberen", "$1 min de idade · toque para tentar novamente"], ["^(.+) km off route$", "$1 km van de route", "$1 km fora do percurso"], ["^Trial: (\\d+) days? and (\\d+) routes? left · live status in the Netherlands only$", "Proef: nog $1 dag(en) en $2 route(s) · live status alleen in Nederland", "Experiência: faltam $1 dia(s) e $2 percurso(s) · estado em direto só nos Países Baixos"], ["^· (\\d+) days? · (\\d+) routes? left$", "· nog $1 dag(en) · $2 route(s)", "· faltam $1 dia(s) · $2 percurso(s)"], ["^· (\\d+) days? and (\\d+) routes? left$", "· nog $1 dag(en) en $2 route(s)", "· faltam $1 dia(s) e $2 percurso(s)"], ["^Live status in the Netherlands · full access via the start screen$", "Live status in Nederland · volledige toegang via het startscherm", "Estado em direto nos Países Baixos · acesso completo no ecrã inicial"], ["^Thanks for trying EVailability! You can extend it once by (\\d+) days? and (\\d+) routes, or ask for a full key\\.$", "Bedankt voor het proberen van EVailability! Je kunt de proefperiode één keer verlengen met $1 dag en $2 routes, of een volledige sleutel aanvragen.", "Obrigado por experimentar o EVailability! Pode prolongá-lo uma vez por $1 dia e $2 percursos, ou pedir uma chave completa."], ["^(.+) Your request for full access is waiting; this app opens again by itself once it’s approved\\.$", "{t:$1} Je aanvraag voor volledige toegang staat open; de app opent vanzelf weer zodra die is goedgekeurd.", "{t:$1} O seu pedido de acesso completo está pendente; a app volta a abrir sozinha quando for aprovado."], ["^(.+) Ask the person who gave it to you for a new one\\.$", "{t:$1} Vraag degene die hem je gaf om een nieuwe.", "{t:$1} Peça uma nova a quem lha deu."], ["^Couldn’t compare routes \\((.+)\\)\\. Planned the fastest\\.$", "Routes vergelijken mislukt ({t:$1}). De snelste is gepland.", "Não foi possível comparar percursos ({t:$1}). Foi planeado o mais rápido."], ["^Couldn’t replan: (.+)$", "Opnieuw plannen mislukt: {t:$1}", "Não foi possível voltar a planear: {t:$1}"], ["^Couldn’t reroute: (.+)$", "Nieuwe route mislukt: {t:$1}", "Não foi possível recalcular: {t:$1}"], ["^New route around (.+)\\.$", "Nieuwe route om {t:$1} heen.", "Novo percurso a contornar {t:$1}."], ["^Planning a route around (.+)…$", "Route om {t:$1} heen plannen…", "A planear um percurso a contornar {t:$1}…"], ["^No way around (.+) found\\. The route still goes through\\.$", "Geen weg om {t:$1} heen gevonden. De route gaat er nog doorheen.", "Não foi encontrada alternativa a {t:$1}. O percurso continua a passar por lá."], ["^Couldn’t plan a route around (.+)\\. Try again in a moment\\.$", "Kon geen route om {t:$1} heen plannen. Probeer het zo opnieuw.", "Não foi possível planear um percurso a contornar {t:$1}. Tente daqui a pouco."], ["^this closure$", "deze afsluiting", "este corte"], ["^these closures$", "deze afsluitingen", "estes cortes"], ["^the closure$", "de afsluiting", "o corte"], ["^(\\d+) closures$", "$1 afsluitingen", "$1 cortes"], ["^(.+) closed$", "$1 afgesloten", "$1 cortada"], ["^until (.+)$", "tot $1", "até $1"], ["^from (.+) to (.+)$", "van $1 tot $2", "de $1 até $2"], ["^Add (\\d+) and replan$", "$1 toevoegen en opnieuw plannen", "Adicionar $1 e voltar a planear"], ["^No more easy-to-reach chargers\\. (\\d+) that needs? a longer detour (?:is|are) hidden\\.$", "Geen makkelijk bereikbare laders meer. $1 met langer omrijden verborgen.", "Não há mais carregadores de fácil acesso. $1 com desvio maior ocultos."], ["^(\\d+) Ionity sites? along the way$", "$1 Ionity-locatie(s) onderweg", "$1 local(is) Ionity pelo caminho"], ["^Via (.+) \\(your via point\\)$", "Via $1 (jouw viapunt)", "Por $1 (o seu ponto intermédio)"], ["^The route service \\(openrouteservice\\) isn’t answering properly right now \\((\\d+)\\)\\. It’s usually back within a few minutes; try again then\\.$", "De routeservice (openrouteservice) reageert nu niet goed ($1). Meestal werkt het binnen een paar minuten weer; probeer het dan opnieuw.", "O serviço de rotas (openrouteservice) não está a responder bem neste momento ($1). Normalmente volta dentro de alguns minutos; tente nessa altura."], ["^Probably not live: no change at the site for (\\d+) h\\. Last reported (\\d+) of (\\d+) free$", "Waarschijnlijk niet live: $1 u geen wijziging op de locatie. Laatst gemeld $2 van $3 vrij", "Provavelmente não está em direto: sem alterações no local há $1 h. Último registo: $2 de $3 livres"], ["^The source last reported (\\d+) of (\\d+) free, but nothing has changed at the site since (.+) \\((.+)\\)\\. The real state is unknown\\.$", "De bron meldde laatst $1 van $2 vrij, maar er is sinds $3 ({t:$4}) niets veranderd op de locatie. De werkelijke stand is onbekend.", "A fonte registou por último $1 de $2 livres, mas nada mudou no local desde $3 ({t:$4}). O estado real é desconhecido."], ["^(.+)\\. Tap to update$", "$1. Tik om bij te werken", "$1. Toque para atualizar"], ["^Beyond an exit, on the (left|right)$", "Na een afrit, aan de {t:$1}", "Depois de uma saída, à {t:$1}"], ["^left$", "linkerkant", "esquerda"], ["^right$", "rechterkant", "direita"], ["^\\+(\\d+) min detour(.*)$", "+$1 min omrijden$2", "+$1 min de desvio$2"], ["^(\\d+) minutes extra to get there and back$", "$1 minuten extra heen en terug", "$1 minutos extra para ir e voltar"], ["^Detours: (.+)$", "Omrijden: $1", "Desvios: $1"], ["^(\\d+) of (\\d+)$", "$1 van $2", "$1 de $2"]];
 // Help manual and intro texts in Dutch and Portuguese (pt-PT). Same structure as the English ones;
 // the ${…} bits (rings, marks, settings) are filled in the same way.
 const HELP_I18N = {
@@ -2189,6 +2228,7 @@ const HELP_I18N = {
     <li>Je <b>viapunten</b> (een wit bolletje met een blauwe rand) en <b>grenzen</b> (de vlag van het nieuwe land) staan op de lijn, met de afstand en tijd ernaartoe. Grenzen alleen als alle wegen getoond worden; viapunten altijd.</li>
     <li><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent.</li>
     <li><b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps, Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
+    <li>Voor Ionity in Nederland, Frankrijk en Portugal toont dezelfde kaart <b>vrije laders door de dag</b>: een groene lijn voor vandaag en een stippellijn voor dezelfde dag vorige week, met het drukste en het meest vrije uur van die dag. Zo zie je wanneer een locatie meestal rustig is.</li>
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
     <li>Het scherm blijft aan tijdens het rijden. ${screenAwake() ? "" : "Op dit moment kan het uitgaan: tik tijdens het rijden één keer op het scherm. "}Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
     <li>Als je aankomt, is er een klein feestje.</li>
@@ -2273,6 +2313,7 @@ const HELP_I18N = {
     <li>Os seus <b>pontos intermédios</b> (um ponto branco com contorno azul) e as <b>fronteiras</b> (a bandeira do novo país) aparecem na linha, com a distância e o tempo até lá. As fronteiras só aparecem com todas as estradas visíveis; os pontos intermédios sempre.</li>
     <li><b>Toque no destino</b> para comparar outros percursos a partir de onde está.</li>
     <li><b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
+    <li>Para a Ionity nos Países Baixos, em França e em Portugal, o mesmo cartão mostra os <b>carregadores livres ao longo do dia</b>: uma linha verde para hoje e uma linha tracejada para o mesmo dia da semana passada, com a hora mais ocupada e a mais livre desse dia. Assim vê quando um local costuma estar calmo.</li>
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
     <li>O ecrã mantém-se ligado enquanto conduz. ${screenAwake() ? "" : "Neste momento pode desligar-se: toque uma vez no ecrã durante a condução. "}Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
     <li>Quando chega, há uma pequena celebração.</li>
@@ -3398,6 +3439,7 @@ async function refreshMe() {
       localStorage.setItem(DEBUG_ALLOWED_KEY, me.debug ? "1" : "0");
       me.name ? localStorage.setItem(ACCESS_NAME_KEY, me.name) : localStorage.removeItem(ACCESS_NAME_KEY);
       me.trial ? localStorage.setItem(TRIAL_KEY, JSON.stringify(me.trial)) : localStorage.removeItem(TRIAL_KEY);
+      if (Array.isArray(me.occBrands)) localStorage.setItem(OCC_BRANDS_KEY, JSON.stringify(me.occBrands));
       if (typeof me.deletePending === "boolean") me.deletePending ? localStorage.setItem(DELETE_PENDING, "1") : localStorage.removeItem(DELETE_PENDING);
       if (!me.trial && localStorage.getItem(UPGRADE_ASKED)) { localStorage.removeItem(UPGRADE_ASKED); localStorage.removeItem(ASK_KEY); }
     } catch (_) {}
@@ -5216,6 +5258,7 @@ function openNavSheet(ids) {
   $("navAddr").hidden = !addr;
   $("navHist").innerHTML = historyHtml(members);
   $("navHist").hidden = !$("navHist").innerHTML;
+  renderOcc(members, ids);
   navTarget.ids = ids;
   // How the name was chosen: only with the debug line on (Help), it's for tuning, not for driving.
   $("navSrc").innerHTML = debugOn() ? nameSourceHtml(members, label) + statusDebugHtml(members) : "";
@@ -5226,6 +5269,152 @@ function openNavSheet(ids) {
     (navigator.share ? `<button type="button" class="navbtn" data-nav="share"><span class="ico" style="background:var(--muted)">↗</span>Share…</button>` : "");
   $("navBackdrop").hidden = false;
   $("navSheet").hidden = false;
+}
+// ---- Occupancy through the day (0.37): in the press-and-hold card, how many chargers were free every
+// 15 minutes today (green, up to now) against the same day last week (dashed, the whole day), like
+// ParkPilot's "previous weeks" line. The data comes from the GitHub job Occupancy (every 15 min, kept 8
+// days) through the Worker's GET /occupancy; only for the brands the usage page follows (from /me) in
+// NL, FR and PT. Kept in memory and on the device (evailability-occ, 24 h); refetched after 10 min.
+const OCC_BRANDS_KEY = "evailability-occ-brands";
+const OCC_KEY = "evailability-occ";
+const OCC_COUNTRIES = ["NL", "FR", "PT"];
+const OCC_FRESH_MS = 10 * 60000;
+const OCC_ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz";
+const occMem = new Map(); // key -> {at, data, ok, loading}
+function occBrands() {
+  try { const v = JSON.parse(localStorage.getItem(OCC_BRANDS_KEY) || "null"); if (Array.isArray(v)) return v; } catch (_) {}
+  return ["ionity"];
+}
+const occKey = (m) => `${brandKey(m)}:${(+m.lat).toFixed(4)},${(+m.lon).toFixed(4)}`;
+function occEntry(key) {
+  if (occMem.has(key)) return occMem.get(key);
+  try {
+    const all = JSON.parse(localStorage.getItem(OCC_KEY) || "{}");
+    const e = all[key];
+    if (e && Date.now() - e.at < 24 * 3600000) { occMem.set(key, { ...e, ok: true }); return occMem.get(key); }
+  } catch (_) {}
+  return null;
+}
+function occStore(key, entry) {
+  occMem.set(key, entry);
+  try {
+    const all = JSON.parse(localStorage.getItem(OCC_KEY) || "{}");
+    all[key] = { at: entry.at, data: entry.data };
+    const keep = Object.entries(all).filter(([, e]) => Date.now() - e.at < 24 * 3600000).sort((a, b) => b[1].at - a[1].at).slice(0, 30);
+    localStorage.setItem(OCC_KEY, JSON.stringify(Object.fromEntries(keep)));
+  } catch (_) {}
+}
+async function loadOcc(m, key) {
+  const prev = occEntry(key);
+  if (prev?.loading) return;
+  occMem.set(key, { ...(prev || {}), loading: true });
+  try {
+    const data = await api(`/occupancy?lat=${(+m.lat).toFixed(5)}&lon=${(+m.lon).toFixed(5)}&brand=${encodeURIComponent(brandKey(m))}`, null, 15000, false);
+    occStore(key, { at: Date.now(), data, ok: true });
+  } catch (e) {
+    occMem.set(key, { ...(prev || {}), loading: false, ok: false, failedAt: Date.now() });
+  }
+}
+// Date (YYYY-MM-DD) and minutes since midnight at the site, in its own time zone.
+function occClock(tz, t = Date.now()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: tz || "Europe/Amsterdam", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(new Date(t)).map((p) => [p.type, p.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, min: +parts.hour * 60 + +parts.minute };
+}
+function occDayBefore(date, days) {
+  const [y, mo, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, mo - 1, d - days)).toISOString().slice(0, 10);
+}
+const occVals = (str) => [...(str || "")].map((c) => { const i = OCC_ALPHA.indexOf(c); return i < 0 ? null : i; });
+// Busiest and quietest hour of a day (free share per hour, at least 2 of its 4 readings), between 06:00
+// and 23:00: at night most sites are empty, which says nothing useful about when to go.
+function occPeaks(vals, total) {
+  const hours = [];
+  for (let h = 6; h < 23; h++) {
+    const v = vals.slice(h * 4, h * 4 + 4).filter((x) => x != null);
+    if (v.length >= 2) hours.push({ h, f: v.reduce((a, b) => a + b, 0) / v.length / Math.max(1, total) });
+  }
+  if (hours.length < 9) return null;
+  const busy = hours.reduce((a, b) => (b.f < a.f ? b : a)), quiet = hours.reduce((a, b) => (b.f > a.f ? b : a));
+  return busy.f < quiet.f ? { busy: busy.h, quiet: quiet.h } : null;
+}
+function occSvg(today, week, total, nowSlot, slots) {
+  const W = 320, H = 118, L = 18, R = 6, T = 8, B = 100;
+  const top = Math.max(1, total, ...today.filter((v) => v != null), ...week.filter((v) => v != null));
+  const x = (i) => L + (i / slots) * (W - L - R);
+  const y = (v) => B - (v / top) * (B - T);
+  // Step lines, broken where a reading is missing.
+  const steps = (vals, upto) => {
+    let d = "", prev = null;
+    for (let i = 0; i < Math.min(vals.length, upto); i++) {
+      const v = vals[i];
+      if (v == null) { prev = null; continue; }
+      d += prev == null ? `M${x(i).toFixed(1)} ${y(v).toFixed(1)}` : `V${y(v).toFixed(1)}`;
+      d += `H${x(i + 1).toFixed(1)}`;
+      prev = v;
+    }
+    return d;
+  };
+  const area = (vals, upto) => {
+    let d = "", run = [];
+    const flush = () => {
+      if (!run.length) return;
+      d += `M${x(run[0][0]).toFixed(1)} ${B}` + run.map(([i, v]) => `V${y(v).toFixed(1)}H${x(i + 1).toFixed(1)}`).join("") + `V${B}Z`;
+      run = [];
+    };
+    for (let i = 0; i < Math.min(vals.length, upto); i++) vals[i] == null ? flush() : run.push([i, vals[i]]);
+    flush();
+    return d;
+  };
+  const upto = Math.min(slots, nowSlot + 1);
+  const grid = [0, top].map((v) => `<line class="occ-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="occ-lbl" x="${L - 4}" y="${y(v) + 3}" text-anchor="end">${v}</text>`).join("");
+  const ticks = [0, 6, 12, 18, 24].map((h) => `<text class="occ-lbl" x="${x(h * slots / 24)}" y="${H - 4}" text-anchor="${h === 0 ? "start" : h === 24 ? "end" : "middle"}">${String(h).padStart(2, "0")}</text>`).join("");
+  const now = `<line class="occ-now" x1="${x(upto)}" x2="${x(upto)}" y1="${T - 2}" y2="${B}"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-hidden="true">${grid}${ticks}<path class="occ-area" d="${area(today, upto)}"/><path class="occ-week" d="${steps(week, slots)}"/><path class="occ-today" d="${steps(today, upto)}"/>${now}</svg>`;
+}
+function occHtml(m, entry, many) {
+  const logo = many ? logoHtml(brandKey(m)) : "";
+  const head = (note) => `<div class="occ-head"><span>${logo}<b>Free chargers through the day</b></span>${note ? `<span class="muted">${note}</span>` : ""}</div>`;
+  const d = entry?.data;
+  if (!d) return entry?.ok === false ? head("") + `<span class="occ-note">Not available right now.</span>` : head("") + `<span class="occ-note">Loading…</span>`;
+  if (!d.ok) return d.reason === "no data" ? head("") + `<span class="occ-note">No readings for this site yet.</span>` : "";
+  const slotMin = d.slotMin || 15, slots = Math.round(1440 / slotMin);
+  const clock = occClock(d.tz);
+  const lastWeek = occDayBefore(clock.date, 7);
+  const today = occVals(d.days?.[clock.date]), week = occVals(d.days?.[lastWeek]);
+  const nowSlot = Math.floor(clock.min / slotMin);
+  const total = d.total || 0;
+  const hasWeek = week.some((v) => v != null);
+  const old = !entry.ok || Date.now() - entry.at > OCC_FRESH_MS + 5 * 60000;
+  const t = clockAndAgo(d.at);
+  const localTz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (_) { return ""; } })();
+  const otherTz = d.tz && localTz && occClock(d.tz).min !== occClock(localTz).min;
+  const hm = (h) => `${String(h).padStart(2, "0")}:00`;
+  const peaks = hasWeek ? occPeaks(week, total) : null;
+  const notes = [];
+  if (peaks) notes.push(`<span class="occ-note">Same day last week: <b>busiest around ${hm(peaks.busy)}</b>, <b>most free around ${hm(peaks.quiet)}</b>.</span>`);
+  if (!hasWeek) notes.push(`<span class="occ-note">The dashed line for the same day last week appears once a week of readings has been collected.</span>`);
+  if (otherTz) notes.push(`<span class="occ-note">Times are local time at the site.</span>`);
+  return head(t ? `${t.clock}` : "") + occSvg(today, week, total, nowSlot, slots) +
+    `<div class="occ-legend"><span><i></i>Today</span>${hasWeek ? `<span><i class="wk"></i>Same day last week</span>` : ""}</div>` + notes.join("");
+}
+function renderOcc(members, ids) {
+  const box = $("navOcc");
+  const follow = occBrands();
+  const list = members.filter((m) => follow.includes(brandKey(m)) && OCC_COUNTRIES.includes(m.country) && !m.liveDup);
+  if (!list.length) { box.hidden = true; box.innerHTML = ""; return; }
+  let anyOld = false;
+  const parts = list.map((m) => {
+    const key = occKey(m), e = occEntry(key);
+    if ((!e || (!e.loading && Date.now() - (e.at || 0) > OCC_FRESH_MS && Date.now() - (e.failedAt || 0) > 60000))) {
+      loadOcc(m, key).then(() => { if (!$("navSheet").hidden && navTarget?.ids === ids) renderOcc(members, ids); });
+    }
+    if (e && e.ok === false && e.data) anyOld = true;
+    return occHtml(m, occEntry(key), list.length > 1);
+  }).filter(Boolean);
+  box.innerHTML = parts.join(`<div style="height:10px"></div>`);
+  box.classList.toggle("old", anyOld);
+  box.hidden = !box.innerHTML;
 }
 // How likely you can charge on arrival: since when it's full, or when it was last full.
 // "since" times come from the operator's data where it has them, otherwise from what this app saw.
@@ -6725,6 +6914,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.37", date: "2026-11-24", title: { en: "Free chargers through the day", nl: "Vrije laders door de dag", pt: "Carregadores livres ao longo do dia" },
+    items: { en: ["Press and hold an Ionity charger in the Netherlands, France or Portugal: the card shows how many chargers were free every 15 minutes today, against the same day last week as a dashed line, and the busiest and most free hour. The line for last week fills in over the coming week."],
+      nl: ["Houd een Ionity-lader in Nederland, Frankrijk of Portugal ingedrukt: de kaart toont hoeveel laders er vandaag elk kwartier vrij waren, met dezelfde dag vorige week als stippellijn, en het drukste en meest vrije uur. De lijn van vorige week vult zich de komende week."],
+      pt: ["Mantenha premido um carregador Ionity nos Países Baixos, em França ou em Portugal: o cartão mostra quantos carregadores estiveram livres a cada 15 minutos hoje, com o mesmo dia da semana passada em linha tracejada, e a hora mais ocupada e a mais livre. A linha da semana passada vai ficando completa ao longo da próxima semana."] } },
   { v: "0.36", date: "2026-11-24", title: { en: "Three Dutch brands", nl: "Drie Nederlandse merken", pt: "Três marcas neerlandesas" },
     items: { en: ["Essent (the former bp pulse fast chargers), Vattenfall InCharge and Eneco can now be picked under the Dutch flag, with live availability in the Netherlands. Only their fast chargers are shown."],
       nl: ["Essent (de vroegere snelladers van bp pulse), Vattenfall InCharge en Eneco kun je nu kiezen onder de Nederlandse vlag, met live beschikbaarheid in Nederland. Alleen hun snelladers worden getoond."],
@@ -6971,6 +7164,7 @@ function helpHtml() {
     <li>Your <b>via points</b> (a white dot with a blue ring) and <b>borders</b> (the new country's flag) sit on the line, with the distance and time to them. Borders only show with every road shown; via points always.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
     <li><b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps, Waze or Flitsmeister, or copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
+    <li>For Ionity in the Netherlands, France and Portugal, the same card shows <b>free chargers through the day</b>: a green line for today and a dashed line for the same day last week, with the busiest and most free hour of that day. It tells you when a site is usually quiet.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${screenAwake() ? "" : "Right now it may turn off: tap the screen once while driving. "}If it still turns off, check that Low Power Mode is off.</li>
     <li>When you arrive, there's a small celebration.</li>

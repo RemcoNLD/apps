@@ -25,6 +25,8 @@
 //                               ?part=request|app|ors for one part (ors = the routing service's raw answer)
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /closures/schedule     hours between road-closure updates (read by the GitHub job .github/workflows/closures.yml)
+//   GET  /occupancy/config      public: occupancy on/off, followed brands and their name patterns (read by occupancy.yml)
+//   GET  /occupancy?lat=&lon=&brand=  free chargers per 15 min over the last 8 days at the nearest followed site (branch occ)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /admin/timer           the 5-minute timer that starts GitHub jobs: its state (POST: check the GitHub App now)
 //   GET  /admin/push            push notifications for the usage page: public key, subscriptions (POST: subscribe, unsubscribe, test)
@@ -70,7 +72,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.9.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.10.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -345,6 +347,10 @@ const SETTINGS = [
     help: "Sites Open Charge Map doesn't have, found in NDW's live data along the route." },
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
     help: "Empty: found automatically. Only fill in if that lookup fails." },
+  { key: "occupancy", type: "bool", label: "Occupancy through the day", def: () => true,
+    help: "On: the GitHub job Occupancy (occupancy.yml) notes every 15 minutes how many chargers are free at the followed brands' sites (NL from NDW, FR and PT from their snapshots) and keeps 8 days on the branch occ; the app's charger card shows today against the same day last week. No KV writes. Off: the timer stops starting it and the job writes nothing (the stored days stay)." },
+  { key: "occupancyBrands", type: "text", label: "Occupancy: brands", def: () => "ionity",
+    help: "Brand keys to follow, separated by commas (e.g. ionity, fastned, tesla), or all. More brands means more NDW calls per run (one small call per Dutch site area) and more data; KV writes stay zero." },
   { key: "closuresHours", type: "choice", options: [6, 12, 24, 48], label: "Road closures: hours between updates", def: () => 12,
     help: "How often the GitHub job fetches planned closures (NL, DE). It wakes every 6 hours and skips until this much time has passed; Run workflow on GitHub always updates." },
 ];
@@ -1205,6 +1211,61 @@ async function ndwFeaturesNear(lat, lon, dLat = 0.004, dLon = 0.006) {
     const data = await fetchJson(`${NDW_BBOX}?bbox=${bbox}`, { headers: { Accept: "application/json" } }, "NDW");
     return data.features || [];
   } finally { ndwDone(); }
+}
+
+// ---------------------------------------------------------------- occupancy through the day (Worker 0.10.0)
+// The GitHub job occupancy.yml notes every 15 minutes how many chargers are free at the followed brands'
+// sites and keeps 8 days on the branch "occ", in tiles of 1 x 1 degree (t_<floor lat>_<floor lon>.json:
+// {at, slotMin, sites: {key: {b, cc, tz, lat, lon, n, t, d: {date: 96 characters}}}}; 0-9, a-z = free,
+// "." = no reading). Read like the France and Portugal snapshots: the branch's commit from git's ref
+// list, then the raw file at that commit, at most once per 5 minutes per tile per Worker copy. No KV.
+const OCC_KEEP_DAYS = 8;
+const OCC_RAW_AT = (sha, tile) => `https://raw.githubusercontent.com/RemcoNLD/apps/${sha}/${tile}`;
+function occBrands(env) {
+  if (!setting(env, "occupancy")) return [];
+  const raw = String(setting(env, "occupancyBrands") || "ionity").toLowerCase();
+  if (raw.trim() === "all") return BRANDS.map((b) => b.key);
+  const keys = raw.split(/[\s,;]+/).filter((k) => BRAND[k]);
+  return keys.length ? [...new Set(keys)] : ["ionity"];
+}
+const occTileName = (lat, lon) => `t_${Math.floor(lat)}_${Math.floor(lon)}.json`;
+async function occTile(tile) {
+  const memo = memoGet(`occ:${tile}`);
+  if (memo !== undefined) return memo;
+  const promise = (async () => {
+    countCall("Occupancy");
+    const sha = await liveSha("occ");
+    const res = await fetch(OCC_RAW_AT(sha, tile), { cf: { cacheTtl: 3600 } });
+    if (res.status === 404) return null; // nothing followed in this tile
+    if (!res.ok) throw new HttpError(502, `Occupancy: HTTP ${res.status}`);
+    return await res.json();
+  })();
+  memoSet(`occ:${tile}`, promise, 5 * 60 * 1000);
+  promise.catch(() => memoSet(`occ:${tile}`, undefined, 1));
+  return promise;
+}
+async function handleOccupancy(request, env, url) {
+  const lat = Number(url.searchParams.get("lat")), lon = Number(url.searchParams.get("lon"));
+  const brand = String(url.searchParams.get("brand") || "ionity");
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) throw new HttpError(400, "Add ?lat=&lon=&brand=");
+  if (!occBrands(env).includes(brand)) return json(request, { ok: false, reason: "not followed" });
+  // The site may sit just over a tile edge from the pin: look in every tile within ~700 m.
+  const tiles = new Set();
+  for (const dy of [-0.007, 0, 0.007]) for (const dx of [-0.01, 0, 0.01]) tiles.add(occTileName(lat + dy, lon + dx));
+  let best = null, at = null, slotMin = 15;
+  for (const t of tiles) {
+    const data = await occTile(t);
+    if (!data) continue;
+    at = data.at; slotMin = data.slotMin || 15;
+    for (const [key, s] of Object.entries(data.sites || {})) {
+      if (s.b !== brand) continue;
+      const d = haversineKm([s.lon, s.lat], [lon, lat]);
+      if (d <= 0.6 && (!best || d < best.d)) best = { d, key, s };
+    }
+  }
+  if (!best) return json(request, { ok: false, reason: "no data", at });
+  const s = best.s;
+  return json(request, { ok: true, at, slotMin, key: best.key, name: s.n, total: s.t, cc: s.cc, tz: s.tz, days: s.d });
 }
 
 // ---------------------------------------------------------------- live status (AT)
@@ -2973,7 +3034,7 @@ async function handleDebugRoute(request, env, id, part) {
   });
 }
 
-const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/admin/timer", "/admin/push", "/admin/alerts", "/closures/schedule"]);
+const PUBLIC_PATHS = new Set(["/", "/unlock", "/service-status", "/self-service", "/request", "/request/status", "/trial/extend", "/contact", "/contact/cancel-delete", "/request/withdraw", "/brands", "/admin/usage", "/admin/settings", "/admin/users", "/admin/timer", "/admin/push", "/admin/alerts", "/closures/schedule", "/occupancy/config"]);
 function elfProef(code) {
   const d = String(code || "").replace(/[\s.\-]/g, "");
   if (!/^\d{9}$/.test(d) || /^0+$/.test(d)) return false;
@@ -3523,7 +3584,7 @@ async function route(request, env) {
     const deletePending = who && who.id !== "legacy" && who.id !== "admin"
       ? (await loadMessages(env)).some((m) => !m.done && m.kind === "delete" && m.userId === who.id) : false;
     return json(request, { name: who?.name || null, debug: !!who?.debug, legacy: who?.id === "legacy", deletePending,
-      trial: who?.trial ? trialInfo(who.trial) : null });
+      trial: who?.trial ? trialInfo(who.trial) : null, occBrands: occBrands(env) });
   }
 
   if (path === "/" && request.method === "GET") {
@@ -3548,6 +3609,13 @@ async function route(request, env) {
     const h = Number(setting(env, "closuresHours"));
     return json(request, { hours: [6, 12, 24, 48].includes(h) ? h : 12 }); // an old saved "Off" (0) counts as 12
   }
+  if (path === "/occupancy/config" && request.method === "GET") {
+    // Public on purpose: on/off and brand name patterns only, for the GitHub job (no secrets there).
+    const keys = occBrands(env);
+    return json(request, { on: keys.length > 0, keepDays: OCC_KEEP_DAYS,
+      brands: keys.map((k) => ({ key: k, live: BRAND[k].live.source, evse: BRAND[k].evse.source })) });
+  }
+  if (path === "/occupancy" && request.method === "GET") return handleOccupancy(request, env, url);
   if (path === "/admin/usage" && request.method === "GET") return handleUsage(request, env);
   if (path === "/admin/settings" && (request.method === "GET" || request.method === "POST")) return handleSettings(request, env);
   if (path === "/admin/users" && (request.method === "GET" || request.method === "POST")) return handleUsers(request, env);
@@ -3901,7 +3969,7 @@ function noteJob(state, job, ok, msg) {
   state[job] = { ...prev, ok, msg, since: changed ? now : prev.since || now };
   return changed;
 }
-const TIMER_JOBS = { pt: "Portugal live", fr: "France live", closures: "Road closures" };
+const TIMER_JOBS = { pt: "Portugal live", fr: "France live", closures: "Road closures", occ: "Occupancy" };
 async function runTimer(env, at = Date.now()) {
   await loadSettings(env);
   const state = await loadTimer(env);
@@ -3940,6 +4008,16 @@ async function runTimer(env, at = Date.now()) {
       save = noteJob(state, "closures", false, e.message) || save;
       console.log("Timer: Road closures", e.message);
     }
+    // Occupancy through the day: one reading per 15 minutes (the job's own schedule is the backup).
+    if (setting(env, "occupancy")) {
+      try {
+        await startWorkflow(env, "occupancy.yml");
+        save = noteJob(state, "occ", true, "starts every 15 minutes") || save;
+      } catch (e) {
+        save = noteJob(state, "occ", false, e.message) || save;
+        console.log("Timer: Occupancy", e.message);
+      }
+    }
     // Failed GitHub runs (also ones the timer didn't start: deploys, pushes, GitHub's own schedule).
     try { save = (await checkWorkflowRuns(env, state)) || save; }
     catch (e) { console.log("Timer: workflow runs", e.message); }
@@ -3968,10 +4046,10 @@ async function handleTimer(request, env) {
     const r = await ghCall(`/repos/${GH_REPO}/actions/workflows?per_page=50`, token);
     if (!r.ok) throw new Error(`The App can’t see the workflows (GitHub ${r.status}): give it Actions: Read and write`);
     const files = (r.data.workflows || []).map((w) => w.path.split("/").pop());
-    for (const f of ["pt-live.yml", "fr-live.yml", "closures.yml"]) {
+    for (const f of ["pt-live.yml", "fr-live.yml", "closures.yml", "occupancy.yml"]) {
       if (!files.includes(f)) throw new Error(`${f} isn’t in the repo`);
     }
-    steps.push("It can see Portugal live, France live and Road closures");
+    steps.push("It can see Portugal live, France live, Road closures and Occupancy");
     return json(request, { ok: true, steps, state });
   } catch (e) {
     return json(request, { ok: false, steps, error: e.message, state });
@@ -4008,7 +4086,7 @@ const ALERT_NAMES = {
   "api:/fr-status": "Live status France (old)", "api:/be-status": "Belgium: sites", "api:/be-evse": "Belgium: one stall",
   "api:/geocode": "Address search", "api:/detours": "Detour minutes", "api:/places": "Place names", "api:/ndw-sites": "Extra NL chargers",
   "api:/where": "Street and town", "svc:Routing": "openrouteservice: routes", "svc:Geocoder": "openrouteservice: addresses",
-  "svc:Matrix": "openrouteservice: detours", "job:pt": "Portugal live", "job:fr": "France live", "job:closures": "Road closures",
+  "svc:Matrix": "openrouteservice: detours", "job:pt": "Portugal live", "job:fr": "France live", "job:closures": "Road closures", "job:occ": "Occupancy",
   ors: "Route service notice",
 };
 const LIMIT_TARGETS = [
@@ -4177,6 +4255,7 @@ function evaluateAlerts(env, cfg, data, timerState, health, now, all = false) {
   };
   for (const [k, name] of Object.entries(TIMER_JOBS)) {
     if (k === "fr" && !setting(env, "frLive")) continue;
+    if (k === "occ" && !setting(env, "occupancy")) continue;
     const j = timerState[k];
     job(`job:${k}`, j?.ok === false, String(j?.msg || "Unknown error").slice(0, 180), j ? (j.ok ? `OK: ${j.msg || ""}` : `failing: ${j.msg || ""}`) : "no tick yet");
   }

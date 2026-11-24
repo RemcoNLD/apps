@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.40.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.40.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -5434,7 +5434,9 @@ function occSvg(today, week, total, nowSlot, slots, arr) {
 }
 // The last stretch with no charger free (0.40, replaces the note about the dashed line): today up to now,
 // else yesterday. A stretch still going on now reads "All in use since …". Missing readings end a stretch.
-function occLastFull(today, nowSlot, yday, slotMin) {
+// freeNow (0.40.1): the live status, when newer than the chart's last reading; a free charger there means
+// the stretch is over, so it reads "Last full at …" instead of contradicting the ring.
+function occLastFull(today, nowSlot, yday, slotMin, freeNow) {
   const hm = (slot) => { const m = slot * slotMin; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
   const last = (vals, upto) => {
     let end = -1;
@@ -5446,7 +5448,7 @@ function occLastFull(today, nowSlot, yday, slotMin) {
   };
   const t = last(today, nowSlot + 1);
   if (t) {
-    if (t.end === nowSlot || (t.end === nowSlot - 1 && today[nowSlot] == null)) return `All in use since ${hm(t.from)}`;
+    if (!(freeNow > 0) && (t.end === nowSlot || (t.end === nowSlot - 1 && today[nowSlot] == null))) return `All in use since ${hm(t.from)}`;
     return `Last full at ${hm(t.from)} for ${(t.end - t.from + 1) * slotMin} minutes.`;
   }
   const y = last(yday, yday.length);
@@ -5477,7 +5479,9 @@ function occHtml(m, entry, etaMin) {
   }
   const anyFull = today.slice(0, nowSlot + 1).includes(0) || week.includes(0);
   const notes = [];
-  const full = occLastFull(today, nowSlot, occVals(d.days?.[occDayBefore(clock.date, 1)]), slotMin);
+  const liveAt = m.statusAt || 0, readAt = Date.parse(d.at || "") || 0;
+  const freeNow = liveAt > readAt && m.status?.available != null ? m.status.available : null;
+  const full = occLastFull(today, nowSlot, occVals(d.days?.[occDayBefore(clock.date, 1)]), slotMin, freeNow);
   if (full) notes.push(`<span class="occ-note">${full}</span>`);
   if (peaks) notes.push(`<span class="occ-note">Same day last week: <b>busiest around ${hm(peaks.busy)}</b>, <b>most free around ${hm(peaks.quiet)}</b>.</span>`);
   if (otherTz) notes.push(`<span class="occ-note">Times are local time at the site.</span>`);

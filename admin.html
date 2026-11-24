@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.8.0"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.8.1"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -260,10 +260,10 @@ const COUNTER_GROUPS = [
     note: "NDW is open data (about 10 calls a second at most). Extra chargers: tiles along the route, cached a day for everyone (one KV write per new tile). Until Worker 0.13.0 both were counted together as NDW." },
   { title: "🇧🇪 Belgium", items: [["Eco-Movement BE", "Eco-Movement: stalls checked"], ["Belgium last known", "Last known stalls saved (KV writes)"], ["BE index", "Index loads (sites and extra chargers)"]],
     note: "Eco-Movement allows about one call per 10 s. The index is a file in the repo, loaded at most once a day per Worker copy." },
-  { title: "🇩🇪 Germany", items: [["MobiData BW", "MobiData BW: live status"], ["DE index", "Index loads (extra chargers, also Austria)"]],
+  { title: "🇩🇪 Germany", items: [["MobiData BW", "MobiData BW: live status"], ["DE index", "Index loads (extra chargers)"]],
     note: "MobiData BW (OCPDB) is open data. The index is built weekly by the GitHub job DE index from the same source." },
   { title: "🇦🇹 Austria", items: [["E-Control", "E-Control: live status"]],
-    note: "At most 4 Austrian sites per call. Extra Austrian chargers come from the Germany index (the sites MobiData BW holds)." },
+    note: "At most 4 Austrian sites per call. Austria has no second list of chargers yet: only Open Charge Map." },
   { title: "🇫🇷 France", items: [["FR live", "Snapshot reads (live status)"], ["PAN FR index", "Index loads (sites and extra chargers)"], ["PAN FR", "Old whole-file read (debug only)"]],
     note: "The snapshot is made every 5 minutes by the GitHub job France live; each Worker copy reads it at most once a minute. The old whole-file read (~9.5 MB) costs more CPU than the free plan allows per request." },
   { title: "🇵🇹 Portugal", items: [["PT live", "Snapshot reads (live status)"], ["PT index", "Index loads (sites and extra chargers)"]],
@@ -305,7 +305,7 @@ const QOS_NAMES = {
   "api:/plan": "Plan a route", "api:/alternatives": "Compare routes", "api:/status": "Live status (all countries but BE)",
   "api:/fr-status": "Live status France (old app copies)", "api:/be-status": "Belgium: sites", "api:/be-evse": "Belgium: one stall",
   "api:/geocode": "Address search", "api:/detours": "Detour minutes", "api:/places": "Place names", "api:/ndw-sites": "Extra chargers NL (NDW)",
-  "api:/extra-sites": "Extra chargers BE, FR, PT, DE, AT", "api:/where": "Street and town",
+  "api:/extra-sites": "Extra chargers BE, FR, PT, DE", "api:/where": "Street and town",
   "svc:Routing": "openrouteservice: routes", "svc:Geocoder": "openrouteservice: addresses", "svc:Matrix": "openrouteservice: detours",
   "svc:Nominatim": "Nominatim (backup search)", "svc:Open Charge Map": "Open Charge Map", "svc:NDW": "NDW live status (NL)",
   "svc:MobiData BW": "MobiData BW live status (DE)", "svc:E-Control": "E-Control live status (AT)",

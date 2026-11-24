@@ -76,7 +76,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.13.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.13.1"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -350,7 +350,7 @@ const SETTINGS = [
   { key: "ndwDiscovery", type: "bool", label: "Netherlands: extra chargers from NDW", def: (env) => env.NDW_DISCOVERY !== "off",
     help: "Sites Open Charge Map doesn't have, found in NDW's live data along the route." },
   { key: "indexDiscovery", type: "bool", label: "Other countries: extra chargers from the indexes", def: () => true,
-    help: "Sites Open Charge Map doesn't have, found in the country lists the Worker already keeps: Belgium, France and Portugal (their live-status indexes) and Germany with part of Austria (de-fast-sites.json, built weekly from MobiData BW by the GitHub job DE index). No calls to outside services, no KV writes." },
+    help: "Sites Open Charge Map doesn't have, found in the country lists the Worker already keeps: Belgium, France and Portugal (their live-status indexes) and Germany (de-fast-sites.json, built weekly from MobiData BW by the GitHub job DE index; it would also take Austrian sites, but OCPDB lists none of the app's brands there yet). No calls to outside services, no KV writes." },
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
     help: "Empty: found automatically. Only fill in if that lookup fails." },
   { key: "occupancy", type: "bool", label: "Occupancy through the day", def: () => true,
@@ -4256,7 +4256,7 @@ const ALERT_NAMES = {
   "api:/plan": "Plan a route", "api:/alternatives": "Compare routes", "api:/status": "Live status",
   "api:/fr-status": "Live status France (old)", "api:/be-status": "Belgium: sites", "api:/be-evse": "Belgium: one stall",
   "api:/geocode": "Address search", "api:/detours": "Detour minutes", "api:/places": "Place names", "api:/ndw-sites": "Extra NL chargers",
-  "api:/extra-sites": "Extra chargers (BE, FR, PT, DE)", "svc:NDW": "NDW live status (NL)", "svc:Open Charge Map": "Open Charge Map",
+  "api:/extra-sites": "Extra chargers BE, FR, PT, DE", "svc:NDW": "NDW live status (NL)", "svc:Open Charge Map": "Open Charge Map",
   "svc:MobiData BW": "MobiData BW live status (DE)", "svc:E-Control": "E-Control live status (AT)", "svc:Nominatim": "Nominatim (backup search)",
   "api:/where": "Street and town", "svc:Routing": "openrouteservice: routes", "svc:Geocoder": "openrouteservice: addresses",
   "svc:Matrix": "openrouteservice: detours", "job:pt": "Portugal live", "job:fr": "France live", "job:closures": "Road closures", "job:occ": "Occupancy",

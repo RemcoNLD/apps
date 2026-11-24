@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.41.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.41.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -3905,7 +3905,7 @@ function addFoundSite(x, id, country, source) {
 }
 
 // Second source outside the Netherlands (0.41): the Worker's country lists (Belgium, France, Portugal,
-// Germany with part of Austria) for sites Open Charge Map misses, such as Fastned Brecht Oost on the E19.
+// Germany) for sites Open Charge Map misses, such as Fastned Brecht Oost on the E19.
 // The Worker sends points along the route (one per km); they go back in pieces of 150 (the Worker's CPU limit).
 let extraRun = 0;
 const EXTRA_CHUNK = 150;
@@ -7053,9 +7053,9 @@ $("introNext").addEventListener("click", () => {
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
   { v: "0.41", date: "2026-11-24", title: { en: "Fewer missing chargers abroad", nl: "Minder ontbrekende laders in het buitenland", pt: "Menos carregadores em falta no estrangeiro" },
-    items: { en: ["Chargers that weren't on the list in Belgium, France, Germany, Austria and Portugal now show up too, such as Fastned Brecht Oost on the E19. They're filled in from the same sources as the live status, as the Netherlands already was."],
-      nl: ["Laders die nog niet in de lijst stonden in België, Frankrijk, Duitsland, Oostenrijk en Portugal komen er nu ook bij, zoals Fastned Brecht Oost aan de E19. Ze worden aangevuld uit dezelfde bronnen als de live status, zoals in Nederland al gebeurde."],
-      pt: ["Os carregadores que ainda não estavam na lista na Bélgica, França, Alemanha, Áustria e Portugal também aparecem agora, como a Fastned Brecht Oost na E19. São completados a partir das mesmas fontes do estado em direto, como já acontecia nos Países Baixos."] } },
+    items: { en: ["Chargers that weren't on the list in Belgium, France, Germany and Portugal now show up too, such as Fastned Brecht Oost on the E19. They're filled in from the same sources as the live status, as the Netherlands already was."],
+      nl: ["Laders die nog niet in de lijst stonden in België, Frankrijk, Duitsland en Portugal komen er nu ook bij, zoals Fastned Brecht Oost aan de E19. Ze worden aangevuld uit dezelfde bronnen als de live status, zoals in Nederland al gebeurde."],
+      pt: ["Os carregadores que ainda não estavam na lista na Bélgica, França, Alemanha e Portugal também aparecem agora, como a Fastned Brecht Oost na E19. São completados a partir das mesmas fontes do estado em direto, como já acontecia nos Países Baixos."] } },
   { v: "0.40", date: "2026-11-24", title: { en: "When it was last full", nl: "Wanneer hij laatst vol was", pt: "Quando esteve cheio pela última vez" },
     items: { en: ["Under the day chart: when the site was last full and for how long, instead of the note about the dashed line."],
       nl: ["Onder de daggrafiek: wanneer de locatie laatst vol was en hoe lang, in plaats van de uitleg over de stippellijn."],

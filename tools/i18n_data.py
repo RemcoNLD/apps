@@ -346,6 +346,8 @@ EXACT = {
 PATTERNS = [
 (r"^busiest around (\d\d:\d\d)$", "het drukst rond $1", "mais ocupado por volta das $1"),
 (r"^most free around (\d\d:\d\d)$", "het meest vrij rond $1", "mais livre por volta das $1"),
+(r"^Last full at (\d\d:\d\d) for (\d+) minutes\.$", "Laatst vol om $1 gedurende $2 minuten.", "Esteve cheio pela última vez às $1 durante $2 minutos."),
+(r"^Last full yesterday at (\d\d:\d\d) for (\d+) minutes\.$", "Gisteren laatst vol om $1 gedurende $2 minuten.", "Esteve cheio pela última vez ontem às $1 durante $2 minutos."),
 (r"^Arrive (.+)$", "Aankomst $1", "Chegada $1"),
 (r"^Signed in as (.+)$", "Ingelogd als $1", "Sessão iniciada como $1"),
 (r"^(\d+) of (\d+) free\.$", "$1 van $2 vrij.", "$1 de $2 livres."),

@@ -18,14 +18,17 @@ Sources (no keys needed):
       sites (nl-sites.json); the other runs ask a small box around each known site.
   FR  the France live snapshot (branch live-fr) with data/fr-fast-sites.json.
   PT  the Portugal live snapshot (branch live) with data/pt-fast-sites.json.
+  DE  MobiData BW's Open ChargePoint DataBase (the Worker's German source, AFIR data, all of Germany):
+      one call per followed brand with operator_name=<brand>, so the whole country in a few calls.
 
 Files written (in STATE_DIR):
   t_<floor lat>_<floor lon>.json  {v, at, slotMin, sites: {key: {b, cc, tz, lat, lon, n, t, d: {date: slots}}}}
       slots: 96 characters, one per 15 minutes of the site's local day (00:00 first):
       0-9 then a-z = number of free chargers (fast ones, the site's own count), "." = no reading.
       t = the site's latest total. Tiles of 1 x 1 degree keep each file small for the Worker.
-  nl-sites.json  {at, brands, sites: {ndwId: [brand, lat, lon, name]}}
-      (with 200+ followed NL sites every run is a full scan: 288 calls instead of a box per site)
+  nl-sites.json  {at, brands, scanCalls, sites: {ndwId: [brand, lat, lon, name]}}
+      (when a box per known site would take as many calls as the last full scan, scanCalls, every run
+      is a full scan instead)
   meta.json      {at, secs, sites per country, NDW calls, discovery or not}
 """
 import concurrent.futures
@@ -41,6 +44,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 from zoneinfo import ZoneInfo
 
 WORKER = "https://ionity.remco-dv.workers.dev"
@@ -48,14 +52,20 @@ NDW = "https://dotnl.ndw.nu/api/rest/geojson/dynamic-road-status/charge-point-da
 NL_BOX = (3.3, 50.7, 7.3, 53.6)          # lon/lat of the Netherlands, generously
 NDW_MAX = 1000                            # NDW answers at most this many features per call
 DISCOVER_H = 20                           # rescan the Netherlands for sites after this many hours
-SCAN_FROM = 200                           # following this many NL sites or more: a full scan each run is
-                                          # cheaper than a box per site (measured 24 Nov 2026: the whole
-                                          # country = 288 calls, all 1,556 fast sites = 1,184 boxes)
+SCAN_CALLS = 288                          # calls of a full NL scan (measured 24 Nov 2026), until a scan has
+                                          # counted its own: when the boxes per site would take as many, a
+                                          # full scan each run is cheaper (all 1,556 fast sites = 1,184 boxes)
+OCPDB = "https://api.mobidata-bw.de/ocpdb/api/public/v1/locations"
+OCPDB_MAX = 1000                          # the API's largest page
+# What to ask OCPDB's operator_name for, per brand key (a part of the operator's name); others: the key.
+DE_OPERATOR = {"ionity": "IONITY", "fastned": "Fastned", "enbw": "EnBW", "aral": "Aral", "tesla": "Tesla",
+               "shell": "Shell", "total": "Total", "allego": "Allego", "electra": "Electra",
+               "essent": "E.ON", "vattenfall": "Vattenfall", "eneco": "Eneco"}
 SLOT_MIN = 15
 SLOTS = 24 * 60 // SLOT_MIN
 ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz"
 FAST_KW = 50
-TZ = {"PT": "Europe/Lisbon"}               # everything else on Central European time
+TZ = {"PT": "Europe/Lisbon", "DE": "Europe/Berlin", "AT": "Europe/Vienna"}  # else Central European time
 DEFAULT_CONFIG = {"on": True, "keepDays": 8, "brands": [
     {"key": "ionity", "live": "ionity", "evse": r"^[A-Z]{2}\*?IO[NY]\*?"}]}
 
@@ -200,12 +210,17 @@ def nl_scan(brands):
     return found, failed[0]
 
 
-def nl_status(sites):
-    """Counts for known sites: a small box around each (sites close together share one call)."""
+def nl_boxes(sites):
     boxes = {}
     for sid, (b, lat, lon, name) in sites.items():
         key = (round(lat, 2), round(lon, 2))
         boxes.setdefault(key, []).append((sid, lat, lon))
+    return boxes
+
+
+def nl_status(sites):
+    """Counts for known sites: a small box around each (sites close together share one call)."""
+    boxes = nl_boxes(sites)
     out = {}
 
     def one(group):
@@ -290,6 +305,111 @@ def pt_sites(path, followed):
     return out
 
 
+# ------------------------------------------------------------------ OCPDB (DE)
+
+SIDE_WORDS = re.compile(r"\b(nord|north|süd|sued|south|ost|east|west|richtung\s+\S+)\b", re.I)
+
+
+def opposite_sides(a, b):
+    wa = "|".join(sorted(w.lower() for w in SIDE_WORDS.findall(a or "")))
+    wb = "|".join(sorted(w.lower() for w in SIDE_WORDS.findall(b or "")))
+    return wa != wb and (wa or wb) != ""
+
+
+def km(lat1, lon1, lat2, lon2):
+    p = math.pi / 180
+    a = (math.sin((lat2 - lat1) * p / 2) ** 2 +
+         math.cos(lat1 * p) * math.cos(lat2 * p) * math.sin((lon2 - lon1) * p / 2) ** 2)
+    return 12742 * math.asin(math.sqrt(a))
+
+
+def de_brand_of(loc, brands):
+    names = " ".join(str((loc.get(k) or {}).get("name") or "") for k in ("operator", "owner", "suboperator"))
+    names += " " + str(loc.get("name") or "")
+    evses = [re.sub(r"\s", "", str(e.get("evse_id") or e.get("uid") or "")) for e in loc.get("evses") or []]
+    for b in brands:
+        if b["live_re"].search(names) or any(b["evse_re"].search(x) for x in evses):
+            return b["key"]
+    return None
+
+
+def de_coords(loc):
+    c = loc.get("coordinates") or {}
+    try:
+        return float(c.get("latitude", c.get("lat"))), float(c.get("longitude", c.get("lon")))
+    except (TypeError, ValueError):
+        return None
+
+
+def de_sites(brands):
+    """All of Germany: per brand one OCPDB call (operator_name contains the brand), grouped into sites
+    like the Worker's summariseDe (the same charger can come twice: operator feed and federal register;
+    merged by EVSE id, a live status wins; sites on the other side of the road stay apart)."""
+    locs, calls = {}, 0
+    for b in brands:
+        term = DE_OPERATOR.get(b["key"], b["key"])
+        url = f"{OCPDB}?operator_name={urllib.parse.quote(term)}&limit={OCPDB_MAX}"
+        try:
+            data = get(url, timeout=120)
+            calls += 1
+        except Exception as e:
+            log(f"DE {b['key']}: OCPDB failed:", e)
+            continue
+        items = data if isinstance(data, list) else (data.get("items") or [])
+        if isinstance(data, dict):
+            log(f"DE {b['key']}: answer keys {sorted(data.keys())}, total {data.get('total_count', data.get('count'))}")
+        if len(items) >= OCPDB_MAX:
+            log(f"DE {b['key']}: {len(items)} locations, at the page limit: some may be missing")
+        ops = {}
+        mine = 0
+        for loc in items:
+            op = str((loc.get("operator") or {}).get("name") or "")
+            ops[op] = ops.get(op, 0) + 1
+            if de_brand_of(loc, [b]) and de_coords(loc):
+                locs[str(loc.get("id"))] = (b["key"], loc)
+                mine += 1
+        log(f"DE {b['key']} (operator_name={term}): {len(items)} locations, {mine} of the brand; operators:",
+            json.dumps(sorted(ops.items(), key=lambda x: -x[1])[:8], ensure_ascii=False))
+
+    # Group into sites: locations of one brand within 80 m, not on opposite sides of the road.
+    def live_count(loc):
+        return sum(1 for e in loc.get("evses") or [] if e.get("status") and e["status"] not in ("STATIC", "UNKNOWN"))
+    order = sorted(locs.items(), key=lambda kv: (-live_count(kv[1][1]), int(kv[0]) if kv[0].isdigit() else 0))
+    sites = []  # [brand, lat, lon, name, [locations]]
+    for lid, (b, loc) in order:
+        lat, lon = de_coords(loc)
+        for s in sites:
+            if s[0] == b and km(lat, lon, s[1], s[2]) <= 0.08 and not opposite_sides(s[3], loc.get("name")):
+                s[4].append((lid, loc))
+                break
+        else:
+            sites.append([b, lat, lon, loc.get("name") or "", [(lid, loc)]])
+
+    out = {}
+    for b, lat, lon, name, members in sites:
+        by_id = {}
+        for lid, loc in members:
+            for i, e in enumerate(loc.get("evses") or []):
+                st = e.get("status")
+                if st in ("REMOVED", "PLANNED"):
+                    continue
+                eid = re.sub(r"[^A-Za-z0-9]", "", str(e.get("evse_id") or e.get("uid") or f"{lid}-{i}")).upper()
+                live = bool(st) and st not in ("STATIC", "UNKNOWN")
+                prev = by_id.get(eid)
+                if prev and prev["live"]:
+                    continue
+                kw = max([0] + [(c.get("max_electric_power") or 0) / 1000 for c in e.get("connectors") or []])
+                by_id[eid] = {"st": st, "live": live, "kw": kw}
+        pts = [p for p in by_id.values() if p["kw"] >= FAST_KW and p["live"]]
+        known = [p for p in pts if p["st"] in ("AVAILABLE", "OUTOFORDER", "INOPERATIVE", "CHARGING", "BLOCKED", "RESERVED")]
+        if not known:
+            continue
+        free = sum(1 for p in pts if p["st"] == "AVAILABLE")
+        key = "de:" + min((lid for lid, _ in members), key=lambda x: (len(x), x))
+        out[key] = ({"b": b, "cc": "DE", "lat": round(lat, 5), "lon": round(lon, 5), "n": name}, (free, len(pts)))
+    return out, calls
+
+
 # ------------------------------------------------------------------ store
 
 def tile_of(lat, lon):
@@ -360,17 +480,24 @@ def main():
         age_h = (now - datetime.datetime.fromisoformat(nl["at"].replace("Z", "+00:00"))).total_seconds() / 3600
     discovered = False
     try:
-        if age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites") or len(nl["sites"]) >= SCAN_FROM:
+        scan_calls = int(nl.get("scanCalls") or SCAN_CALLS)
+        boxes = len(nl_boxes(nl.get("sites") or {}))
+        if age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites") or boxes >= scan_calls:
+            before = PACE.calls
             found, failed = nl_scan(brands)
+            if not failed:
+                scan_calls = PACE.calls - before
             if found and not failed and (age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites")):
-                nl = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "brands": brand_sig,
+                nl = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "brands": brand_sig, "scanCalls": scan_calls,
                       "sites": {sid: site for sid, (site, _) in found.items()}}
                 discovered = True
             elif found:  # readings only (or an incomplete scan): add sites that showed up, drop none
                 nl["sites"].update({sid: site for sid, (site, _) in found.items()})
             got = {sid: c for sid, (_, c) in found.items()}
-            log(f"NL scan: {len(found)} sites of {brand_sig}, {failed} tiles failed")
+            nl["scanCalls"] = scan_calls
+            log(f"NL scan: {len(found)} sites of {brand_sig}, {failed} tiles failed, {scan_calls} calls")
         else:
+            log(f"NL: {len(nl['sites'])} sites in {boxes} boxes (a full scan takes {scan_calls} calls)")
             got = nl_status(nl["sites"])
         for sid, c in got.items():
             b, lat, lon, name = nl["sites"][sid]
@@ -384,6 +511,12 @@ def main():
     pt = pt_sites(opt.get("--pt"), followed)
     readings.update(fr)
     readings.update(pt)
+    try:
+        de, de_calls = de_sites(brands)
+    except Exception as e:
+        log("DE failed:", e)
+        de, de_calls = {}, 0
+    readings.update(de)
 
     for key, (info, c) in readings.items():
         put(sites_by_tile, key, info, c, now, keep_days)
@@ -400,7 +533,8 @@ def main():
     with open(os.path.join(state, "nl-sites.json"), "w") as f:
         json.dump(nl, f, ensure_ascii=False, separators=(",", ":"))
     meta = {"at": at, "secs": round(time.time() - t0, 1), "brands": brand_sig, "keepDays": keep_days,
-            "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt)}, "ndwCalls": PACE.calls,
+            "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt), "DE": len(de)}, "ndwCalls": PACE.calls,
+            "ocpdbCalls": de_calls,
             "discovery": discovered, "nlSites": len(nl.get("sites") or {}),
             "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values())}
     with open(os.path.join(state, "meta.json"), "w") as f:

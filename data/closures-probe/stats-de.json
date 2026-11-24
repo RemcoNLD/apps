@@ -1,8 +1,8 @@
 {
  "roads": 113,
- "type:CLOSURE": 62,
- "type:CLOSURE_ENTRY_EXIT": 401,
- "skip:time": 7,
- "kept": 55,
+ "type:CLOSURE": 60,
+ "type:CLOSURE_ENTRY_EXIT": 423,
+ "skip:time": 9,
+ "kept": 51,
  "unparsedTimes": []
 }

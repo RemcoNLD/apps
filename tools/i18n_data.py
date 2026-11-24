@@ -288,6 +288,8 @@ EXACT = {
   "De stippellijn voor dezelfde dag vorige week verschijnt zodra er een week aan metingen is verzameld.",
   "A linha tracejada do mesmo dia da semana passada aparece quando houver uma semana de leituras."),
 "Times are local time at the site.": ("Tijden zijn de lokale tijd op de locatie.", "As horas são a hora local do posto."),
+"Full": ("Vol", "Cheio"),
+"Arrival": ("Aankomst", "Chegada"),
 # ---- help sheet chrome
 "How it works": ("Zo werkt het", "Como funciona"),
 "Version": ("Versie", "Versão"),

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.38.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.39.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -932,24 +932,38 @@
   .navsheet .hist .tip { color: var(--free); font-size: .9rem; font-weight: 700; }
   /* Occupancy through the day (0.37): today against the same day last week */
   .navsheet { max-height: calc(var(--app-h, 100dvh) - 24px); overflow-y: auto; overscroll-behavior: contain; }
-  .navsheet .occ { display: block; }
-  .navsheet .occ .occ-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-  .navsheet .occ .occ-head b { font-size: .95rem; }
-  .navsheet .occ .occ-head .muted { font-size: .8rem; white-space: nowrap; flex-shrink: 0; }
-  .navsheet .occ svg { display: block; width: 100%; height: auto; }
-  .navsheet .occ .occ-today { fill: none; stroke: var(--free); stroke-width: 2.2; stroke-linejoin: round; }
-  .navsheet .occ .occ-area { fill: var(--free); opacity: .16; stroke: none; }
-  .navsheet .occ .occ-week { fill: none; stroke: var(--line); stroke-width: 1.4; stroke-dasharray: 3 3; opacity: .6; }
-  .navsheet .occ .occ-grid { stroke: var(--muted); stroke-width: .6; opacity: .45; }
-  .navsheet .occ .occ-now { stroke: var(--line); stroke-width: 1; stroke-dasharray: 1 2; opacity: .8; }
-  .navsheet .occ .occ-lbl { fill: var(--muted); font-size: 9px; font-family: inherit; }
-  .navsheet .occ .occ-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: .8rem; color: var(--muted); }
-  .navsheet .occ .occ-legend i { display: inline-block; width: 16px; height: 0; margin-right: 5px; vertical-align: middle; border-top: 2.2px solid var(--free); }
-  .navsheet .occ .occ-legend i.wk { border-top: 1.4px dashed var(--line); opacity: .7; }
-  .navsheet .occ .occ-note { display: block; margin-top: 4px; font-size: .85rem; color: var(--muted); line-height: 1.35; }
-  .navsheet .occ .occ-note b { color: var(--line); }
-  .navsheet .occ.old svg { opacity: .55; filter: grayscale(1); }
-  .navsheet .occ + .occ { margin-top: -4px; }
+  /* 0.39: the chart opens under its row in the list (tap the row), one at a time */
+  .row.occp { height: auto; flex-shrink: 0; padding: 0 0 10px; grid-template-columns: 48px 1fr; cursor: pointer; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+  .row.occp > div.occ { margin-left: 0; padding: 10px 12px; border-radius: 12px; background: var(--asphalt-raised); }
+  .row.occp > div.occ.fresh { animation: occOpen .22s ease-out; }
+  @keyframes occOpen { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .row.occp > div.occ { animation: none; } }
+  .occ { display: block; }
+  .occ .occ-tabs { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+  .occ .occ-tabs button { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: .85rem; font-weight: 700; padding: 4px 10px 4px 5px; border-radius: 999px; border: 1.5px solid var(--muted); background: transparent; color: var(--muted); cursor: pointer; }
+  .occ .occ-tabs button.on { border-color: var(--line); color: var(--line); }
+  .occ .occ-tabs .logo { width: 18px; height: 18px; }
+  .occ .occ-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .occ .occ-head b { font-size: .95rem; }
+  .occ .occ-head .muted { font-size: .8rem; white-space: nowrap; flex-shrink: 0; color: var(--muted); }
+  .occ svg { display: block; width: 100%; height: auto; }
+  .occ .occ-today { fill: none; stroke: var(--free); stroke-width: 2.2; stroke-linejoin: round; }
+  .occ .occ-full { fill: var(--danger); opacity: .22; stroke: none; }
+  .occ .occ-full-wk { fill: var(--danger); opacity: .75; stroke: none; }
+  .occ .occ-week { fill: none; stroke: var(--line); stroke-width: 1.4; stroke-dasharray: 3 3; opacity: .6; }
+  .occ .occ-grid { stroke: var(--muted); stroke-width: .6; opacity: .45; }
+  .occ .occ-now { stroke: var(--line); stroke-width: 1; stroke-dasharray: 1 2; opacity: .8; }
+  .occ .occ-arr { stroke: var(--sign-blue); stroke-width: 2; }
+  .occ .occ-arr-lbl { fill: var(--sign-blue); font-size: 9px; font-weight: 700; font-family: inherit; }
+  .occ .occ-lbl { fill: var(--muted); font-size: 9px; font-family: inherit; }
+  .occ .occ-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: .8rem; color: var(--muted); }
+  .occ .occ-legend i { display: inline-block; width: 16px; height: 0; margin-right: 5px; vertical-align: middle; border-top: 2.2px solid var(--free); }
+  .occ .occ-legend i.wk { border-top: 1.4px dashed var(--line); opacity: .7; }
+  .occ .occ-legend i.full { width: 12px; height: 10px; border: 0; background: var(--danger); opacity: .45; border-radius: 2px; }
+  .occ .occ-legend i.arr { width: 0; height: 11px; border-top: 0; border-left: 2px solid var(--sign-blue); margin-right: 6px; }
+  .occ .occ-note { display: block; margin-top: 4px; font-size: .85rem; color: var(--muted); line-height: 1.35; }
+  .occ .occ-note b { color: var(--line); }
+  .occ.old svg { opacity: .55; filter: grayscale(1); }
   /* Demo strip: real row styles on a small piece of road */
   .demo { position: relative; padding: 4px 0; }
   .demo::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 8px; background: var(--sign-blue); border-radius: 4px; }
@@ -1440,7 +1454,6 @@
   <div class="sub" id="navSub"></div>
   <div class="addr" id="navAddr" hidden></div>
   <div class="hist" id="navHist" hidden></div>
-  <div class="hist occ" id="navOcc" hidden></div>
   <div id="navSrc"></div>
   <div id="navList"></div>
   <button type="button" class="cancel" id="navCancel">Cancel</button>
@@ -1823,6 +1836,8 @@ const I18N_TEXT = {
 "Same day last week:": "Zelfde dag vorige week:",
 "The dashed line for the same day last week appears once a week of readings has been collected.": "De stippellijn voor dezelfde dag vorige week verschijnt zodra er een week aan metingen is verzameld.",
 "Times are local time at the site.": "Tijden zijn de lokale tijd op de locatie.",
+"Full": "Vol",
+"Arrival": "Aankomst",
 "How it works": "Zo werkt het",
 "Version": "Versie",
 "Check for update": "Controleren op update",
@@ -2117,6 +2132,8 @@ const I18N_TEXT = {
 "Same day last week:": "Mesmo dia da semana passada:",
 "The dashed line for the same day last week appears once a week of readings has been collected.": "A linha tracejada do mesmo dia da semana passada aparece quando houver uma semana de leituras.",
 "Times are local time at the site.": "As horas são a hora local do posto.",
+"Full": "Cheio",
+"Arrival": "Chegada",
 "How it works": "Como funciona",
 "Version": "Versão",
 "Check for update": "Procurar atualização",
@@ -2228,7 +2245,7 @@ const HELP_I18N = {
     <li>Je <b>viapunten</b> (een wit bolletje met een blauwe rand) en <b>grenzen</b> (de vlag van het nieuwe land) staan op de lijn, met de afstand en tijd ernaartoe. Grenzen alleen als alle wegen getoond worden; viapunten altijd.</li>
     <li><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent.</li>
     <li><b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps, Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
-    <li>Voor Ionity en Fastned in Nederland, Duitsland, Oostenrijk, Frankrijk en Portugal toont dezelfde kaart <b>vrije laders door de dag</b>: een groene lijn voor vandaag en een stippellijn voor dezelfde dag vorige week, met het drukste en het meest vrije uur van die dag. Zo zie je wanneer een locatie meestal rustig is.</li>
+    <li>Voor Ionity en Fastned in Nederland, Duitsland, Oostenrijk, Frankrijk en Portugal <b>tik je op de lader</b> om er <b>vrije laders door de dag</b> onder te openen (één tegelijk; tik nog eens om te sluiten). De tik werkt hem ook bij. Een groene lijn voor vandaag, rood waar alle laders bezet waren, een stippellijn voor dezelfde dag vorige week (rood onder de as waar hij vol was) en een blauwe lijn op je aankomsttijd, met het drukste en het meest vrije uur van die dag. Zo zie je wanneer een locatie meestal rustig is.</li>
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
     <li>Het scherm blijft aan tijdens het rijden. ${screenAwake() ? "" : "Op dit moment kan het uitgaan: tik tijdens het rijden één keer op het scherm. "}Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
     <li>Als je aankomt, is er een klein feestje.</li>
@@ -2313,7 +2330,7 @@ const HELP_I18N = {
     <li>Os seus <b>pontos intermédios</b> (um ponto branco com contorno azul) e as <b>fronteiras</b> (a bandeira do novo país) aparecem na linha, com a distância e o tempo até lá. As fronteiras só aparecem com todas as estradas visíveis; os pontos intermédios sempre.</li>
     <li><b>Toque no destino</b> para comparar outros percursos a partir de onde está.</li>
     <li><b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
-    <li>Para a Ionity e a Fastned nos Países Baixos, na Alemanha, na Áustria, em França e em Portugal, o mesmo cartão mostra os <b>carregadores livres ao longo do dia</b>: uma linha verde para hoje e uma linha tracejada para o mesmo dia da semana passada, com a hora mais ocupada e a mais livre desse dia. Assim vê quando um local costuma estar calmo.</li>
+    <li>Para a Ionity e a Fastned nos Países Baixos, na Alemanha, na Áustria, em França e em Portugal, <b>toque no carregador</b> para abrir por baixo os <b>carregadores livres ao longo do dia</b> (um de cada vez; toque de novo para fechar). O toque também o atualiza. Uma linha verde para hoje, vermelho onde todos os carregadores estavam ocupados, uma linha tracejada para o mesmo dia da semana passada (vermelho por baixo do eixo onde esteve cheio) e uma linha azul à sua hora de chegada, com a hora mais ocupada e a mais livre desse dia. Assim vê quando um local costuma estar calmo.</li>
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
     <li>O ecrã mantém-se ligado enquanto conduz. ${screenAwake() ? "" : "Neste momento pode desligar-se: toque uma vez no ecrã durante a condução. "}Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
     <li>Quando chega, há uma pequena celebração.</li>
@@ -5138,16 +5155,13 @@ function waitText(ms) {
   return sec < 90 ? `${sec} s` : `${Math.ceil(sec / 60)} min`;
 }
 let suppressClick = false;
-$("list").addEventListener("click", (e) => {
-  const row = e.target.closest(".row.st[data-ids]");
-  if (!row || roadTapTarget(e)) return;
-  if (suppressClick) { suppressClick = false; return; } // that was a long press
-  const ids = row.dataset.ids.split(" ");
-  const members = state.stations.filter((s) => ids.includes(s.id));
+// Update a row's chargers now (at most once a minute each). quiet: no "Checked N s ago" toast, used when
+// the tap opens the row's chart, which already shows that something happened.
+function tapUpdate(members, quiet) {
   const now = Date.now();
   // Belgian chargers go stall by stall (refreshBelgium), not by the 1-minute tap rule.
   if (members.some(tapOnly)) {
-    if (members.some((s) => s.country === "BE")) refreshBelgium(members).then((why) => { if (why) toast(why, 3200); });
+    if (members.some((s) => s.country === "BE")) refreshBelgium(members).then((why) => { if (why && !quiet) toast(why, 3200); });
     const rest = members.filter((s) => !tapOnly(s) && (!s.statusAt || now - s.statusAt >= TAP_MIN_MS || retryAllowed(s, now)));
     for (const s of rest) if (statusUnusable(s)) s.retryAt = now;
     if (rest.length) refreshOne(rest.map((s) => s.id));
@@ -5156,12 +5170,45 @@ $("list").addEventListener("click", (e) => {
   const due = members.filter((s) => !s.statusAt || now - s.statusAt >= TAP_MIN_MS || retryAllowed(s, now));
   for (const s of due) if (statusUnusable(s)) s.retryAt = now;
   if (!due.length) {
+    if (quiet) return;
     const last = Math.max(...members.map((s) => s.statusAt || 0));
     const next = Math.min(...members.map((s) => s.statusAt || 0)) + TAP_MIN_MS - now; // the first one that's due again
     toast(`Checked ${Math.max(1, Math.round((now - last) / 1000))} s ago · next update in ${waitText(next)}`, 2800);
     return;
   }
   refreshOne(due.map((s) => s.id));
+}
+$("list").addEventListener("click", (e) => {
+  // The open chart (0.39): a brand button switches the chart; anywhere else updates the row again.
+  const panel = e.target.closest(".row.occp[data-occ]");
+  if (panel) {
+    if (suppressClick) { suppressClick = false; return; }
+    const tab = e.target.closest("[data-occ-b]");
+    if (tab && occOpen) { occOpen.brand = tab.dataset.occB; render(); return; }
+    const ids = panel.dataset.occ.split(" ");
+    tapUpdate(state.stations.filter((s) => ids.includes(s.id)), false);
+    return;
+  }
+  const row = e.target.closest(".row.st[data-ids]");
+  if (!row || roadTapTarget(e)) return;
+  if (suppressClick) { suppressClick = false; return; } // that was a long press
+  const ids = row.dataset.ids.split(" ");
+  const members = state.stations.filter((s) => ids.includes(s.id));
+  const charts = occMembers(members);
+  // A row with a chart opens it (and closes any other) and updates; tapped again, it closes.
+  if (charts.length) {
+    const key = row.dataset.k;
+    if (occOpen?.k === key) { occOpen = null; render(); return; }
+    // On a row with several brands, the ring you tapped picks the chart.
+    const rings = [...row.querySelectorAll(".avail .ml")], hit = e.target.closest(".avail .ml");
+    const tapped = hit ? members[rings.indexOf(hit)] : null;
+    occOpen = { k: key, brand: brandKey(charts.includes(tapped) ? tapped : charts[0]) };
+    occScroll = true; occFresh = true;
+    tapUpdate(members, true);
+    render();
+    return;
+  }
+  tapUpdate(members, false);
 });
 
 const LONG_PRESS_MS = 500;
@@ -5259,7 +5306,6 @@ function openNavSheet(ids) {
   $("navAddr").hidden = !addr;
   $("navHist").innerHTML = historyHtml(members);
   $("navHist").hidden = !$("navHist").innerHTML;
-  renderOcc(members, ids);
   navTarget.ids = ids;
   // How the name was chosen: only with the debug line on (Help), it's for tuning, not for driving.
   $("navSrc").innerHTML = debugOn() ? nameSourceHtml(members, label) + statusDebugHtml(members) : "";
@@ -5271,7 +5317,7 @@ function openNavSheet(ids) {
   $("navBackdrop").hidden = false;
   $("navSheet").hidden = false;
 }
-// ---- Occupancy through the day (0.37): in the press-and-hold card, how many chargers were free every
+// ---- Occupancy through the day (0.37): how many chargers were free every
 // 15 minutes today (green, up to now) against the same day last week (dashed, the whole day), like
 // ParkPilot's "previous weeks" line. The data comes from the GitHub job Occupancy (every 15 min, kept 8
 // days) through the Worker's GET /occupancy; only for the brands the usage page follows (from /me) in
@@ -5343,8 +5389,11 @@ function occPeaks(vals, total) {
   const busy = hours.reduce((a, b) => (b.f < a.f ? b : a)), quiet = hours.reduce((a, b) => (b.f > a.f ? b : a));
   return busy.f < quiet.f ? { busy: busy.h, quiet: quiet.h } : null;
 }
-function occSvg(today, week, total, nowSlot, slots) {
-  const W = 320, H = 118, L = 18, R = 6, T = 8, B = 100;
+// The chart (0.39): today as a green step line up to now, with a red band over the whole height where
+// no charger was free; the same day last week dashed, its full stretches as a red strip under the axis;
+// a blue line at your arrival time when that's later today. Missing readings stay empty (not red).
+function occSvg(today, week, total, nowSlot, slots, arr) {
+  const W = 320, H = 122, L = 18, R = 6, T = 14, B = 102;
   const top = Math.max(1, total, ...today.filter((v) => v != null), ...week.filter((v) => v != null));
   const x = (i) => L + (i / slots) * (W - L - R);
   const y = (v) => B - (v / top) * (B - T);
@@ -5360,29 +5409,34 @@ function occSvg(today, week, total, nowSlot, slots) {
     }
     return d;
   };
-  const area = (vals, upto) => {
-    let d = "", run = [];
-    const flush = () => {
-      if (!run.length) return;
-      d += `M${x(run[0][0]).toFixed(1)} ${B}` + run.map(([i, v]) => `V${y(v).toFixed(1)}H${x(i + 1).toFixed(1)}`).join("") + `V${B}Z`;
-      run = [];
-    };
-    for (let i = 0; i < Math.min(vals.length, upto); i++) vals[i] == null ? flush() : run.push([i, vals[i]]);
-    flush();
-    return d;
+  // Runs of slots with 0 free, as rectangles from y0 to y1.
+  const fullRuns = (vals, upto, y0, y1, cls) => {
+    let out = "", from = -1;
+    const end = Math.min(vals.length, upto);
+    for (let i = 0; i <= end; i++) {
+      const full = i < end && vals[i] === 0;
+      if (full && from < 0) from = i;
+      if (!full && from >= 0) { out += `<rect class="${cls}" x="${x(from).toFixed(1)}" y="${y0}" width="${(x(i) - x(from)).toFixed(1)}" height="${y1 - y0}"/>`; from = -1; }
+    }
+    return out;
   };
   const upto = Math.min(slots, nowSlot + 1);
   const grid = [0, top].map((v) => `<line class="occ-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="occ-lbl" x="${L - 4}" y="${y(v) + 3}" text-anchor="end">${v}</text>`).join("");
   const ticks = [0, 6, 12, 18, 24].map((h) => `<text class="occ-lbl" x="${x(h * slots / 24)}" y="${H - 4}" text-anchor="${h === 0 ? "start" : h === 24 ? "end" : "middle"}">${String(h).padStart(2, "0")}</text>`).join("");
   const now = `<line class="occ-now" x1="${x(upto)}" x2="${x(upto)}" y1="${T - 2}" y2="${B}"/>`;
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-hidden="true">${grid}${ticks}<path class="occ-area" d="${area(today, upto)}"/><path class="occ-week" d="${steps(week, slots)}"/><path class="occ-today" d="${steps(today, upto)}"/>${now}</svg>`;
+  let arrive = "";
+  if (arr && arr.slot > nowSlot && arr.slot < slots) {
+    const ax = L + (arr.min / 1440) * (W - L - R);
+    const anchor = ax > W - 40 ? "end" : ax < L + 24 ? "start" : "middle";
+    arrive = `<line class="occ-arr" x1="${ax.toFixed(1)}" x2="${ax.toFixed(1)}" y1="${T - 2}" y2="${B}"/><text class="occ-arr-lbl" x="${ax.toFixed(1)}" y="${T - 5}" text-anchor="${anchor}">${arr.label}</text>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-hidden="true">${fullRuns(today, upto, T, B, "occ-full")}${fullRuns(week, slots, B + 1, B + 4, "occ-full-wk")}${grid}${ticks}<path class="occ-week" d="${steps(week, slots)}"/><path class="occ-today" d="${steps(today, upto)}"/>${now}${arrive}</svg>`;
 }
-function occHtml(m, entry, many) {
-  const logo = many ? logoHtml(brandKey(m)) : "";
-  const head = (note) => `<div class="occ-head"><span>${logo}<b>Free chargers through the day</b></span>${note ? `<span class="muted">${note}</span>` : ""}</div>`;
+function occHtml(m, entry, etaMin) {
+  const head = (note) => `<div class="occ-head"><span><b>Free chargers through the day</b></span>${note ? `<span class="muted">${note}</span>` : ""}</div>`;
   const d = entry?.data;
   if (!d) return entry?.ok === false ? head("") + `<span class="occ-note">Not available right now.</span>` : head("") + `<span class="occ-note">Loading…</span>`;
-  if (!d.ok) return d.reason === "no data" ? head("") + `<span class="occ-note">No readings for this site yet.</span>` : "";
+  if (!d.ok) return head("") + `<span class="occ-note">${d.reason === "no data" ? "No readings for this site yet." : "Not available right now."}</span>`;
   const slotMin = d.slotMin || 15, slots = Math.round(1440 / slotMin);
   const clock = occClock(d.tz);
   const lastWeek = occDayBefore(clock.date, 7);
@@ -5390,36 +5444,52 @@ function occHtml(m, entry, many) {
   const nowSlot = Math.floor(clock.min / slotMin);
   const total = d.total || 0;
   const hasWeek = week.some((v) => v != null);
-  const old = !entry.ok || Date.now() - entry.at > OCC_FRESH_MS + 5 * 60000;
   const t = clockAndAgo(d.at);
   const localTz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (_) { return ""; } })();
   const otherTz = d.tz && localTz && occClock(d.tz).min !== occClock(localTz).min;
   const hm = (h) => `${String(h).padStart(2, "0")}:00`;
   const peaks = hasWeek ? occPeaks(week, total) : null;
+  // Your arrival, on the site's clock, when it's still today there.
+  let arr = null;
+  if (etaMin != null && etaMin >= 1) {
+    const c = occClock(d.tz, Date.now() + etaMin * 60000);
+    if (c.date === clock.date) arr = { min: c.min, slot: Math.floor(c.min / slotMin), label: `${String(Math.floor(c.min / 60)).padStart(2, "0")}:${String(c.min % 60).padStart(2, "0")}` };
+  }
+  const anyFull = today.slice(0, nowSlot + 1).includes(0) || week.includes(0);
   const notes = [];
   if (peaks) notes.push(`<span class="occ-note">Same day last week: <b>busiest around ${hm(peaks.busy)}</b>, <b>most free around ${hm(peaks.quiet)}</b>.</span>`);
   if (!hasWeek) notes.push(`<span class="occ-note">The dashed line for the same day last week appears once a week of readings has been collected.</span>`);
   if (otherTz) notes.push(`<span class="occ-note">Times are local time at the site.</span>`);
-  return head(t ? `${t.clock}` : "") + occSvg(today, week, total, nowSlot, slots) +
-    `<div class="occ-legend"><span><i></i>Today</span>${hasWeek ? `<span><i class="wk"></i>Same day last week</span>` : ""}</div>` + notes.join("");
+  const svg = occSvg(today, week, total, nowSlot, slots, arr);
+  return head(t ? `${t.clock}` : "") + svg +
+    `<div class="occ-legend"><span><i></i>Today</span>${hasWeek ? `<span><i class="wk"></i>Same day last week</span>` : ""}${anyFull ? `<span><i class="full"></i>Full</span>` : ""}${svg.includes("occ-arr") ? `<span><i class="arr"></i>Arrival</span>` : ""}</div>` + notes.join("");
 }
-function renderOcc(members, ids) {
-  const box = $("navOcc");
-  const follow = occBrands();
-  const list = members.filter((m) => follow.includes(brandKey(m)) && occCountries().includes(m.country) && !m.liveDup);
-  if (!list.length) { box.hidden = true; box.innerHTML = ""; return; }
-  let anyOld = false;
-  const parts = list.map((m) => {
-    const key = occKey(m), e = occEntry(key);
-    if ((!e || (!e.loading && Date.now() - (e.at || 0) > OCC_FRESH_MS && Date.now() - (e.failedAt || 0) > 60000))) {
-      loadOcc(m, key).then(() => { if (!$("navSheet").hidden && navTarget?.ids === ids) renderOcc(members, ids); });
-    }
-    if (e && e.ok === false && e.data) anyOld = true;
-    return occHtml(m, occEntry(key), list.length > 1);
-  }).filter(Boolean);
-  box.innerHTML = parts.join(`<div style="height:10px"></div>`);
-  box.classList.toggle("old", anyOld);
-  box.hidden = !box.innerHTML;
+// Which members of a row have a chart: followed brands in the countries the job covers.
+function occMembers(members) {
+  const follow = occBrands(), cc = occCountries();
+  return members.filter((m) => follow.includes(brandKey(m)) && cc.includes(m.country) && !m.liveDup);
+}
+// Fetch when missing or older than 10 min (a failure is retried after 1 min), then redraw.
+function ensureOcc(m) {
+  const key = occKey(m), e = occEntry(key);
+  if (!e || (!e.loading && Date.now() - (e.at || 0) > OCC_FRESH_MS && Date.now() - (e.failedAt || 0) > 60000)) {
+    loadOcc(m, key).then(() => { if (occOpen) render(); });
+  }
+  return occEntry(key);
+}
+// The open row (0.39): at most one. k = the row's key (member ids), brand = the member whose chart shows.
+let occOpen = null, occScroll = false, occFresh = false;
+function occPanelRow(site, key) {
+  const list = occMembers(site.members);
+  if (!list.length) return null;
+  const m = list.find((x) => brandKey(x) === occOpen.brand) || list[0];
+  const entry = ensureOcc(m);
+  const tabs = list.length > 1 ? `<div class="occ-tabs">${list.map((x) =>
+    `<button type="button" data-occ-b="${esc(brandKey(x))}" class="${x === m ? "on" : ""}">${logoHtml(brandKey(x))}${esc((BRAND[brandKey(x)] || {}).name || "")}</button>`).join("")}</div>` : "";
+  const old = entry && entry.ok === false && entry.data;
+  // Slides in only when just opened: later redraws replace the element and mustn't flash it again.
+  const fresh = occFresh; occFresh = false;
+  return `<div class="row occp" data-occ="${esc(key)}"><span aria-hidden="true"></span><div class="occ${old ? " old" : ""}${fresh ? " fresh" : ""}">${tabs}${occHtml(m, entry, wayTo(m).min)}</div></div>`;
 }
 // How likely you can charge on arrival: since when it's full, or when it was last full.
 // "since" times come from the operator's data where it has them, otherwise from what this app saw.
@@ -6711,6 +6781,7 @@ function render() {
   const pushRoad = () => { const p = nextRoads[ri++]; pushClosures(p.fromKm); pushMarks(p.fromKm); inOrder.push({ key: `road-${p.fromKm}`, html: roadRow(p, false) }); };
   { const seen = new Map(); for (const site of ahead) { const l = siteLabel(site.members); seen.set(l, (seen.get(l) || 0) + 1); }
     dupLabels = new Set([...seen].filter(([, n]) => n > 1).map(([l]) => l)); }
+  let openSeen = false;
   ahead.forEach((site, i) => {
     while (ri < nextRoads.length && nextRoads[ri].fromKm <= site.alongKm) pushRoad();
     pushClosures(site.alongKm);
@@ -6719,8 +6790,12 @@ function render() {
     // charger the road you're on.
     const below = rows ? null : roadChange(i ? ahead[i - 1].alongKm : -Infinity, site.alongKm) || (i === 0 ? curRoad : null);
     const above = rows || i !== ahead.length - 1 ? null : roadChange(site.alongKm, Infinity);
-    inOrder.push({ key: site.members.map((m) => m.id).join(" "), html: stationRow(site, below, above).trim() });
+    const key = site.members.map((m) => m.id).join(" ");
+    // The open chart sits under its row (pushed first: the list is shown reversed).
+    if (occOpen?.k === key) { const panel = occPanelRow(site, key); if (panel) { inOrder.push({ key: `occ-${key}`, html: panel }); openSeen = true; } }
+    inOrder.push({ key, html: stationRow(site, below, above).trim() });
   });
+  if (occOpen && !openSeen) occOpen = null; // passed, hidden or no longer a chart row
   while (ri < nextRoads.length) pushRoad();
   pushClosures(Infinity);
   pushMarks(Infinity);
@@ -6736,6 +6811,15 @@ function render() {
     : anchorEl ? anchorEl.offsetTop - anchor.off
     : list.scrollHeight - list.clientHeight - fromBottom;
   if (Math.abs(list.scrollTop - Math.max(0, wantTop)) > 1) { selfScroll = true; list.scrollTop = wantTop; }
+  // Just opened: scroll so the chart is in view, without pushing its row off the top.
+  if (occScroll) {
+    occScroll = false;
+    const panel = list.querySelector(".row.occp"), row = panel?.previousElementSibling;
+    if (panel && row) {
+      const need = Math.min(panel.offsetTop + panel.offsetHeight - list.clientHeight + 8, row.offsetTop - 8);
+      if (need > list.scrollTop + 1) { selfScroll = true; list.scrollTop = need; }
+    }
+  }
   updateScrollUi();
 
   const busy = statusBusy();
@@ -6919,6 +7003,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.39", date: "2026-11-24", title: { en: "Tap for the day chart", nl: "Tik voor de daggrafiek", pt: "Toque para o gráfico do dia" },
+    items: { en: ["Tap an Ionity or Fastned charger: free chargers through the day opens right under it, and the charger updates at the same time. One is open at a time; tap again to close. It's no longer in the press-and-hold card.", "In the chart, red shows when every charger was taken, and a blue line marks when you'll get there."],
+      nl: ["Tik op een Ionity- of Fastned-lader: vrije laders door de dag klapt er direct onder open, en de lader wordt meteen bijgewerkt. Er is er steeds één open; tik nog eens om te sluiten. Hij staat niet meer in de kaart onder ingedrukt houden.", "In de grafiek zie je in rood wanneer alle laders bezet waren, en een blauwe lijn geeft aan wanneer je er bent."],
+      pt: ["Toque num carregador Ionity ou Fastned: os carregadores livres ao longo do dia abrem logo por baixo, e o carregador é atualizado ao mesmo tempo. Fica um aberto de cada vez; toque de novo para fechar. Já não está no cartão de manter premido.", "No gráfico, o vermelho mostra quando todos os carregadores estavam ocupados e uma linha azul marca quando lá chega."] } },
   { v: "0.38", date: "2026-11-24", title: { en: "Through the day: Fastned, Germany and Austria", nl: "Door de dag: Fastned, Duitsland en Oostenrijk", pt: "Ao longo do dia: Fastned, Alemanha e Áustria" },
     items: { en: ["Free chargers through the day now also for Fastned, and in Germany and Austria too (Ionity and Fastned). Press and hold a charger to see it. For sites that are new to this, the dashed line for last week fills in over the coming week."],
       nl: ["Vrije laders door de dag nu ook voor Fastned, en ook in Duitsland en Oostenrijk (Ionity en Fastned). Houd een lader ingedrukt om het te zien. Bij locaties die er nieuw bij zijn, vult de stippellijn van vorige week zich de komende week."],
@@ -7173,7 +7261,7 @@ function helpHtml() {
     <li>Your <b>via points</b> (a white dot with a blue ring) and <b>borders</b> (the new country's flag) sit on the line, with the distance and time to them. Borders only show with every road shown; via points always.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
     <li><b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps, Waze or Flitsmeister, or copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
-    <li>For Ionity and Fastned in the Netherlands, Germany, Austria, France and Portugal, the same card shows <b>free chargers through the day</b>: a green line for today and a dashed line for the same day last week, with the busiest and most free hour of that day. It tells you when a site is usually quiet.</li>
+    <li>For Ionity and Fastned in the Netherlands, Germany, Austria, France and Portugal, <b>tap the charger</b> to open <b>free chargers through the day</b> under it (one at a time; tap again to close). The tap also updates it. A green line for today, red where every charger was taken, a dashed line for the same day last week (red under the axis where it was full) and a blue line at your arrival time, with the busiest and most free hour of that day. It tells you when a site is usually quiet.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${screenAwake() ? "" : "Right now it may turn off: tap the screen once while driving. "}If it still turns off, check that Low Power Mode is off.</li>
     <li>When you arrive, there's a small celebration.</li>

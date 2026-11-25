@@ -42,8 +42,10 @@ pas weer de snelheid opvoeren als we het idee hebben dat het weer kan"): each so
 5 minutes. When it rate-limits (HTTP 429, a 503, the Worker saying E-Control limited it) or a fifth or
 more of its calls in a run fail, the rest of that run leaves it alone, it pauses at least 10 minutes
 (longer if it says Retry-After), and it steps down one level: 5 -> 10 -> 15 -> 30 minutes between
-reads. After a clean hour at a level it steps one level faster again, back to 5. FR and PT come from
-snapshots that are made anyway, so they're read every run.
+reads. After a calm hour at a level it steps one level faster again, back to 5; a source that pushes
+back again needs a longer calm before speeding up (2, 3, at most 4 hours: "streak"), until it has
+been fine at 5 minutes for 3 hours. FR and PT come from snapshots that are made anyway, so they're
+read every run.
 """
 import concurrent.futures
 import datetime
@@ -81,7 +83,8 @@ SLOT_MIN = 5
 SLOTS = 24 * 60 // SLOT_MIN
 PACE_LEVELS = [5, 10, 15, 30]             # minutes between reads of one source, fastest first
 PAUSE_MIN = 10                            # at least this long without calls after being rate limited
-CALM_MIN = 60                             # a clean hour at a level: one level faster
+CALM_MIN = 60                             # a calm hour at a level: one level faster (times the streak, max 4)
+STREAK_RESET_H = 3                        # fine at the fastest level this long: the streak starts over
 FAIL_SHARE = 0.2                          # this share of failed calls (and at least 3) counts as overload
 ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz"
 FAST_KW = 50
@@ -577,15 +580,18 @@ class Pacer:
             until = self.now + datetime.timedelta(seconds=wait)
             r.update({"every": PACE_LEVELS[min(lvl + 1, len(PACE_LEVELS) - 1)], "until": self._iso(until),
                       "calmSince": self._iso(until), "lastHit": self._iso(self.now), "why": str(overload),
-                      "hits": int(r.get("hits") or 0) + 1})
+                      "hits": int(r.get("hits") or 0) + 1, "streak": int(r.get("streak") or 0) + 1})
             log(f"{src}: slowing down ({overload}): paused until {r['until']}, then every {r['every']} min")
             return
         calm = self._t(r.get("calmSince") or "")
-        if lvl > 0 and calm and (self.now - calm).total_seconds() >= CALM_MIN * 60:
+        need = CALM_MIN * min(4, max(1, int(r.get("streak") or 1)))
+        if lvl > 0 and calm and (self.now - calm).total_seconds() >= need * 60:
             r["every"] = PACE_LEVELS[lvl - 1]
             r["calmSince"] = self._iso(self.now)
-            log(f"{src}: calm for an hour, speeding up: every {r['every']} min")
-        if lvl == 0:
+            log(f"{src}: calm for {need // 60} h, speeding up: every {r['every']} min")
+        hit = self._t(r.get("lastHit") or "")
+        if r["every"] == PACE_LEVELS[0] and r.get("streak") and hit and (self.now - hit).total_seconds() >= STREAK_RESET_H * 3600:
+            r["streak"] = 0
             r.pop("calmSince", None)
 
     def save(self):
@@ -772,7 +778,7 @@ def main():
             "ocpdbCalls": de_calls, "workerAtCalls": at_calls,
             "discovery": discovered, "nlSites": len(nl.get("sites") or {}),
             "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values()),
-            "pace": {src: {k: v for k, v in r.items() if k in ("every", "until", "lastHit", "why")}
+            "pace": {src: {k: v for k, v in r.items() if k in ("every", "until", "lastHit", "why", "streak")}
                      for src, r in pacer.state.items()}}
     with open(os.path.join(state, "meta.json"), "w") as f:
         json.dump(meta, f, separators=(",", ":"))

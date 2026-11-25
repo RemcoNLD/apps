@@ -757,14 +757,14 @@ def main():
     for path in glob.glob(os.path.join(state, "t_*.json")):
         if os.path.basename(path) not in sites_by_tile:
             os.remove(path)
-    at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     for tile, sites in sites_by_tile.items():
         with open(os.path.join(state, tile), "w") as f:
-            json.dump({"v": 1, "at": at, "slotMin": SLOT_MIN, "sites": sites}, f, ensure_ascii=False, separators=(",", ":"))
+            json.dump({"v": 1, "at": stamp, "slotMin": SLOT_MIN, "sites": sites}, f, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(state, "nl-sites.json"), "w") as f:
         json.dump(nl, f, ensure_ascii=False, separators=(",", ":"))
     pacer.save()
-    meta = {"at": at, "secs": round(time.time() - t0, 1), "brands": brand_sig, "keepDays": keep_days,
+    meta = {"at": stamp, "secs": round(time.time() - t0, 1), "brands": brand_sig, "keepDays": keep_days,
             "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt),
                          "DE": sum(1 for i, _ in de.values() if i["cc"] == "DE"),
                          "AT": len(at) + sum(1 for i, _ in de.values() if i["cc"] == "AT")}, "ndwCalls": PACE.calls,

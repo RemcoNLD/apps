@@ -76,7 +76,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.14.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.15.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -355,8 +355,10 @@ const SETTINGS = [
     help: "Empty: found automatically. Only fill in if that lookup fails." },
   { key: "occupancy", type: "bool", label: "Occupancy through the day", def: () => true,
     help: "On: the GitHub job Occupancy (occupancy.yml) notes every 5 minutes how many chargers are free at the followed brands' sites (each source slows down by itself to 10, 15 or 30 minutes when it rate-limits, and speeds up again after a calm hour; NL from NDW, DE from MobiData BW, AT from E-Control through the Worker, FR and PT from their snapshots) and keeps 8 days on the branch occ; the app's charger card shows today against the same day last week. No KV writes. Off: the timer stops starting it and the job writes nothing (the stored days stay)." },
-  { key: "occupancyBrands", type: "text", label: "Occupancy: brands", def: () => "ionity, fastned",
-    help: "Brand keys to follow, separated by commas (e.g. ionity, fastned, tesla), or all. More brands means more NDW calls per run (one small call per Dutch site area, or one full scan of NL once that is cheaper) and one MobiData BW call per brand for Germany; KV writes stay zero." },
+  { key: "occupancyBrands", type: "brands", label: "Occupancy: brands", def: () => "ionity, fastned",
+    help: "Tap to pick the brands to follow. Fewer Dutch brands means fewer NDW calls per run (one small call per site area instead of a full scan of NL), so NL can be read more often: about 21 calls for Ionity, 172 for Ionity + Fastned, a full scan of 284 for all Dutch brands (NDW accepts the full scan every 15 minutes). Germany costs one MobiData BW call per brand. KV writes stay zero." },
+  { key: "occupancyMinutes", type: "choice", options: [5, 10, 15, 30], unit: "min", label: "Occupancy: fastest interval", def: () => 5,
+    help: "How often the job reads each source at most. A source that rate-limits is still slowed down by itself (paused at least 10 minutes, then 10, 15 or 30 minutes between reads) and only speeds up again, never past this, after a calm hour. Slower than 5 also starts the job less often." },
   { key: "closuresHours", type: "choice", options: [6, 12, 24, 48], label: "Road closures: hours between updates", def: () => 12,
     help: "How often the GitHub job fetches planned closures (NL, DE). It wakes every 6 hours and skips until this much time has passed; Run workflow on GitHub always updates." },
 ];
@@ -398,6 +400,12 @@ async function handleSettings(request, env) {
         if (typeof d.options[0] === "number") v = Number(v);
         if (!d.options.includes(v)) throw new HttpError(400, `${d.label}: ${d.options.join(", ")}`);
       }
+      else if (d.type === "brands") {
+        const raw = String(v).toLowerCase();
+        const keys = raw.trim() === "all" ? BRANDS.map((b) => b.key) : raw.split(/[\s,;]+/).filter((k) => BRAND[k]);
+        if (!keys.length) throw new HttpError(400, `${d.label}: at least one brand`);
+        v = keys.length === BRANDS.length ? "all" : BRANDS.map((b) => b.key).filter((k) => keys.includes(k)).join(", ");
+      }
       else if (d.type === "date") {
         v = String(v).trim();
         if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new HttpError(400, `${d.label}: a date like 2026-12-16`);
@@ -416,7 +424,8 @@ async function handleSettings(request, env) {
   }
   const { values, saved } = await loadSettings(env);
   return json(request, {
-    settings: SETTINGS.map((d) => ({ key: d.key, type: d.type, label: d.label, help: d.help, min: d.min, max: d.max, options: d.options,
+    settings: SETTINGS.map((d) => ({ key: d.key, type: d.type, label: d.label, help: d.help, min: d.min, max: d.max, unit: d.unit,
+      options: d.type === "brands" ? BRANDS.map((b) => ({ key: b.key, name: b.name, nl: OCC_NL_BRANDS.includes(b.key) })) : d.options,
       value: d.key === "frGapMin" && saved.frGapMin !== undefined && (saved.frGapPlan || "paid") !== (isPaid(env) ? "paid" : "free") ? "" : values[d.key],
       default: d.key === "frGapMin" ? frGapDefault(env) : d.def(env),
       changed: d.key === "frGapMin" ? saved.frGapMin !== undefined && (saved.frGapPlan || "paid") === (isPaid(env) ? "paid" : "free") : saved[d.key] !== undefined })),
@@ -1229,6 +1238,9 @@ async function ndwFeaturesNear(lat, lon, dLat = 0.004, dLon = 0.006) {
 // file at that commit, at most once per 4 minutes per tile per Worker copy. No KV.
 const OCC_KEEP_DAYS = 8;
 const OCC_COUNTRIES = ["NL", "DE", "AT", "FR", "PT"]; // where the job takes readings (told to the app by /me)
+// Brands with fast sites in NDW's Dutch data (the job's nl-sites.json, 25 Nov 2026): the usage page's "NL brands".
+const OCC_NL_BRANDS = ["ionity", "fastned", "tesla", "shell", "total", "allego", "electra", "essent", "vattenfall", "eneco"];
+const occEveryMin = (env) => { const m = Number(setting(env, "occupancyMinutes")); return [5, 10, 15, 30].includes(m) ? m : 5; };
 const OCC_RAW_AT = (sha, tile) => `https://raw.githubusercontent.com/RemcoNLD/apps/${sha}/${tile}`;
 function occBrands(env) {
   if (!setting(env, "occupancy")) return [];
@@ -3789,7 +3801,7 @@ async function route(request, env) {
     // Public on purpose: on/off and brand name patterns only, for the GitHub job (no secrets there).
     const all = url.searchParams.get("all") === "1"; // de-index.yml: every brand, whatever is followed
     const keys = all ? BRANDS.map((b) => b.key) : occBrands(env);
-    return json(request, { on: keys.length > 0, keepDays: OCC_KEEP_DAYS,
+    return json(request, { on: keys.length > 0, keepDays: OCC_KEEP_DAYS, everyMin: occEveryMin(env),
       brands: keys.map((k) => ({ key: k, live: BRAND[k].live.source, evse: BRAND[k].evse.source })) });
   }
   if (path === "/occupancy" && request.method === "GET") return handleOccupancy(request, env, url);
@@ -4172,10 +4184,12 @@ async function runTimer(env, at = Date.now()) {
   }
   // Occupancy through the day: one reading per 5 minutes (since 0.14.0; the job's own schedule is the
   // backup, and the job itself reads a source less often while it rate-limits, see its pace.json).
-  if (setting(env, "occupancy")) {
+  // Setting "Occupancy: fastest interval" above 5: only on the ticks that fit (e.g. :00, :15, :30, :45).
+  const occEvery = occEveryMin(env);
+  if (setting(env, "occupancy") && Math.floor(new Date(at).getUTCMinutes() / 5) % (occEvery / 5 | 0 || 1) === 0) {
     try {
       await startWorkflow(env, "occupancy.yml");
-      save = noteJob(state, "occ", true, "starts every 5 minutes") || save;
+      save = noteJob(state, "occ", true, `starts every ${occEvery} minutes`) || save;
     } catch (e) {
       save = noteJob(state, "occ", false, e.message) || save;
       console.log("Timer: Occupancy", e.message);

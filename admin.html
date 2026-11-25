@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.8.3"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.9.0"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -113,8 +113,18 @@
   .set-name[aria-expanded="true"] .info { background: var(--muted); color: var(--card); }
   .set-name .dot { display: inline-block; width: 8px; height: 8px; margin-left: 7px; border-radius: 50%; background: var(--warn); vertical-align: 2px; }
   .set + .set { border-top: 1px solid rgba(127,127,127,.18); }
+  .bp-sum { flex: none; max-width: 55%; padding: 7px 10px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bp { margin-top: 6px; }
+  .bp-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+  .bp-presets button { padding: 6px 10px; font-size: .9em; background: none; color: var(--blue); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .bp-h { margin: 8px 0 2px; }
+  .bp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 10px; }
+  .bp-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; cursor: pointer; }
+  .bp-item input { width: 20px; height: 20px; flex: none; margin: 0; }
+  .bp-item span { flex: 1; min-width: 0; line-height: 1.2; }
+  .bp-item code { display: block; font-size: .78em; opacity: .6; }
   .set .row { align-items: center; }
-  .set select { flex: none; width: 6.5em; padding: 8px 10px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 8px; }
+  .set select { flex: none; width: 8em; padding: 8px 10px; font: inherit; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 8px; }
   .set input[type=number], .set input[type=text] { flex: none; width: 6.5em; padding: 7px 30px 7px 10px; }
   .inwrap { position: relative; flex: none; display: inline-flex; }
   .inwrap .clr { display: none; position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; padding: 0;
@@ -601,10 +611,17 @@ async function loadSettings(token) {
     $("settings").innerHTML = `<div class="card small error">Settings couldn’t be loaded: ${esc(e.message)}</div>`;
   }
 }
-// Number choices are hours (closures); text choices show as they are, capitalised (self-service).
-const choiceLabel = (o) => typeof o === "number" ? `${o} h` : String(o).charAt(0).toUpperCase() + String(o).slice(1);
-const showVal = (s, v) => (s.type === "bool" ? (v ? "on" : "off") : s.type === "choice" ? choiceLabel(typeof s.options?.[0] === "number" ? Number(v) : v)
+// Number choices carry their unit (h for closures, min for occupancy); text choices show as they are, capitalised.
+const choiceLabel = (o, unit = "h") => typeof o === "number" ? `${o} ${unit}` : String(o).charAt(0).toUpperCase() + String(o).slice(1);
+// Brand picker (0.9.0): the saved value is "all" or brand keys separated by commas.
+const brandKeys = (s, v) => String(v ?? "").trim().toLowerCase() === "all" ? s.options.map((o) => o.key)
+  : String(v ?? "").toLowerCase().split(/[\s,;]+/).filter((k) => s.options.some((o) => o.key === k));
+const brandSummary = (s, v) => { const k = brandKeys(s, v); return k.length === s.options.length ? `all ${k.length}` : k.length <= 2 ? k.map((x) => s.options.find((o) => o.key === x).name).join(" + ") : `${k.length} of ${s.options.length}`; };
+const showVal = (s, v) => (s.type === "bool" ? (v ? "on" : "off") : s.type === "choice" ? choiceLabel(typeof s.options?.[0] === "number" ? Number(v) : v, s.unit)
+  : s.type === "brands" ? brandSummary(s, v)
   : v === "" || v == null ? (s.type === "date" ? "not set (free plan)" : "empty") : String(v));
+let brandsOpen = false; // the picker stays open across a save
+let brandTimer = null;
 function renderSettings(data, msg = "") {
   // Back to default without a separate link: an emptied field shows the default as grey placeholder
   // (× clears it while you type), the dropdown marks its default option, and a switch set back to
@@ -614,7 +631,21 @@ function renderSettings(data, msg = "") {
     const def = esc(String(s.default ?? ""));
     if (s.type === "bool") control = `<label class="switch"><input type="checkbox" data-key="${esc(s.key)}" data-default="${def}" ${s.value ? "checked" : ""} aria-label="${esc(s.label)}"><span></span></label>`;
     else if (s.type === "choice") control = `<select data-key="${esc(s.key)}" data-default="${def}" aria-label="${esc(s.label)}">${s.options.map((o) =>
-      `<option value="${o}" ${String(s.value) === String(o) ? "selected" : ""}>${choiceLabel(o)}${String(o) === String(s.default) ? " (default)" : ""}</option>`).join("")}</select>`;
+      `<option value="${o}" ${String(s.value) === String(o) ? "selected" : ""}>${choiceLabel(o, s.unit)}${String(o) === String(s.default) ? " (default)" : ""}</option>`).join("")}</select>`;
+    else if (s.type === "brands") {
+      const on = new Set(brandKeys(s, s.value));
+      const box = (o) => `<label class="bp-item"><input type="checkbox" data-brand="${esc(o.key)}" ${on.has(o.key) ? "checked" : ""}><span>${esc(o.name)}<code>${esc(o.key)}</code></span></label>`;
+      const nl = s.options.filter((o) => o.nl), rest = s.options.filter((o) => !o.nl);
+      return `<div class="set"><div class="row">
+          <button type="button" class="set-name" data-info="${esc(s.key)}" aria-expanded="false">${esc(s.label)}${s.changed ? '<i class="dot" title="Changed"></i>' : ""}<span class="info" aria-hidden="true">i</span></button>
+          <button type="button" class="bp-sum" data-bp-toggle data-set="${esc(s.key)}" aria-expanded="${brandsOpen}">${esc(brandSummary(s, s.value))} <span aria-hidden="true">${brandsOpen ? "▴" : "▾"}</span></button></div>
+        <div class="small muted meta" id="info-${esc(s.key)}" hidden>${esc(s.help || "")} Default: ${esc(showVal(s, s.default))}.</div>
+        <div class="bp" id="bp-${esc(s.key)}" data-set="${esc(s.key)}" ${brandsOpen ? "" : "hidden"}>
+          <div class="bp-presets"><button type="button" class="sec" data-bp-preset="ionity,fastned">Ionity + Fastned</button><button type="button" class="sec" data-bp-preset="nl">NL brands</button><button type="button" class="sec" data-bp-preset="all">All</button></div>
+          <div class="bp-h small muted">In the Netherlands (and abroad)</div><div class="bp-list">${nl.map(box).join("")}</div>
+          <div class="bp-h small muted">Only abroad</div><div class="bp-list">${rest.map(box).join("")}</div>
+        </div></div>`;
+    }
     else control = `<span class="inwrap"><input type="${s.type === "number" ? "number" : s.type === "date" ? "date" : "text"}" data-key="${esc(s.key)}" value="${s.changed ? esc(s.value ?? "") : ""}"
       ${s.type === "number" ? `min="${s.min}" max="${s.max}" inputmode="numeric"` : ""} placeholder="${esc(showVal(s, s.default))}" aria-label="${esc(s.label)}"><button type="button" class="clr" data-clear tabindex="-1" aria-label="Back to default">×</button></span>`;
     return `<div class="set"><div class="row">
@@ -626,6 +657,7 @@ function renderSettings(data, msg = "") {
     <h2>Road closures</h2><div class="card small" id="closInfo">Loading…</div>
     ${infoH2("GitHub timer", "Starts the GitHub jobs every 5 minutes as the GitHub App (Portugal and France live, occupancy, road closures when due).", ' id="timer"')}<div class="card small" id="timerInfo">Loading…</div>
     <h2 id="notifications">Notifications</h2><div class="card small" id="pushInfo">Loading…</div>`;
+  SET_DEFS = Object.fromEntries(data.settings.map((x) => [x.key, x]));
   loadClosuresInfo(Number(data.settings.find((x) => x.key === "closuresHours")?.value));
   loadTimerInfo();
   loadPush();
@@ -802,7 +834,24 @@ async function saveSetting(key, value) {
     $("setMsg").classList.add("error");
   }
 }
+let SET_DEFS = {};
+// A tap on a brand saves 1.2 s after the last tap, so a few taps in a row make one save (and one NL rescan).
+function brandsChanged(panel, keys) {
+  const s = SET_DEFS[panel.dataset.set];
+  if (!keys) keys = [...panel.querySelectorAll("[data-brand]:checked")].map((x) => x.dataset.brand);
+  const msg = $("setMsg");
+  if (!keys.length) { msg.textContent = "Keep at least one brand."; msg.classList.add("error"); return; }
+  msg.classList.remove("error");
+  panel.closest(".set").querySelector("[data-bp-toggle]").firstChild.textContent = `${brandSummary(s, keys.join(","))} `;
+  clearTimeout(brandTimer);
+  brandTimer = setTimeout(() => {
+    const v = keys.length === s.options.length ? "all" : keys.join(", ");
+    saveSetting(s.key, brandKeys(s, v).join(",") === brandKeys(s, s.default).join(",") ? null : v);
+  }, 1200);
+}
 $("settings").addEventListener("change", (e) => {
+  const bp = e.target.closest("[data-brand]");
+  if (bp) { brandsChanged(bp.closest(".bp")); return; }
   const el = e.target.closest("[data-key]");
   if (!el) return;
   // Empty, or the default picked again: saved as "back to default" (null), so it doesn't count as changed.
@@ -811,6 +860,23 @@ $("settings").addEventListener("change", (e) => {
   saveSetting(el.dataset.key, v);
 });
 $("settings").addEventListener("click", (e) => {
+  const tog = e.target.closest("[data-bp-toggle]");
+  if (tog) {
+    const panel = $(`bp-${tog.dataset.set}`);
+    brandsOpen = panel.hidden;
+    panel.hidden = !brandsOpen;
+    tog.setAttribute("aria-expanded", String(brandsOpen));
+    tog.lastElementChild.textContent = brandsOpen ? "▴" : "▾";
+    return;
+  }
+  const pre = e.target.closest("[data-bp-preset]");
+  if (pre) {
+    const panel = pre.closest(".bp"), s = SET_DEFS[panel.dataset.set], p = pre.dataset.bpPreset;
+    const keys = p === "all" ? s.options.map((o) => o.key) : p === "nl" ? s.options.filter((o) => o.nl).map((o) => o.key) : p.split(",");
+    panel.querySelectorAll("[data-brand]").forEach((x) => { x.checked = keys.includes(x.dataset.brand); });
+    brandsChanged(panel, keys);
+    return;
+  }
   const info = e.target.closest("[data-info]");
   if (info) {
     const box = $(`info-${info.dataset.info}`);

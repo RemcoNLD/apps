@@ -523,13 +523,30 @@ class Pacer:
     """How often each outside source is read (pace.json on the branch, see "Pace" at the top)."""
     SOURCES = ("NDW", "OCPDB", "E-Control")
 
-    def __init__(self, path, now):
+    def __init__(self, path, now, fastest=PACE_LEVELS[0]):
         self.path, self.now = path, now
+        # The usage page's "Occupancy: fastest interval": never read a source more often than that.
+        self.levels = [m for m in PACE_LEVELS if m >= fastest] or PACE_LEVELS[-1:]
         try:
             self.state = json.load(open(path))
         except Exception:
             self.state = {}
+        for src, r in list(self.state.items()):
+            if not isinstance(r, dict):
+                continue
+            if r.get("every") not in self.levels:
+                r["every"] = min((m for m in self.levels if m >= (r.get("every") or 0)), default=self.levels[-1])
         self.run = {s: {"calls": 0, "failed": 0, "limited": None} for s in self.SOURCES}
+
+    def lighter(self, src, why):
+        """The load on src shrank (fewer brands followed): one level faster at once. Rate limiting still
+        slows it down again straight away (paused at least 10 minutes)."""
+        r = self.rec(src)
+        lvl = self.levels.index(r["every"])
+        if lvl > 0:
+            r["every"] = self.levels[lvl - 1]
+            r["calmSince"] = self._iso(self.now)
+            log(f"{src}: {why}, speeding up: every {r['every']} min")
 
     def _t(self, iso):
         try:
@@ -541,7 +558,7 @@ class Pacer:
         return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def rec(self, src):
-        return self.state.setdefault(src, {"every": PACE_LEVELS[0]})
+        return self.state.setdefault(src, {"every": self.levels[0]})
 
     def due(self, src):
         """Read this source in this run? Not while paused, and not sooner than its interval (2 min slack:
@@ -574,11 +591,11 @@ class Pacer:
         overload = run["limited"]
         if not overload and run["calls"] >= 3 and run["failed"] >= FAIL_SHARE * run["calls"]:
             overload = f"{run['failed']} of {run['calls']} calls failed"
-        lvl = PACE_LEVELS.index(r["every"]) if r["every"] in PACE_LEVELS else 0
+        lvl = self.levels.index(r["every"]) if r["every"] in self.levels else 0
         if overload:
             wait = max(PAUSE_MIN * 60, getattr(overload, "retry_after", 0) or 0)
             until = self.now + datetime.timedelta(seconds=wait)
-            r.update({"every": PACE_LEVELS[min(lvl + 1, len(PACE_LEVELS) - 1)], "until": self._iso(until),
+            r.update({"every": self.levels[min(lvl + 1, len(self.levels) - 1)], "until": self._iso(until),
                       "calmSince": self._iso(until), "lastHit": self._iso(self.now), "why": str(overload),
                       "hits": int(r.get("hits") or 0) + 1, "streak": int(r.get("streak") or 0) + 1})
             log(f"{src}: slowing down ({overload}): paused until {r['until']}, then every {r['every']} min")
@@ -586,11 +603,11 @@ class Pacer:
         calm = self._t(r.get("calmSince") or "")
         need = CALM_MIN * min(4, max(1, int(r.get("streak") or 1)))
         if lvl > 0 and calm and (self.now - calm).total_seconds() >= need * 60:
-            r["every"] = PACE_LEVELS[lvl - 1]
+            r["every"] = self.levels[lvl - 1]
             r["calmSince"] = self._iso(self.now)
             log(f"{src}: calm for {need // 60} h, speeding up: every {r['every']} min")
         hit = self._t(r.get("lastHit") or "")
-        if r["every"] == PACE_LEVELS[0] and r.get("streak") and hit and (self.now - hit).total_seconds() >= STREAK_RESET_H * 3600:
+        if r["every"] == self.levels[0] and r.get("streak") and hit and (self.now - hit).total_seconds() >= STREAK_RESET_H * 3600:
             r["streak"] = 0
             r.pop("calmSince", None)
 
@@ -682,13 +699,27 @@ def main():
     except Exception:
         nl = {"at": None, "brands": "", "sites": {}}
 
-    pacer = Pacer(os.path.join(state, "pace.json"), now)
+    try:
+        fastest = int(cfg.get("everyMin") or PACE_LEVELS[0])
+    except Exception:
+        fastest = PACE_LEVELS[0]
+    pacer = Pacer(os.path.join(state, "pace.json"), now, fastest)
+    if fastest != PACE_LEVELS[0]:
+        log(f"Fastest interval set to {pacer.levels[0]} min")
+    # Fewer brands than the last run: less load on NDW (boxes instead of a full scan, after one discovery
+    # scan) and on OCPDB (one call per brand), so those try one level faster.
+    prev_brands = set(filter(None, (pacer.state.get("brands") or "").split(",")))
+    fewer = bool(prev_brands) and followed < prev_brands
+    if fewer:
+        pacer.lighter("OCPDB", f"{len(prev_brands)} → {len(followed)} brands")
+    pacer.state["brands"] = brand_sig
     readings = {}
     # NL
     age_h = 1e9
     if nl.get("at"):
         age_h = (now - datetime.datetime.fromisoformat(nl["at"].replace("Z", "+00:00"))).total_seconds() / 3600
     discovered = False
+    prev_nl_sig = nl.get("brands") or ""
     nl_due = pacer.due("NDW")
     try:
         if not nl_due:
@@ -728,6 +759,10 @@ def main():
         if PACE.stopped:
             pacer.limited("NDW", PACE.stopped)
         pacer.done("NDW")
+        old = set(filter(None, prev_nl_sig.split(",")))
+        if discovered and not pacer.run["NDW"]["limited"] and old and followed < old \
+                and len(nl_boxes(nl["sites"])) < int(nl.get("scanCalls") or SCAN_CALLS):
+            pacer.lighter("NDW", f"{len(nl['sites'])} Dutch sites in {len(nl_boxes(nl['sites']))} boxes instead of a full scan")
     nl_count = sum(1 for k in readings if k.startswith("nl:"))
 
     fr = fr_sites(opt.get("--fr"), followed)
@@ -779,7 +814,7 @@ def main():
             "discovery": discovered, "nlSites": len(nl.get("sites") or {}),
             "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values()),
             "pace": {src: {k: v for k, v in r.items() if k in ("every", "until", "lastHit", "why", "streak")}
-                     for src, r in pacer.state.items()}}
+                     for src, r in pacer.state.items() if isinstance(r, dict)}, "fastest": pacer.levels[0]}
     with open(os.path.join(state, "meta.json"), "w") as f:
         json.dump(meta, f, separators=(",", ":"))
     log("Done:", json.dumps(meta))

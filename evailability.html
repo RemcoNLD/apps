@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.41.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.42.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -5343,10 +5343,10 @@ function openNavSheet(ids) {
   $("navSheet").hidden = false;
 }
 // ---- Occupancy through the day (0.37): how many chargers were free every
-// 15 minutes today (green, up to now) against the same day last week (dashed, the whole day), like
-// ParkPilot's "previous weeks" line. The data comes from the GitHub job Occupancy (every 15 min, kept 8
+// 5 minutes (since 0.42; 15 before) today (green, up to now) against the same day last week (dashed, the whole day), like
+// ParkPilot's "previous weeks" line. The data comes from the GitHub job Occupancy (every 5 min, kept 8
 // days) through the Worker's GET /occupancy; only for the brands the usage page follows (from /me) in
-// the countries the job covers (from /me: NL, DE, AT, FR, PT). Kept in memory and on the device (evailability-occ, 24 h); refetched after 10 min.
+// the countries the job covers (from /me: NL, DE, AT, FR, PT). Kept in memory and on the device (evailability-occ, 24 h); refetched after 5 min.
 const OCC_BRANDS_KEY = "evailability-occ-brands";
 const OCC_KEY = "evailability-occ";
 const OCC_COUNTRIES_KEY = "evailability-occ-countries";
@@ -5354,7 +5354,7 @@ function occCountries() {
   try { const v = JSON.parse(localStorage.getItem(OCC_COUNTRIES_KEY) || "null"); if (Array.isArray(v)) return v; } catch (_) {}
   return ["NL", "DE", "AT", "FR", "PT"];
 }
-const OCC_FRESH_MS = 10 * 60000;
+const OCC_FRESH_MS = 5 * 60000;
 const OCC_ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz";
 const occMem = new Map(); // key -> {at, data, ok, loading}
 function occBrands() {
@@ -5402,13 +5402,26 @@ function occDayBefore(date, days) {
   return new Date(Date.UTC(y, mo - 1, d - days)).toISOString().slice(0, 10);
 }
 const occVals = (str) => [...(str || "")].map((c) => { const i = OCC_ALPHA.indexOf(c); return i < 0 ? null : i; });
-// Busiest and quietest hour of a day (free share per hour, at least 2 of its 4 readings), between 06:00
+// A source that rate-limits is read less often for a while (every 10, 15 or 30 min instead of 5, 0.42):
+// a reading then holds until the next one, across a gap of at most 30 minutes between two readings.
+// Longer gaps (the job stopped) and the stretch after the last reading stay empty.
+function occBridge(vals, slotMin) {
+  const max = Math.round(30 / slotMin);
+  let last = -1;
+  for (let i = 0; i < vals.length; i++) {
+    if (vals[i] == null) continue;
+    if (last >= 0 && i - last > 1 && i - last <= max) for (let j = last + 1; j < i; j++) vals[j] = vals[last];
+    last = i;
+  }
+  return vals;
+}
+// Busiest and quietest hour of a day (free share per hour, at least half of its readings), between 06:00
 // and 23:00: at night most sites are empty, which says nothing useful about when to go.
-function occPeaks(vals, total) {
-  const hours = [];
+function occPeaks(vals, total, slotMin = 15) {
+  const hours = [], per = Math.round(60 / slotMin);
   for (let h = 6; h < 23; h++) {
-    const v = vals.slice(h * 4, h * 4 + 4).filter((x) => x != null);
-    if (v.length >= 2) hours.push({ h, f: v.reduce((a, b) => a + b, 0) / v.length / Math.max(1, total) });
+    const v = vals.slice(h * per, h * per + per).filter((x) => x != null);
+    if (v.length >= Math.ceil(per / 2)) hours.push({ h, f: v.reduce((a, b) => a + b, 0) / v.length / Math.max(1, total) });
   }
   if (hours.length < 9) return null;
   const busy = hours.reduce((a, b) => (b.f < a.f ? b : a)), quiet = hours.reduce((a, b) => (b.f > a.f ? b : a));
@@ -5472,7 +5485,12 @@ function occLastFull(today, nowSlot, yday, slotMin, freeNow) {
   };
   const t = last(today, nowSlot + 1);
   if (t) {
-    if (!(freeNow > 0) && (t.end === nowSlot || (t.end === nowSlot - 1 && today[nowSlot] == null))) return `All in use since ${hm(t.from)}`;
+    // Still going on: the stretch ends in the latest reading, and that reading is recent (the chart's data
+    // can lag the clock by a few 5-minute slots: job, Worker and app each keep it a few minutes).
+    let lastRead = -1;
+    for (let i = Math.min(today.length - 1, nowSlot); i >= 0; i--) if (today[i] != null) { lastRead = i; break; }
+    const recent = Math.max(1, Math.round(15 / slotMin));
+    if (!(freeNow > 0) && t.end === lastRead && nowSlot - lastRead <= recent) return `All in use since ${hm(t.from)}`;
     return `Last full at ${hm(t.from)} for ${(t.end - t.from + 1) * slotMin} minutes.`;
   }
   const y = last(yday, yday.length);
@@ -5486,7 +5504,7 @@ function occHtml(m, entry, etaMin) {
   const slotMin = d.slotMin || 15, slots = Math.round(1440 / slotMin);
   const clock = occClock(d.tz);
   const lastWeek = occDayBefore(clock.date, 7);
-  const today = occVals(d.days?.[clock.date]), week = occVals(d.days?.[lastWeek]);
+  const today = occBridge(occVals(d.days?.[clock.date]), slotMin), week = occBridge(occVals(d.days?.[lastWeek]), slotMin);
   const nowSlot = Math.floor(clock.min / slotMin);
   const total = d.total || 0;
   const hasWeek = week.some((v) => v != null);
@@ -5494,7 +5512,7 @@ function occHtml(m, entry, etaMin) {
   const localTz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (_) { return ""; } })();
   const otherTz = d.tz && localTz && occClock(d.tz).min !== occClock(localTz).min;
   const hm = (h) => `${String(h).padStart(2, "0")}:00`;
-  const peaks = hasWeek ? occPeaks(week, total) : null;
+  const peaks = hasWeek ? occPeaks(week, total, slotMin) : null;
   // Your arrival, on the site's clock, when it's still today there.
   let arr = null;
   if (etaMin != null && etaMin >= 1) {
@@ -5505,7 +5523,7 @@ function occHtml(m, entry, etaMin) {
   const notes = [];
   const liveAt = m.statusAt || 0, readAt = Date.parse(d.at || "") || 0;
   const freeNow = liveAt > readAt && m.status?.available != null ? m.status.available : null;
-  const full = occLastFull(today, nowSlot, occVals(d.days?.[occDayBefore(clock.date, 1)]), slotMin, freeNow);
+  const full = occLastFull(today, nowSlot, occBridge(occVals(d.days?.[occDayBefore(clock.date, 1)]), slotMin), slotMin, freeNow);
   if (full) notes.push(`<span class="occ-note">${full}</span>`);
   if (peaks) notes.push(`<span class="occ-note">Same day last week: <b>busiest around ${hm(peaks.busy)}</b>, <b>most free around ${hm(peaks.quiet)}</b>.</span>`);
   if (otherTz) notes.push(`<span class="occ-note">Times are local time at the site.</span>`);
@@ -7052,6 +7070,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.42", date: "2026-11-25", title: { en: "Day chart every 5 minutes", nl: "Daggrafiek elke 5 minuten", pt: "Gráfico do dia a cada 5 minutos" },
+    items: { en: ["Free chargers through the day is now noted every 5 minutes instead of every 15, so you see more precisely when a site was full and for how long. Earlier days keep their 15-minute steps."],
+      nl: ["Vrije laders door de dag wordt nu elke 5 minuten bijgehouden in plaats van elk kwartier, zodat je preciezer ziet wanneer een locatie vol was en hoe lang. Eerdere dagen houden hun stappen van een kwartier."],
+      pt: ["Os carregadores livres ao longo do dia são agora registados a cada 5 minutos em vez de 15, para ver com mais precisão quando um local esteve cheio e durante quanto tempo. Os dias anteriores mantêm os seus passos de 15 minutos."] } },
   { v: "0.41", date: "2026-11-24", title: { en: "Fewer missing chargers abroad", nl: "Minder ontbrekende laders in het buitenland", pt: "Menos carregadores em falta no estrangeiro" },
     items: { en: ["Chargers that weren't on the list in Belgium, France, Germany and Portugal now show up too, such as Fastned Brecht Oost on the E19. They're filled in from the same sources as the live status, as the Netherlands already was."],
       nl: ["Laders die nog niet in de lijst stonden in België, Frankrijk, Duitsland en Portugal komen er nu ook bij, zoals Fastned Brecht Oost aan de E19. Ze worden aangevuld uit dezelfde bronnen als de live status, zoals in Nederland al gebeurde."],

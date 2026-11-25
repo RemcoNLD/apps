@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Occupancy through the day: how many chargers were free at each charger site, every 15 minutes.
+"""Occupancy through the day: how many chargers were free at each charger site, every 5 minutes.
 
-Run by .github/workflows/occupancy.yml (started by the Worker's timer every 15 minutes, GitHub's own
+Run by .github/workflows/occupancy.yml (started by the Worker's timer every 5 minutes, GitHub's own
 schedule as backup). Standard library only. Keeps 8 days (today and the same weekday a week ago), so
 the app can draw today's line against last week's (like ParkPilot's "previous weeks" line).
 
@@ -26,13 +26,24 @@ Sources (no keys needed):
 
 Files written (in STATE_DIR):
   t_<floor lat>_<floor lon>.json  {v, at, slotMin, sites: {key: {b, cc, tz, lat, lon, n, t, d: {date: slots}}}}
-      slots: 96 characters, one per 15 minutes of the site's local day (00:00 first):
+      slots: 288 characters, one per 5 minutes of the site's local day (00:00 first; until 25 Nov 2026
+      96 per 15 minutes: those days are stretched to 288 on the first run, each reading kept 3 times):
       0-9 then a-z = number of free chargers (fast ones, the site's own count), "." = no reading.
       t = the site's latest total. Tiles of 1 x 1 degree keep each file small for the Worker.
   nl-sites.json  {at, brands, scanCalls, sites: {ndwId: [brand, lat, lon, name]}}
       (when a box per known site would take as many calls as the last full scan, scanCalls, every run
       is a full scan instead)
-  meta.json      {at, secs, sites per country, NDW calls, discovery or not}
+  meta.json      {at, secs, sites per country, NDW calls, discovery or not, pace}
+  pace.json      per source (NDW, OCPDB, E-Control): how often it is read now and since when it is
+      paused (see "Pace" below)
+
+Pace (25 Nov 2026, Remco: "als er een rate limiting optreedt ... meteen 10 minuten langer pauzeren ...
+pas weer de snelheid opvoeren als we het idee hebben dat het weer kan"): each source is read every
+5 minutes. When it rate-limits (HTTP 429, a 503, the Worker saying E-Control limited it) or a fifth or
+more of its calls in a run fail, the rest of that run leaves it alone, it pauses at least 10 minutes
+(longer if it says Retry-After), and it steps down one level: 5 -> 10 -> 15 -> 30 minutes between
+reads. After a clean hour at a level it steps one level faster again, back to 5. FR and PT come from
+snapshots that are made anyway, so they're read every run.
 """
 import concurrent.futures
 import datetime
@@ -66,8 +77,12 @@ DE_COUNTRIES = {"DE", "AT"}               # OCPDB also holds some sites abroad (
 DE_OPERATOR = {"ionity": "IONITY", "fastned": "Fastned", "enbw": "EnBW", "aral": "Aral", "tesla": "Tesla",
                "shell": "Shell", "total": "Total", "allego": "Allego", "electra": "Electra",
                "essent": "E.ON", "vattenfall": "Vattenfall", "eneco": "Eneco"}
-SLOT_MIN = 15
+SLOT_MIN = 5
 SLOTS = 24 * 60 // SLOT_MIN
+PACE_LEVELS = [5, 10, 15, 30]             # minutes between reads of one source, fastest first
+PAUSE_MIN = 10                            # at least this long without calls after being rate limited
+CALM_MIN = 60                             # a clean hour at a level: one level faster
+FAIL_SHARE = 0.2                          # this share of failed calls (and at least 3) counts as overload
 ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz"
 FAST_KW = 50
 TZ = {"PT": "Europe/Lisbon", "DE": "Europe/Berlin", "AT": "Europe/Vienna"}  # else Central European time
@@ -83,7 +98,21 @@ def tz_of(cc):
     return ZoneInfo(TZ.get(cc, "Europe/Amsterdam"))
 
 
-def get(url, timeout=60, tries=3):
+class RateLimited(Exception):
+    """The source asks us to slow down (HTTP 429 or 503): no retries, the run leaves it alone."""
+    def __init__(self, source, status, retry_after=0):
+        super().__init__(f"{source}: HTTP {status}" + (f", Retry-After {retry_after} s" if retry_after else ""))
+        self.source, self.status, self.retry_after = source, status, retry_after
+
+
+def retry_after_s(e):
+    try:
+        return max(0, int(float(e.headers.get("Retry-After") or 0)))
+    except (TypeError, ValueError, AttributeError):
+        return 0
+
+
+def get(url, timeout=60, tries=3, source="?"):
     last = None
     for i in range(tries):
         try:
@@ -96,7 +125,9 @@ def get(url, timeout=60, tries=3):
             return json.loads(raw)
         except urllib.error.HTTPError as e:
             last = e
-            if e.code < 500 and e.code != 429:
+            if e.code in (429, 503):
+                raise RateLimited(source, e.code, retry_after_s(e))
+            if e.code < 500:
                 raise
         except Exception as e:  # network trouble: try again
             last = e
@@ -117,13 +148,17 @@ def load_config():
 # ------------------------------------------------------------------ NDW (NL)
 
 class Pace:
-    """NDW refuses bursts (about 10 calls a second): at most 8 starts a second over all threads."""
+    """NDW refuses bursts (about 10 calls a second): at most 8 starts a second over all threads.
+    Once NDW rate-limits (stop), every further call in this run is skipped."""
     def __init__(self, per_sec=8):
         self.gap, self.next, self.lock = 1.0 / per_sec, 0.0, threading.Lock()
         self.calls = 0
+        self.stopped = None
 
     def wait(self):
         with self.lock:
+            if self.stopped:
+                raise self.stopped
             now = time.time()
             at = max(now, self.next)
             self.next = at + self.gap
@@ -138,7 +173,12 @@ PACE = Pace()
 def ndw(box):
     PACE.wait()
     bbox = ",".join(f"{v:.6f}" for v in box)
-    return get(f"{NDW}?bbox={bbox}", timeout=60).get("features", [])
+    try:
+        return get(f"{NDW}?bbox={bbox}", timeout=60, source="NDW").get("features", [])
+    except RateLimited as e:
+        with PACE.lock:
+            PACE.stopped = PACE.stopped or e
+        raise
 
 
 def brand_of(feature, brands):
@@ -185,7 +225,8 @@ def nl_scan(brands):
             return box, depth, ndw(box)
         except Exception as e:  # one tile failing shouldn't cost the whole country
             failed[0] += 1
-            log("NDW tile failed:", box, e)
+            if not isinstance(e, RateLimited) or e is not PACE.stopped or failed[0] == 1:
+                log("NDW tile failed:", box, e)
             return box, depth, []
 
     with concurrent.futures.ThreadPoolExecutor(4) as ex:
@@ -224,9 +265,10 @@ def nl_boxes(sites):
 
 
 def nl_status(sites):
-    """Counts for known sites: a small box around each (sites close together share one call)."""
+    """Counts for known sites: a small box around each (sites close together share one call).
+    Returns (counts, failed calls)."""
     boxes = nl_boxes(sites)
-    out = {}
+    out, failed = {}, 0
 
     def one(group):
         lats = [g[1] for g in group]
@@ -243,8 +285,10 @@ def nl_status(sites):
                     if c:
                         out[sid] = c
             except Exception as e:
-                log("NDW call failed:", e)
-    return out
+                failed += 1
+                if not isinstance(e, RateLimited) or failed == 1:
+                    log("NDW call failed:", e)
+    return out, failed
 
 
 # ------------------------------------------------------------------ snapshots (FR, PT)
@@ -355,7 +399,7 @@ def de_coords(loc):
         return None
 
 
-def de_sites(brands):
+def de_sites(brands, pace=None):
     """All of Germany: per brand one OCPDB call (operator_name contains the brand), grouped into sites
     like the Worker's summariseDe (the same charger can come twice: operator feed and federal register;
     merged by EVSE id, a live status wins; sites on the other side of the road stay apart)."""
@@ -364,10 +408,17 @@ def de_sites(brands):
         term = DE_OPERATOR.get(b["key"], b["key"])
         url = f"{OCPDB}?operator_name={urllib.parse.quote(term)}&limit={OCPDB_MAX}"
         try:
-            data = get(url, timeout=120)
             calls += 1
+            data = get(url, timeout=120, source="OCPDB")
+        except RateLimited as e:
+            log(f"DE {b['key']}: OCPDB rate limited, the other brands wait:", e)
+            if pace:
+                pace.limited("OCPDB", e)
+            break
         except Exception as e:
             log(f"DE {b['key']}: OCPDB failed:", e)
+            if pace:
+                pace.failed("OCPDB")
             continue
         items = data if isinstance(data, list) else (data.get("items") or [])
         if isinstance(data, dict):
@@ -428,14 +479,21 @@ def de_sites(brands):
 
 # ------------------------------------------------------------------ E-Control via the Worker (AT)
 
-def at_sites():
+def at_sites(pace=None):
     out, calls, part, parts = {}, 0, 0, 1
     while part < parts and part < 40:
         try:
-            data = get(f"{WORKER}/occupancy/at?part={part}", timeout=60, tries=2)
             calls += 1
+            data = get(f"{WORKER}/occupancy/at?part={part}", timeout=60, tries=2, source="E-Control")
+        except RateLimited as e:
+            log(f"AT part {part}: rate limited, the other parts wait:", e)
+            if pace:
+                pace.limited("E-Control", e)
+            break
         except Exception as e:
             log(f"AT part {part} failed:", e)
+            if pace:
+                pace.failed("E-Control")
             part += 1
             continue
         if not data.get("ok"):
@@ -446,11 +504,107 @@ def at_sites():
             out[f"at:{x['id']}"] = ({"b": x["b"], "cc": "AT", "lat": round(x["lat"], 5), "lon": round(x["lon"], 5),
                                      "n": x.get("n") or ""}, (int(x["free"]), int(x["total"])))
         part += 1
+        if data.get("limited"):  # E-Control limited the Worker partway through this part
+            log(f"AT part {part - 1}: E-Control rate limited the Worker, the other parts wait")
+            if pace:
+                pace.limited("E-Control", RateLimited("E-Control", 429))
+            break
     log(f"AT: {len(out)} readings from {calls} Worker calls ({parts} parts)")
     return out, calls
 
 
+# ------------------------------------------------------------------ pace per source
+
+class Pacer:
+    """How often each outside source is read (pace.json on the branch, see "Pace" at the top)."""
+    SOURCES = ("NDW", "OCPDB", "E-Control")
+
+    def __init__(self, path, now):
+        self.path, self.now = path, now
+        try:
+            self.state = json.load(open(path))
+        except Exception:
+            self.state = {}
+        self.run = {s: {"calls": 0, "failed": 0, "limited": None} for s in self.SOURCES}
+
+    def _t(self, iso):
+        try:
+            return datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    def _iso(self, t):
+        return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def rec(self, src):
+        return self.state.setdefault(src, {"every": PACE_LEVELS[0]})
+
+    def due(self, src):
+        """Read this source in this run? Not while paused, and not sooner than its interval (2 min slack:
+        runs start a little later or earlier than every 5 minutes)."""
+        r = self.rec(src)
+        until, last = self._t(r.get("until") or ""), self._t(r.get("last") or "")
+        if until and self.now < until:
+            log(f"{src}: paused until {r['until']} (rate limited), every {r['every']} min")
+            return False
+        if last and (self.now - last).total_seconds() < (r["every"] - 2) * 60:
+            log(f"{src}: read every {r['every']} min for now, next after {self._iso(last + datetime.timedelta(minutes=r['every']))}")
+            return False
+        return True
+
+    def called(self, src, calls, failed):
+        self.run[src]["calls"] += calls
+        self.run[src]["failed"] += failed
+
+    def failed(self, src):
+        self.run[src]["calls"] += 1
+        self.run[src]["failed"] += 1
+
+    def limited(self, src, err):
+        self.run[src]["limited"] = self.run[src]["limited"] or err
+
+    def done(self, src):
+        """After reading src in this run: slow down when it pushed back, speed up after a calm hour."""
+        r, run = self.rec(src), self.run[src]
+        r["last"] = self._iso(self.now)
+        overload = run["limited"]
+        if not overload and run["calls"] >= 3 and run["failed"] >= FAIL_SHARE * run["calls"]:
+            overload = f"{run['failed']} of {run['calls']} calls failed"
+        lvl = PACE_LEVELS.index(r["every"]) if r["every"] in PACE_LEVELS else 0
+        if overload:
+            wait = max(PAUSE_MIN * 60, getattr(overload, "retry_after", 0) or 0)
+            until = self.now + datetime.timedelta(seconds=wait)
+            r.update({"every": PACE_LEVELS[min(lvl + 1, len(PACE_LEVELS) - 1)], "until": self._iso(until),
+                      "calmSince": self._iso(until), "lastHit": self._iso(self.now), "why": str(overload),
+                      "hits": int(r.get("hits") or 0) + 1})
+            log(f"{src}: slowing down ({overload}): paused until {r['until']}, then every {r['every']} min")
+            return
+        calm = self._t(r.get("calmSince") or "")
+        if lvl > 0 and calm and (self.now - calm).total_seconds() >= CALM_MIN * 60:
+            r["every"] = PACE_LEVELS[lvl - 1]
+            r["calmSince"] = self._iso(self.now)
+            log(f"{src}: calm for an hour, speeding up: every {r['every']} min")
+        if lvl == 0:
+            r.pop("calmSince", None)
+
+    def save(self):
+        with open(self.path, "w") as f:
+            json.dump(self.state, f, separators=(",", ":"))
+
+
 # ------------------------------------------------------------------ store
+
+def stretch(days):
+    """Days stored per 15 minutes (96 characters, before 25 Nov 2026) as per 5 minutes: each reading
+    covers the 3 slots of its quarter, as it did in the chart."""
+    out = {}
+    for d, v in days.items():
+        if v and len(v) < SLOTS and SLOTS % len(v) == 0:
+            k = SLOTS // len(v)
+            v = "".join(ch * k for ch in v)
+        out[d] = v
+    return out
+
 
 def tile_of(lat, lon):
     return f"t_{math.floor(lat)}_{math.floor(lon)}.json"
@@ -510,6 +664,9 @@ def main():
             if (doc.get("at") or "") < "2026-11-24T18:20:00Z":
                 # the first German test run (24 Nov 18:18 UTC) kept Swiss sites too, all marked DE
                 sites = {k: v for k, v in sites.items() if not k.startswith("de:")}
+            if (doc.get("slotMin") or 15) != SLOT_MIN:
+                for rec in sites.values():
+                    rec["d"] = stretch(rec.get("d") or {})
             sites_by_tile[os.path.basename(path)] = sites
         except Exception as e:
             log("Unreadable", path, e)
@@ -518,13 +675,17 @@ def main():
     except Exception:
         nl = {"at": None, "brands": "", "sites": {}}
 
+    pacer = Pacer(os.path.join(state, "pace.json"), now)
     readings = {}
     # NL
     age_h = 1e9
     if nl.get("at"):
         age_h = (now - datetime.datetime.fromisoformat(nl["at"].replace("Z", "+00:00"))).total_seconds() / 3600
     discovered = False
+    nl_due = pacer.due("NDW")
     try:
+        if not nl_due:
+            raise StopIteration
         scan_calls = int(nl.get("scanCalls") or SCAN_CALLS)
         boxes = len(nl_boxes(nl.get("sites") or {}))
         if age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites") or boxes >= scan_calls:
@@ -540,33 +701,52 @@ def main():
                 nl["sites"].update({sid: site for sid, (site, _) in found.items()})
             got = {sid: c for sid, (_, c) in found.items()}
             nl["scanCalls"] = scan_calls
+            pacer.called("NDW", PACE.calls - before, failed)
             log(f"NL scan: {len(found)} sites of {brand_sig}, {failed} tiles failed, {scan_calls} calls")
         else:
             log(f"NL: {len(nl['sites'])} sites in {boxes} boxes (a full scan takes {scan_calls} calls)")
-            got = nl_status(nl["sites"])
+            before = PACE.calls
+            got, failed = nl_status(nl["sites"])
+            pacer.called("NDW", PACE.calls - before, failed)
         for sid, c in got.items():
             b, lat, lon, name = nl["sites"][sid]
             if b in followed:
                 readings[f"nl:{sid}"] = ({"b": b, "cc": "NL", "lat": lat, "lon": lon, "n": name}, c)
+    except StopIteration:
+        pass
     except Exception as e:
         log("NL failed:", e)
+        pacer.failed("NDW")
+    if nl_due:
+        if PACE.stopped:
+            pacer.limited("NDW", PACE.stopped)
+        pacer.done("NDW")
     nl_count = sum(1 for k in readings if k.startswith("nl:"))
 
     fr = fr_sites(opt.get("--fr"), followed)
     pt = pt_sites(opt.get("--pt"), followed)
     readings.update(fr)
     readings.update(pt)
-    try:
-        de, de_calls = de_sites(brands)
-    except Exception as e:
-        log("DE failed:", e)
-        de, de_calls = {}, 0
+    de, de_calls = {}, 0
+    if pacer.due("OCPDB"):
+        try:
+            de, de_calls = de_sites(brands, pacer)
+            pacer.called("OCPDB", 0, 0)
+        except Exception as e:
+            log("DE failed:", e)
+            pacer.failed("OCPDB")
+        pacer.run["OCPDB"]["calls"] = max(pacer.run["OCPDB"]["calls"], de_calls)
+        pacer.done("OCPDB")
     readings.update(de)
-    try:
-        at, at_calls = at_sites()
-    except Exception as e:
-        log("AT failed:", e)
-        at, at_calls = {}, 0
+    at, at_calls = {}, 0
+    if pacer.due("E-Control"):
+        try:
+            at, at_calls = at_sites(pacer)
+        except Exception as e:
+            log("AT failed:", e)
+            pacer.failed("E-Control")
+        pacer.run["E-Control"]["calls"] = max(pacer.run["E-Control"]["calls"], at_calls)
+        pacer.done("E-Control")
     readings.update(at)
 
     for key, (info, c) in readings.items():
@@ -583,19 +763,24 @@ def main():
             json.dump({"v": 1, "at": at, "slotMin": SLOT_MIN, "sites": sites}, f, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(state, "nl-sites.json"), "w") as f:
         json.dump(nl, f, ensure_ascii=False, separators=(",", ":"))
+    pacer.save()
     meta = {"at": at, "secs": round(time.time() - t0, 1), "brands": brand_sig, "keepDays": keep_days,
             "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt),
                          "DE": sum(1 for i, _ in de.values() if i["cc"] == "DE"),
                          "AT": len(at) + sum(1 for i, _ in de.values() if i["cc"] == "AT")}, "ndwCalls": PACE.calls,
             "ocpdbCalls": de_calls, "workerAtCalls": at_calls,
             "discovery": discovered, "nlSites": len(nl.get("sites") or {}),
-            "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values())}
+            "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values()),
+            "pace": {src: {k: v for k, v in r.items() if k in ("every", "until", "lastHit", "why")}
+                     for src, r in pacer.state.items()}}
     with open(os.path.join(state, "meta.json"), "w") as f:
         json.dump(meta, f, separators=(",", ":"))
     log("Done:", json.dumps(meta))
-    if not readings:
+    if not readings and nl_due:
         log("No readings at all")
         sys.exit(1)
+    if not readings:
+        log("No readings: the sources are paused or not due in this run")
 
 
 if __name__ == "__main__":

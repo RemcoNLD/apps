@@ -30,7 +30,7 @@
 //   GET  /occupancy/config      public: occupancy on/off, followed brands and their name patterns (read by occupancy.yml)
 //                               ?all=1: every brand (read by de-index.yml)
 //   GET  /occupancy/at?part=     public: free/total at the followed brands' Austrian sites (E-Control), for occupancy.yml
-//   GET  /occupancy?lat=&lon=&brand=  free chargers per 15 min over the last 8 days at the nearest followed site (branch occ)
+//   GET  /occupancy?lat=&lon=&brand=  free chargers per 5 min (slotMin) over the last 8 days at the nearest followed site (branch occ)
 //   GET  /admin/usage           usage per data source (header Authorization: Bearer <ADMIN_TOKEN>)
 //   GET  /admin/timer           the 5-minute timer that starts GitHub jobs: its state (POST: check the GitHub App now)
 //   GET  /admin/push            push notifications for the usage page: public key, subscriptions (POST: subscribe, unsubscribe, test)
@@ -76,7 +76,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.13.1"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.14.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -354,7 +354,7 @@ const SETTINGS = [
   { key: "ocmIonityOperatorId", type: "text", label: "Open Charge Map operator id for Ionity", def: (env) => env.OCM_IONITY_OPERATOR_ID || "",
     help: "Empty: found automatically. Only fill in if that lookup fails." },
   { key: "occupancy", type: "bool", label: "Occupancy through the day", def: () => true,
-    help: "On: the GitHub job Occupancy (occupancy.yml) notes every 15 minutes how many chargers are free at the followed brands' sites (NL from NDW, DE from MobiData BW, AT from E-Control through the Worker, FR and PT from their snapshots) and keeps 8 days on the branch occ; the app's charger card shows today against the same day last week. No KV writes. Off: the timer stops starting it and the job writes nothing (the stored days stay)." },
+    help: "On: the GitHub job Occupancy (occupancy.yml) notes every 5 minutes how many chargers are free at the followed brands' sites (each source slows down by itself to 10, 15 or 30 minutes when it rate-limits, and speeds up again after a calm hour; NL from NDW, DE from MobiData BW, AT from E-Control through the Worker, FR and PT from their snapshots) and keeps 8 days on the branch occ; the app's charger card shows today against the same day last week. No KV writes. Off: the timer stops starting it and the job writes nothing (the stored days stay)." },
   { key: "occupancyBrands", type: "text", label: "Occupancy: brands", def: () => "ionity, fastned",
     help: "Brand keys to follow, separated by commas (e.g. ionity, fastned, tesla), or all. More brands means more NDW calls per run (one small call per Dutch site area, or one full scan of NL once that is cheaper) and one MobiData BW call per brand for Germany; KV writes stay zero." },
   { key: "closuresHours", type: "choice", options: [6, 12, 24, 48], label: "Road closures: hours between updates", def: () => 12,
@@ -1220,11 +1220,13 @@ async function ndwFeaturesNear(lat, lon, dLat = 0.004, dLon = 0.006) {
 }
 
 // ---------------------------------------------------------------- occupancy through the day (Worker 0.10.0)
-// The GitHub job occupancy.yml notes every 15 minutes how many chargers are free at the followed brands'
-// sites and keeps 8 days on the branch "occ", in tiles of 1 x 1 degree (t_<floor lat>_<floor lon>.json:
-// {at, slotMin, sites: {key: {b, cc, tz, lat, lon, n, t, d: {date: 96 characters}}}}; 0-9, a-z = free,
-// "." = no reading). Read like the France and Portugal snapshots: the branch's commit from git's ref
-// list, then the raw file at that commit, at most once per 5 minutes per tile per Worker copy. No KV.
+// The GitHub job occupancy.yml notes every 5 minutes (since Worker 0.14.0; 15 before) how many chargers
+// are free at the followed brands' sites and keeps 8 days on the branch "occ", in tiles of 1 x 1 degree
+// (t_<floor lat>_<floor lon>.json: {at, slotMin: 5, sites: {key: {b, cc, tz, lat, lon, n, t, d: {date:
+// 288 characters}}}}; 0-9, a-z = free, "." = no reading). A source that rate-limits is read less often
+// for a while (the job's pace.json), so a day can have gaps of 10–30 minutes; the app bridges those.
+// Read like the France and Portugal snapshots: the branch's commit from git's ref list, then the raw
+// file at that commit, at most once per 4 minutes per tile per Worker copy. No KV.
 const OCC_KEEP_DAYS = 8;
 const OCC_COUNTRIES = ["NL", "DE", "AT", "FR", "PT"]; // where the job takes readings (told to the app by /me)
 const OCC_RAW_AT = (sha, tile) => `https://raw.githubusercontent.com/RemcoNLD/apps/${sha}/${tile}`;
@@ -1247,7 +1249,7 @@ async function occTile(tile) {
     if (!res.ok) throw new HttpError(502, `Occupancy: HTTP ${res.status}`);
     return await res.json();
   })();
-  memoSet(`occ:${tile}`, promise, 5 * 60 * 1000);
+  memoSet(`occ:${tile}`, promise, 4 * 60 * 1000);
   promise.catch(() => memoSet(`occ:${tile}`, undefined, 1));
   return promise;
 }
@@ -1279,7 +1281,9 @@ async function handleOccupancy(request, env, url) {
 // asks here: GET /occupancy/at?part=N (public, like /occupancy/config: counts of public data only).
 // Sites: the followed brands' Austrian sites from Open Charge Map (sitesInBox: kept a day in KV, so
 // about one KV write a day). Per part at most OCC_AT_PART sites (each E-Control answer is large, as in
-// MAX_AT_LOOKUPS), each part's answer kept 10 minutes per Worker copy, so repeated calls cost nothing.
+// MAX_AT_LOOKUPS), each part's answer kept 4 minutes per Worker copy (10 until 0.14.0, when the job
+// went to every 5 minutes), so a repeated call costs nothing. When E-Control rate-limits (429/503) the
+// part stops there and answers limited: true, so the job pauses Austria (its pace.json).
 const OCC_AT_BOX = [9.5, 46.35, 17.2, 49.05];
 const OCC_AT_PART = 4;
 async function occAtSites(env, brands) {
@@ -1306,15 +1310,19 @@ async function handleOccupancyAt(request, env, url) {
     const parts = Math.ceil(all.length / OCC_AT_PART);
     const mine = all.slice(part * OCC_AT_PART, (part + 1) * OCC_AT_PART);
     const sites = [];
+    let limited = false;
     for (const s of mine) {
       let st = null;
       try { st = await atStatus({ lat: s.lat, lon: s.lon }, env, BRAND[s.b] || BRAND.ionity); }
-      catch (e) { console.log("Occupancy AT failed", s.id, e.message); }
+      catch (e) {
+        console.log("Occupancy AT failed", s.id, e.message);
+        if (/returned (429|503)\b/.test(e.message)) { limited = true; break; }
+      }
       if (st && st.available != null && st.total) sites.push({ ...s, free: st.available, total: st.total });
     }
-    return { ok: true, at: new Date().toISOString(), part, parts, count: all.length, sites };
+    return { ok: true, at: new Date().toISOString(), part, parts, count: all.length, sites, limited };
   })();
-  memoSet(key, promise, 10 * 60 * 1000);
+  memoSet(key, promise, 4 * 60 * 1000);
   promise.catch(() => memoSet(key, undefined, 1));
   return json(request, await promise);
 }
@@ -4136,7 +4144,7 @@ async function saveTimer(env, state) {
 function noteJob(state, job, ok, msg) {
   const prev = state[job] || {};
   const now = new Date().toISOString();
-  const changed = prev.ok !== ok || (!ok && prev.msg !== msg);
+  const changed = prev.ok !== ok || prev.msg !== msg; // also when an OK message changes (0.14.0: "every 5 minutes"), once
   state[job] = { ...prev, ok, msg, since: changed ? now : prev.since || now };
   return changed;
 }
@@ -4162,6 +4170,17 @@ async function runTimer(env, at = Date.now()) {
       console.log("Timer: France live", e.message);
     }
   }
+  // Occupancy through the day: one reading per 5 minutes (since 0.14.0; the job's own schedule is the
+  // backup, and the job itself reads a source less often while it rate-limits, see its pace.json).
+  if (setting(env, "occupancy")) {
+    try {
+      await startWorkflow(env, "occupancy.yml");
+      save = noteJob(state, "occ", true, "starts every 5 minutes") || save;
+    } catch (e) {
+      save = noteJob(state, "occ", false, e.message) || save;
+      console.log("Timer: Occupancy", e.message);
+    }
+  }
   if (new Date(at).getUTCMinutes() % 15 < 5) {
     try {
       const h = Number(setting(env, "closuresHours"));
@@ -4178,16 +4197,6 @@ async function runTimer(env, at = Date.now()) {
     } catch (e) {
       save = noteJob(state, "closures", false, e.message) || save;
       console.log("Timer: Road closures", e.message);
-    }
-    // Occupancy through the day: one reading per 15 minutes (the job's own schedule is the backup).
-    if (setting(env, "occupancy")) {
-      try {
-        await startWorkflow(env, "occupancy.yml");
-        save = noteJob(state, "occ", true, "starts every 15 minutes") || save;
-      } catch (e) {
-        save = noteJob(state, "occ", false, e.message) || save;
-        console.log("Timer: Occupancy", e.message);
-      }
     }
     // Failed GitHub runs (also ones the timer didn't start: deploys, pushes, GitHub's own schedule).
     try { save = (await checkWorkflowRuns(env, state)) || save; }

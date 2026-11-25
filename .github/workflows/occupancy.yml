@@ -1,5 +1,6 @@
-# Occupancy through the day: every 15 minutes, how many chargers are free at the followed brands' sites
-# (NL from NDW, FR and PT from their live snapshots), kept 8 days on the branch "occ" (force-pushed:
+# Occupancy through the day: every 5 minutes (15 until 25 Nov 2026), how many chargers are free at the
+# followed brands' sites (NL from NDW, DE from OCPDB, AT through the Worker, FR and PT from their live
+# snapshots; a source that rate-limits is paused and read less often for a while, see pace.json), kept 8 days on the branch "occ" (force-pushed:
 # one commit, no history, no Pages build). The Worker's GET /occupancy reads one tile of it for the
 # chart in the app's charger card. Switched on/off and brands chosen on the usage page (settings
 # "occupancy", "occupancyBrands"). Started by the Worker's timer; GitHub's own schedule is a backup.
@@ -16,7 +17,7 @@ concurrency:
 jobs:
   sample:
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:

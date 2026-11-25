@@ -148,9 +148,10 @@ def load_config():
 # ------------------------------------------------------------------ NDW (NL)
 
 class Pace:
-    """NDW refuses bursts (about 10 calls a second): at most 8 starts a second over all threads.
+    """NDW refuses bursts: at most 5 starts a second over all threads (8 until 25 Nov 2026, when the first
+    5-minute run got a 429 with Retry-After 1 s after 19 calls; a full scan now takes about a minute).
     Once NDW rate-limits (stop), every further call in this run is skipped."""
-    def __init__(self, per_sec=8):
+    def __init__(self, per_sec=5):
         self.gap, self.next, self.lock = 1.0 / per_sec, 0.0, threading.Lock()
         self.calls = 0
         self.stopped = None

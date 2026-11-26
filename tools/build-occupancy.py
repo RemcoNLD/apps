@@ -15,7 +15,10 @@ writes nothing and exits with code 3, so the workflow skips publishing.
 Sources (no keys needed):
   NL  NDW's live GeoJSON (the Worker's source too). At most 1,000 features per call, so a scan of the
       whole country (tiles split until under 1,000) runs once a day to find the followed brands' fast
-      sites (nl-sites.json); the other runs ask a small box around each known site.
+      sites (nl-sites.json) and to count NDW's features per 0.01 degree (nl-grid.json); the other runs
+      ask planned boxes (nl_plan, 26 Nov 2026): the followed sites split into as few boxes as hold at most
+      800 features each, so the land between motorway sites costs no calls; calls spread evenly over
+      about two minutes (1-2 a second) and a run cut short resumes at the box it stopped at.
   FR  the France live snapshot (branch live-fr) with data/fr-fast-sites.json.
   PT  the Portugal live snapshot (branch live) with data/pt-fast-sites.json.
   DE  MobiData BW's Open ChargePoint DataBase (the Worker's German source, AFIR data; Germany, and
@@ -31,6 +34,7 @@ Files written (in STATE_DIR):
       0-9 then a-z = number of free chargers (fast ones, the site's own count), "." = no reading.
       t = the site's latest total. Tiles of 1 x 1 degree keep each file small for the Worker.
   nl-sites.json  {at, brands, scanCalls, sites: {ndwId: [brand, lat, lon, name]}}
+  nl-grid.json   {at, cell, cells: {"<floor lat*100>_<floor lon*100>": features}} from the last full scan
       (when a box per known site would take as many calls as the last full scan, scanCalls, every run
       is a full scan instead)
   meta.json      {at, secs, sites per country, NDW calls, discovery or not, pace}
@@ -87,7 +91,13 @@ CALM_MIN = 60                             # a calm hour at a level: one level fa
 STREAK_RESET_H = 3                        # fine at the fastest level this long: the streak starts over
 SOFT_RETRY_S = 5                          # NDW 429 asking to wait at most this long: obeyed once per run
 SOFT_BURST_S = 3                          # 429s within this many seconds of that one belong to the same burst
-PACE_V = 2                                # pace.json version: 2 = NDW calmer per second (26 Nov 2026)
+PACE_V = 3                                # pace.json version: 2 = NDW calmer per second, 3 = planned boxes
+                                          # and a steady pace (26 Nov 2026)
+BOX_FEATURES = 800                        # plan NDW boxes to hold at most this many features (cap 1,000)
+GRID = 100                                # feature density per 1/GRID degree (from the last full scan)
+NDW_RUN_S = 120                           # spread a run's NDW calls over about this many seconds:
+NDW_RATE = (1.0, 2.0)                     # between 1 and 2 calls a second (documented limit: 10)
+NDW_THREADS = 2
 FAIL_SHARE = 0.2                          # this share of failed calls (and at least 3) counts as overload
 ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz"
 FAST_KW = 50
@@ -161,12 +171,16 @@ class Pace:
     the rate and carry on (calls refused in that same burst are tried once more). A second one in the same
     run, a 503 or a longer Retry-After counts as overload (stop): every further call in this run is
     skipped and the pace pauses NDW (at least 10 minutes) and slows it down a level."""
-    def __init__(self, per_sec=3):
+    def __init__(self, per_sec=2):
         self.gap, self.next, self.lock = 1.0 / per_sec, 0.0, threading.Lock()
         self.calls = 0
         self.stopped = None
         self.soft = None       # the 429 obeyed in this run
         self.soft_at = 0.0
+
+    def rate(self, per_sec):
+        with self.lock:
+            self.gap = 1.0 / per_sec
 
     def wait(self):
         with self.lock:
@@ -237,8 +251,11 @@ def counts(feature):
 
 
 def nl_scan(brands):
-    """The whole country in tiles, split while NDW hits its 1,000 cap. Returns {id: (site, counts)}."""
-    found, todo, depth_hit = {}, [], 0
+    """The whole country in tiles, split while NDW hits its 1,000 cap. Returns ({id: (site, counts)},
+    failed tiles, grid): grid = features of all operators per 1/GRID-degree cell ("<lat*GRID>_<lon*GRID>"),
+    which plans the boxes of the next runs (nl_plan)."""
+    found, todo, depth_hit, grid = {}, [], 0, {}
+    PACE.rate(NDW_RATE[1])
     lon0, lat0, lon1, lat1 = NL_BOX
     lat = lat0
     while lat < lat1:
@@ -260,7 +277,7 @@ def nl_scan(brands):
                 log("NDW tile failed:", box, e)
             return box, depth, []
 
-    with concurrent.futures.ThreadPoolExecutor(4) as ex:
+    with concurrent.futures.ThreadPoolExecutor(NDW_THREADS) as ex:
         while todo:
             batch, todo = todo, []
             for box, depth, feats in ex.map(one, batch):
@@ -273,6 +290,10 @@ def nl_scan(brands):
                 if len(feats) >= NDW_MAX:
                     depth_hit += 1
                 for f in feats:
+                    xy = (f.get("geometry") or {}).get("coordinates") or []
+                    if len(xy) >= 2 and xy[0] is not None and xy[1] is not None:
+                        cell = f"{math.floor(xy[1] * GRID)}_{math.floor(xy[0] * GRID)}"
+                        grid[cell] = grid.get(cell, 0) + 1
                     b = brand_of(f, brands)
                     c = counts(f) if b else None
                     if not c:
@@ -284,42 +305,105 @@ def nl_scan(brands):
                     found[str(f["id"])] = ([b, round(lat, 5), round(lon, 5), p.get("address") or ""], c)
     if depth_hit:
         log(f"NL scan: {depth_hit} tiles still at the cap at the deepest level")
-    return found, failed[0]
+    return found, failed[0], grid
 
 
 def nl_boxes(sites):
+    """The old way (until 26 Nov 2026), still used while there is no density grid: one small box per
+    group of sites rounded to 0.01 degree."""
     boxes = {}
     for sid, (b, lat, lon, name) in sites.items():
         key = (round(lat, 2), round(lon, 2))
         boxes.setdefault(key, []).append((sid, lat, lon))
-    return boxes
+    return list(boxes.values())
 
 
-def nl_status(sites):
-    """Counts for known sites: a small box around each (sites close together share one call).
-    Returns (counts, failed calls)."""
-    boxes = nl_boxes(sites)
+def group_box(group):
+    lats = [g[1] for g in group]
+    lons = [g[2] for g in group]
+    return (min(lons) - 0.004, min(lats) - 0.003, max(lons) + 0.004, max(lats) + 0.003)
+
+
+def box_features(box, grid):
+    """Expected NDW features in a box: the grid's cells, each counted for the part the box covers."""
+    x0, y0, x1, y1 = box
+    n = 0.0
+    for i in range(math.floor(y0 * GRID), math.floor(y1 * GRID) + 1):
+        fy = min(y1, (i + 1) / GRID) - max(y0, i / GRID)
+        if fy <= 0:
+            continue
+        for j in range(math.floor(x0 * GRID), math.floor(x1 * GRID) + 1):
+            c = grid.get(f"{i}_{j}")
+            if c:
+                fx = min(x1, (j + 1) / GRID) - max(x0, j / GRID)
+                if fx > 0:
+                    n += c * fx * fy * GRID * GRID
+    return n
+
+
+def split_group(group):
+    """Two halves along the longer side (in km: a degree of longitude is ~0.62 of one of latitude here)."""
+    lats = [g[1] for g in group]
+    lons = [g[2] for g in group]
+    axis = 2 if (max(lons) - min(lons)) * 0.62 > max(lats) - min(lats) else 1
+    g = sorted(group, key=lambda x: x[axis])
+    return g[:len(g) // 2], g[len(g) // 2:]
+
+
+def nl_plan(sites, grid):
+    """Boxes for the followed sites (26 Nov 2026, Remco: "slimmer, maar wel zo frequent mogelijk"): as
+    few NDW calls as possible. Start with every site in one box and halve a group (along its longer side)
+    while its box would hold more than BOX_FEATURES features of all operators (from the last full scan's
+    grid) or more than 1 square degree. A box is the group's sites plus a small margin, so the empty land
+    between motorway sites costs nothing. Returns a list of groups [(id, lat, lon)], in a fixed order."""
+    pts = sorted((sid, lat, lon) for sid, (b, lat, lon, name) in sites.items())
+    if not grid:
+        return nl_boxes(sites)
+    out, todo = [], [pts] if pts else []
+    while todo:
+        g = todo.pop()
+        x0, y0, x1, y1 = group_box(g)
+        if len(g) > 1 and ((x1 - x0) * (y1 - y0) > 1.0 or box_features((x0, y0, x1, y1), grid) > BOX_FEATURES):
+            todo += list(split_group(g))
+        else:
+            out.append(g)
+    out.sort(key=lambda g: (-round(g[0][1], 1), g[0][2]))  # north to south: a stable order for the cursor
+    return out
+
+
+def nl_status(sites, groups, cursor=0):
+    """Counts for known sites, one NDW call per planned group. A group whose answer still hits the
+    1,000 cap is halved and asked again. Starts at group `cursor` (where the last stopped run got to), so
+    a run cut short by rate limiting doesn't always miss the same sites.
+    Returns (counts, failed calls, next cursor)."""
     out, failed = {}, 0
+    n = len(groups)
+    order = [(cursor + k) % n for k in range(n)] if n else []
+    PACE.rate(max(NDW_RATE[0], min(NDW_RATE[1], n / NDW_RUN_S)))
 
-    def one(group):
-        lats = [g[1] for g in group]
-        lons = [g[2] for g in group]
-        feats = ndw((min(lons) - 0.004, min(lats) - 0.003, max(lons) + 0.004, max(lats) + 0.003))
+    def ask(group, depth=0):
+        feats = ndw(group_box(group))
+        if len(feats) >= NDW_MAX and len(group) > 1 and depth < 4:
+            a, b = split_group(group)
+            return ask(a, depth + 1) + ask(b, depth + 1)
         byid = {str(f.get("id")): f for f in feats}
         return [(sid, counts(byid[sid]) if sid in byid else None) for sid, _, _ in group]
 
-    with concurrent.futures.ThreadPoolExecutor(4) as ex:
-        futs = [ex.submit(one, g) for g in boxes.values()]
-        for fu in futs:
+    first_failed = None
+    with concurrent.futures.ThreadPoolExecutor(NDW_THREADS) as ex:
+        futs = [(k, ex.submit(ask, groups[k])) for k in order]
+        for pos, (k, fu) in enumerate(futs):
             try:
                 for sid, c in fu.result():
                     if c:
                         out[sid] = c
             except Exception as e:
                 failed += 1
+                if first_failed is None:
+                    first_failed = k
                 if not isinstance(e, RateLimited) or failed == 1:
                     log("NDW call failed:", e)
-    return out, failed
+    return out, failed, (first_failed if first_failed is not None else cursor)
 
 
 # ------------------------------------------------------------------ snapshots (FR, PT)
@@ -562,11 +646,12 @@ class Pacer:
             # 26 Nov 2026: NDW is now called at 3 instead of 5 a second and a short Retry-After is obeyed, so
             # the overnight push-backs (every 30 min, streak 19) say little about the new pace: start NDW
             # again at 15 minutes (fine with full scans on 24-25 Nov) with a streak of 1.
+            # 26 Nov 2026 (v3): planned boxes (far fewer calls) at a steady 1-2 calls a second: same restart.
             r = self.state.get("NDW")
             if isinstance(r, dict):
                 r.update({"every": 15, "streak": 1, "calmSince": self._iso(now)})
                 r.pop("until", None)
-                log("NDW: calmer calls per second now, pace starts again at every 15 min")
+                log("NDW: fewer, calmer calls now (planned boxes), pace starts again at every 15 min")
         self.state["v"] = PACE_V
         for src, r in list(self.state.items()):
             if not isinstance(r, dict):
@@ -757,15 +842,26 @@ def main():
         age_h = (now - datetime.datetime.fromisoformat(nl["at"].replace("Z", "+00:00"))).total_seconds() / 3600
     discovered = False
     prev_nl_sig = nl.get("brands") or ""
+    try:
+        nl_grid = json.load(open(os.path.join(state, "nl-grid.json"))).get("cells") or {}
+    except Exception:
+        nl_grid = {}
+    grid_changed = False
     nl_due = pacer.due("NDW")
     try:
         if not nl_due:
             raise StopIteration
         scan_calls = int(nl.get("scanCalls") or SCAN_CALLS)
-        boxes = len(nl_boxes(nl.get("sites") or {}))
-        if age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites") or boxes >= scan_calls:
+        groups = nl_plan(nl.get("sites") or {}, nl_grid)
+        boxes = len(groups)
+        if age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites") or not nl_grid or boxes >= scan_calls:
+            if not nl_grid:
+                log("NL: no density grid yet: a full scan now, then planned boxes")
             before = PACE.calls
-            found, failed = nl_scan(brands)
+            found, failed, grid = nl_scan(brands)
+            if grid and not failed:
+                nl_grid = grid
+                grid_changed = True
             if not failed:
                 scan_calls = PACE.calls - before
             if found and not failed and (age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites")):
@@ -777,12 +873,18 @@ def main():
             got = {sid: c for sid, (_, c) in found.items()}
             nl["scanCalls"] = scan_calls
             pacer.called("NDW", PACE.calls - before, failed)
-            log(f"NL scan: {len(found)} sites of {brand_sig}, {failed} tiles failed, {scan_calls} calls")
+            log(f"NL scan: {len(found)} sites of {brand_sig}, {failed} tiles failed, {scan_calls} calls, "
+                f"grid {sum(nl_grid.values())} features in {len(nl_grid)} cells; "
+                f"next runs: {len(nl_plan(nl['sites'], nl_grid))} planned boxes")
         else:
-            log(f"NL: {len(nl['sites'])} sites in {boxes} boxes (a full scan takes {scan_calls} calls)")
+            rec = pacer.rec("NDW")
+            cursor = int(rec.get("cursor") or 0) % max(1, boxes)
+            log(f"NL: {len(nl['sites'])} sites in {boxes} planned boxes (a full scan takes {scan_calls} calls)"
+                + (f", starting at box {cursor}" if cursor else ""))
             before = PACE.calls
-            got, failed = nl_status(nl["sites"])
+            got, failed, rec["cursor"] = nl_status(nl["sites"], groups, cursor)
             pacer.called("NDW", PACE.calls - before, failed)
+            log(f"NL: {len(got)} readings from {PACE.calls - before} calls")
         for sid, c in got.items():
             b, lat, lon, name = nl["sites"][sid]
             if b in followed:
@@ -798,8 +900,8 @@ def main():
         pacer.done("NDW")
         old = set(filter(None, prev_nl_sig.split(",")))
         if discovered and not pacer.run["NDW"]["limited"] and old and followed < old \
-                and len(nl_boxes(nl["sites"])) < int(nl.get("scanCalls") or SCAN_CALLS):
-            pacer.lighter("NDW", f"{len(nl['sites'])} Dutch sites in {len(nl_boxes(nl['sites']))} boxes instead of a full scan")
+                and len(nl_plan(nl["sites"], nl_grid)) < int(nl.get("scanCalls") or SCAN_CALLS):
+            pacer.lighter("NDW", f"{len(nl['sites'])} Dutch sites in {len(nl_plan(nl['sites'], nl_grid))} boxes instead of a full scan")
     nl_count = sum(1 for k in readings if k.startswith("nl:"))
 
     fr = fr_sites(opt.get("--fr"), followed)
@@ -842,6 +944,9 @@ def main():
             json.dump({"v": 1, "at": stamp, "slotMin": SLOT_MIN, "sites": sites}, f, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(state, "nl-sites.json"), "w") as f:
         json.dump(nl, f, ensure_ascii=False, separators=(",", ":"))
+    if grid_changed:
+        with open(os.path.join(state, "nl-grid.json"), "w") as f:
+            json.dump({"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "cell": 1 / GRID, "cells": nl_grid}, f, separators=(",", ":"))
     pacer.save()
     meta = {"at": stamp, "secs": round(time.time() - t0, 1), "brands": brand_sig, "keepDays": keep_days,
             "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt),
@@ -849,6 +954,7 @@ def main():
                          "AT": len(at) + sum(1 for i, _ in de.values() if i["cc"] == "AT")}, "ndwCalls": PACE.calls,
             "ndwWaited": str(PACE.soft) if PACE.soft else None, "ocpdbCalls": de_calls, "workerAtCalls": at_calls,
             "discovery": discovered, "nlSites": len(nl.get("sites") or {}),
+            "nlBoxes": len(nl_plan(nl.get("sites") or {}, nl_grid)),
             "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values()),
             "pace": {src: {k: v for k, v in r.items() if k in ("every", "until", "lastHit", "why", "streak")}
                      for src, r in pacer.state.items() if isinstance(r, dict)}, "fastest": pacer.levels[0]}

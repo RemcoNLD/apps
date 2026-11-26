@@ -283,9 +283,7 @@ EXACT = {
 "No readings for this site yet.": ("Nog geen metingen voor deze locatie.", "Ainda não há leituras para este local."),
 "Today": ("Vandaag", "Hoje"),
 "Same day last week": ("Zelfde dag vorige week", "Mesmo dia da semana passada"),
-"Same day last week:": ("Zelfde dag vorige week:", "Mesmo dia da semana passada:"),
 "Yesterday": ("Gisteren", "Ontem"),
-"Yesterday:": ("Gisteren:", "Ontem:"),
 "The dashed line for the same day last week appears once a week of readings has been collected.": (
   "De stippellijn voor dezelfde dag vorige week verschijnt zodra er een week aan metingen is verzameld.",
   "A linha tracejada do mesmo dia da semana passada aparece quando houver uma semana de leituras."),
@@ -346,8 +344,9 @@ EXACT = {
 # Patterns for texts with numbers or names in them: (regex, Dutch, Portuguese). $1… are the groups;
 # {t:$1} means "translate group 1 as a text of its own".
 PATTERNS = [
-(r"^busiest around (\d\d:\d\d)$", "het drukst rond $1", "mais ocupado por volta das $1"),
-(r"^most free around (\d\d:\d\d)$", "het meest vrij rond $1", "mais livre por volta das $1"),
+(r"^Full since (\d\d:\d\d); last reading (\d\d:\d\d)\.$", "Vol sinds $1; laatste meting $2.", "Cheio desde as $1; última leitura às $2."),
+(r"^Usually free again in about (\d+) min \(around (\d\d:\d\d)\)\.$", "Meestal over ongeveer $1 min weer vrij (rond $2).", "Costuma voltar a ter vagas dentro de cerca de $1 min (por volta das $2)."),
+(r"^Full for longer than usual \(usually (\d+) min\)\.$", "Langer vol dan gebruikelijk (meestal $1 min).", "Cheio há mais tempo do que o habitual (normalmente $1 min)."),
 (r"^Last full at (\d\d:\d\d) for (\d+) minutes\.$", "Laatst vol om $1 gedurende $2 minuten.", "Esteve cheio pela última vez às $1 durante $2 minutos."),
 (r"^Last full yesterday at (\d\d:\d\d) for (\d+) minutes\.$", "Gisteren laatst vol om $1 gedurende $2 minuten.", "Esteve cheio pela última vez ontem às $1 durante $2 minutos."),
 (r"^Arrive (.+)$", "Aankomst $1", "Chegada $1"),

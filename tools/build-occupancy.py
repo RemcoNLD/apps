@@ -85,6 +85,9 @@ PACE_LEVELS = [5, 10, 15, 30]             # minutes between reads of one source,
 PAUSE_MIN = 10                            # at least this long without calls after being rate limited
 CALM_MIN = 60                             # a calm hour at a level: one level faster (times the streak, max 4)
 STREAK_RESET_H = 3                        # fine at the fastest level this long: the streak starts over
+SOFT_RETRY_S = 5                          # NDW 429 asking to wait at most this long: obeyed once per run
+SOFT_BURST_S = 3                          # 429s within this many seconds of that one belong to the same burst
+PACE_V = 2                                # pace.json version: 2 = NDW calmer per second (26 Nov 2026)
 FAIL_SHARE = 0.2                          # this share of failed calls (and at least 3) counts as overload
 ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz"
 FAST_KW = 50
@@ -151,13 +154,19 @@ def load_config():
 # ------------------------------------------------------------------ NDW (NL)
 
 class Pace:
-    """NDW refuses bursts: at most 5 starts a second over all threads (8 until 25 Nov 2026, when the first
-    5-minute run got a 429 with Retry-After 1 s after 19 calls; a full scan now takes about a minute).
-    Once NDW rate-limits (stop), every further call in this run is skipped."""
-    def __init__(self, per_sec=5):
+    """NDW refuses bursts: at most 3 starts a second over all threads (8 until 25 Nov 2026, 5 until 26 Nov,
+    when full scans of ~256 calls got "429, Retry-After 1 s" in most runs from 25 Nov 18:00 UTC on, even
+    every 30 min, so NDW sat at its slowest level with 20 push-backs overnight).
+    A 429 asking to wait a few seconds (Retry-After <= SOFT_RETRY_S) is obeyed once per run: wait, halve
+    the rate and carry on (calls refused in that same burst are tried once more). A second one in the same
+    run, a 503 or a longer Retry-After counts as overload (stop): every further call in this run is
+    skipped and the pace pauses NDW (at least 10 minutes) and slows it down a level."""
+    def __init__(self, per_sec=3):
         self.gap, self.next, self.lock = 1.0 / per_sec, 0.0, threading.Lock()
         self.calls = 0
         self.stopped = None
+        self.soft = None       # the 429 obeyed in this run
+        self.soft_at = 0.0
 
     def wait(self):
         with self.lock:
@@ -170,19 +179,37 @@ class Pace:
         if at > now:
             time.sleep(at - now)
 
+    def soften(self, e):
+        """NDW asked to wait a moment: True to try the call once more after waiting, False to stop."""
+        with self.lock:
+            now = time.time()
+            if self.stopped or e.status != 429 or e.retry_after > SOFT_RETRY_S:
+                return False
+            if self.soft and now - self.soft_at > SOFT_BURST_S:
+                return False  # a second push-back in this run: overload
+            if not self.soft:
+                self.soft, self.soft_at = e, now
+                self.gap = min(self.gap * 2, 1.0)
+                log(f"NDW: {e}: waiting {e.retry_after + 1} s, then {1 / self.gap:.1f} calls/s for the rest of this run")
+            self.next = max(self.next, now + e.retry_after + 1)
+            return True
+
 
 PACE = Pace()
 
 
 def ndw(box):
-    PACE.wait()
     bbox = ",".join(f"{v:.6f}" for v in box)
-    try:
-        return get(f"{NDW}?bbox={bbox}", timeout=60, source="NDW").get("features", [])
-    except RateLimited as e:
-        with PACE.lock:
-            PACE.stopped = PACE.stopped or e
-        raise
+    for attempt in (0, 1):
+        PACE.wait()
+        try:
+            return get(f"{NDW}?bbox={bbox}", timeout=60, source="NDW").get("features", [])
+        except RateLimited as e:
+            if attempt == 0 and PACE.soften(e):
+                continue
+            with PACE.lock:
+                PACE.stopped = PACE.stopped or e
+            raise
 
 
 def brand_of(feature, brands):
@@ -531,6 +558,16 @@ class Pacer:
             self.state = json.load(open(path))
         except Exception:
             self.state = {}
+        if self.state and self.state.get("v") != PACE_V:
+            # 26 Nov 2026: NDW is now called at 3 instead of 5 a second and a short Retry-After is obeyed, so
+            # the overnight push-backs (every 30 min, streak 19) say little about the new pace: start NDW
+            # again at 15 minutes (fine with full scans on 24-25 Nov) with a streak of 1.
+            r = self.state.get("NDW")
+            if isinstance(r, dict):
+                r.update({"every": 15, "streak": 1, "calmSince": self._iso(now)})
+                r.pop("until", None)
+                log("NDW: calmer calls per second now, pace starts again at every 15 min")
+        self.state["v"] = PACE_V
         for src, r in list(self.state.items()):
             if not isinstance(r, dict):
                 continue
@@ -810,7 +847,7 @@ def main():
             "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt),
                          "DE": sum(1 for i, _ in de.values() if i["cc"] == "DE"),
                          "AT": len(at) + sum(1 for i, _ in de.values() if i["cc"] == "AT")}, "ndwCalls": PACE.calls,
-            "ocpdbCalls": de_calls, "workerAtCalls": at_calls,
+            "ndwWaited": str(PACE.soft) if PACE.soft else None, "ocpdbCalls": de_calls, "workerAtCalls": at_calls,
             "discovery": discovered, "nlSites": len(nl.get("sites") or {}),
             "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values()),
             "pace": {src: {k: v for k, v in r.items() if k in ("every", "until", "lastHit", "why", "streak")}

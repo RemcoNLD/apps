@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.49.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.49.2"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -949,7 +949,7 @@
   .navsheet .navhead .hist .nb.off .nb-m, .navsheet .navhead .hist .nb.stale .nb-m b { color: var(--muted); }
   .navsheet .navhead .hist .nb-f { display: block; color: var(--muted); font-size: .76rem; white-space: nowrap; margin-top: 1px; }
   .navsheet .navhead .hist .logo { width: 16px; height: 16px; align-self: center; }
-  .navsheet .navmap { position: relative; height: 150px; margin: 0 0 12px; border-radius: 12px; overflow: hidden; background: var(--asphalt); }
+  .navsheet .navmap { cursor: pointer; -webkit-tap-highlight-color: transparent; position: relative; height: 150px; margin: 0 0 12px; border-radius: 12px; overflow: hidden; background: var(--asphalt); }
   .navsheet .navmap .tiles { position: absolute; left: 50%; top: 50%; width: 768px; height: 768px; }
   .navsheet .navmap .tiles img { position: absolute; width: 256px; height: 256px; max-width: none; user-select: none; -webkit-user-drag: none; }
   .navsheet .navmap .pin { position: absolute; left: 50%; top: 50%; width: 26px; height: 34px; transform: translate(-50%, -100%); filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
@@ -1484,7 +1484,7 @@
     </div>
     <div class="hist" id="navHist" hidden></div>
   </div>
-  <div class="navmap" id="navMap" hidden aria-hidden="true"></div>
+  <div class="navmap" id="navMap" hidden></div>
   <div id="navSrc"></div>
   <div id="navList"></div>
   <button type="button" class="cancel" id="navCancel">Cancel</button>
@@ -5678,6 +5678,7 @@ function openNavSheet(ids) {
   $("navAddr").hidden = !addr;
   $("navHist").innerHTML = navBoxHtml(members);
   $("navHist").hidden = !$("navHist").innerHTML;
+  navMapStep = 0;
   renderNavMap(navTarget.lat, navTarget.lon);
   navTarget.ids = ids;
   // How the name was chosen: only with the debug line on (Help), it's for tuning, not for driving.
@@ -6043,10 +6044,18 @@ function cardMapSettings() {
   const zoom = Number.isFinite(+v?.zoom) ? Math.min(19, Math.max(3, Math.round(+v.zoom))) : 17;
   return { style, zoom };
 }
+// 0.49.2: a tap on the map steps through three zoom levels, starting zoomed out; the usage page's
+// zoom is the middle one (Remco, 28 Nov 14:04). Two levels apart, kept within the source's maximum.
+let navMapStep = 0;
+const NAV_MAP_STEP = 2;
+function navMapZooms(zoom, max) {
+  const top = Math.min(max, zoom + NAV_MAP_STEP);
+  return [top - 2 * NAV_MAP_STEP, top - NAV_MAP_STEP, top].map((z) => Math.max(3, z));
+}
 function renderNavMap(lat, lon) {
   const box = $("navMap"), { style, zoom } = cardMapSettings(), src = CARD_MAPS[style];
   if (!src || !Number.isFinite(lat) || !Number.isFinite(lon)) { box.hidden = true; box.innerHTML = ""; return; }
-  const z = Math.min(zoom, src.max), n = 2 ** z;
+  const z = navMapZooms(zoom, src.max)[navMapStep % 3], n = 2 ** z;
   // Position of the site in tile units (Web Mercator); the 3×3 tiles around it, shifted so the site is in the middle.
   const fx = (lon + 180) / 360 * n;
   const r = lat * Math.PI / 180;
@@ -6064,6 +6073,12 @@ function renderNavMap(lat, lon) {
     `<div class="cr">${src.credit}</div>`;
   box.hidden = false;
 }
+$("navMap").addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (e.target.closest("a") || !navTarget) return;
+  navMapStep = (navMapStep + 1) % 3;
+  renderNavMap(navTarget.lat, navTarget.lon);
+});
 function closeNavSheet() { $("navSheet").hidden = true; $("navBackdrop").hidden = true; }
 $("navCancel").addEventListener("click", closeNavSheet);
 $("navBackdrop").addEventListener("click", closeNavSheet);
@@ -7531,9 +7546,9 @@ $("introNext").addEventListener("click", () => {
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
   { v: "0.49", date: "2026-11-28", title: { en: "A map in the details card", nl: "Een kaartje op de detailkaart", pt: "Um mapa no cartão de detalhes" },
-    items: { en: ["Press and hold a charger: the card now shows a small map of the site, with how many chargers are free in a compact box beside the name.", "Flitsmeister is no longer in the list; Apple Maps, Google Maps, Waze, copying the coordinates and sharing stay."],
-      nl: ["Houd een lader ingedrukt: de kaart toont nu een klein kaartje van de locatie, met hoeveel laders vrij zijn in een compact vak naast de naam.", "Flitsmeister staat niet meer in de lijst; Apple Kaarten, Google Maps, Waze, coördinaten kopiëren en delen blijven."],
-      pt: ["Mantenha premido um carregador: o cartão mostra agora um pequeno mapa do local, com quantos carregadores estão livres numa caixa compacta ao lado do nome.", "O Flitsmeister já não está na lista; os Mapas da Apple, o Google Maps, o Waze, copiar as coordenadas e partilhar continuam."] } },
+    items: { en: ["Press and hold a charger: the card now shows a small map of the site, with how many chargers are free in a compact box beside the name.", "Flitsmeister is no longer in the list; Apple Maps, Google Maps, Waze, copying the coordinates and sharing stay.", "Tap the map to zoom in, in three steps; a fourth tap zooms out again."],
+      nl: ["Houd een lader ingedrukt: de kaart toont nu een klein kaartje van de locatie, met hoeveel laders vrij zijn in een compact vak naast de naam.", "Flitsmeister staat niet meer in de lijst; Apple Kaarten, Google Maps, Waze, coördinaten kopiëren en delen blijven.", "Tik op het kaartje om in drie stappen in te zoomen; een vierde tik zoomt weer uit."],
+      pt: ["Mantenha premido um carregador: o cartão mostra agora um pequeno mapa do local, com quantos carregadores estão livres numa caixa compacta ao lado do nome.", "O Flitsmeister já não está na lista; os Mapas da Apple, o Google Maps, o Waze, copiar as coordenadas e partilhar continuam.", "Toque no mapa para aproximar em três passos; um quarto toque volta a afastar."] } },
   { v: "0.48", date: "2026-11-28", title: { en: "Exits, forks and arriving", nl: "Afritten, splitsingen en aankomen", pt: "Saídas, bifurcações e chegada" },
     items: { en: ["Exits after a short stretch of motorway now show the exit number and where you're heading, not the motorway itself, also when the map couldn't be loaded when you planned.", "Keep left or keep right on an exit's slip road is now shown.", "The next instruction comes as soon as your movement shows you're past the exit, turn or roundabout; the roundabout's exit is only in the icon.", "\u201cYou've arrived\u201d comes when you're there (or have parked just short of it), not 150 m before.", "After arriving you see the chargers within 15 km of your destination; Go plans a route to one."],
       nl: ["Afritten na een kort stuk snelweg tonen nu het afritnummer en waar je heen gaat, niet de snelweg zelf, ook als de kaart bij het plannen niet geladen kon worden.", "Links of rechts houden op de afrit wordt nu getoond.", "De volgende aanwijzing komt zodra aan je beweging te zien is dat je de afrit, afslag of rotonde voorbij bent; de afslag van de rotonde staat alleen nog in het icoon.", "\u201cJe bent er\u201d komt als je er bent (of net ervoor geparkeerd staat), niet 150 m ervoor.", "Na aankomst zie je de laders binnen 15 km van je bestemming; met Ga plan je er een route naartoe."],

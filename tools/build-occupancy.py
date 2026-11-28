@@ -13,7 +13,11 @@ which brands to follow (setting "occupancy" and "occupancyBrands" on the usage p
 writes nothing and exits with code 3, so the workflow skips publishing.
 
 Sources (no keys needed):
-  NL  NDW's live GeoJSON (the Worker's source too). At most 1,000 features per call, so a scan of the
+  NL  since 28 Nov 2026 NDW's whole-country file (opendata.ndw.nu/charging_point_locations.geojson.gz, ~4.5 MB,
+      every Dutch charge point with its live availabilities, refreshed about every minute): one download per
+      run gives every followed site, and the site list itself. Only when it fails or is stale, and every 6 h
+      as a check (counts compared, in the run log), the boxes below are asked.
+      Before: NDW's live GeoJSON API (the Worker's source too). At most 1,000 features per call, so a scan of the
       whole country (tiles split until under 1,000) runs once a day to find the followed brands' fast
       sites (nl-sites.json) and to count NDW's features per 0.01 degree (nl-grid.json); the other runs
       ask planned boxes (nl_plan, 26 Nov 2026): the followed sites split into as few boxes as hold at most
@@ -45,7 +49,6 @@ Files written (in STATE_DIR):
       seconds waited, why it stopped, readings (28 Nov 2026, Remco: "per bron terughalen wanneer die iets
       gedaan heeft en wat het resultaat was ... of er retry was en na hoeveel pogingen het wel gelukt is").
       Read by the usage page straight from raw.githubusercontent.com: no Worker call, no KV.
-  ndw-file.json  what NDW's whole-country file (opendata.ndw.nu) looked like when last probed (every 6 h)
 
 Retries (28 Nov 2026): NDW and OCPDB refused calls now and then at only 1 call a second, OCPDB even at
 the first call of a run read every 30 minutes: GitHub's runners share their addresses with other users,
@@ -114,10 +117,11 @@ CALM_STEP_MIN = 30                        # calm needed before speeding up: this
 RECENT_H = 6
 TRIES = 4                                 # attempts per call (the first plus 3 retries)
 LONG_RA_S = 60                            # a Retry-After longer than this: stop the source for the run
-RETRY = {"NDW": (1, 40), "OCPDB": (5, 60), "E-Control": (2, 20)}  # first wait (s, doubles), waiting budget per run
+RETRY = {"NDW": (1, 40), "OCPDB": (5, 60), "E-Control": (2, 20), "NDW file": (3, 30)}  # first wait (s, doubles), waiting budget per run
 OCPDB_GAP_S = 2                           # between OCPDB calls (one per brand)
 NDW_FILE = "https://opendata.ndw.nu/charging_point_locations.geojson.gz"
-NDW_FILE_EVERY_H = 6                      # probe the whole-country file this often (28 Nov 2026)
+NDW_FILE_EVERY_H = 6                      # compare the file with box reads this often (28 Nov 2026)
+NDW_FILE_FRESH_MIN = 15                   # the file's newest last_updated must be at most this old
 LOG_TZ = "Europe/Amsterdam"
 BOX_FEATURES = 800                        # plan NDW boxes to hold at most this many features (cap 1,000)
 GRID = 100                                # feature density per 1/GRID degree (from the last full scan)
@@ -751,7 +755,7 @@ def at_sites():
 
 class Pacer:
     """How often each outside source is read (pace.json on the branch, see "Pace" at the top)."""
-    SOURCES = ("NDW", "OCPDB", "E-Control")
+    SOURCES = ("NDW file", "NDW", "OCPDB", "E-Control")
 
     def __init__(self, path, now, fastest=PACE_LEVELS[0]):
         self.path, self.now = path, now
@@ -899,67 +903,76 @@ def prune(sites_by_tile, now, keep_days):
 NOTES = {}  # source -> why it gave no readings (FR, PT), for the run log
 
 
-# ------------------------------------------------------------------ NDW's whole-country file (probe)
+# ------------------------------------------------------------------ NDW's whole-country file (28 Nov 2026)
 
-def ndw_file_probe(state, now, sites, got):
-    """28 Nov 2026: NDW also publishes the whole country as one file (opendata.ndw.nu, "Consumption of the
-    Entire Netherlands" in its docs). If it carries live availability and is refreshed every few minutes,
-    one download per run could replace the ~110 box calls that keep getting refused. Its docs don't say
-    either, so every NDW_FILE_EVERY_H hours this downloads it once and records (ndw-file.json, the run log)
-    its size, headers, feature count, how many features carry availabilities, and for the followed Dutch
-    sites read by boxes in this same run how many counts agree. Nothing else uses the file yet."""
-    path = os.path.join(state, "ndw-file.json")
-    try:
-        prev = json.load(open(path))
-        if (now - datetime.datetime.fromisoformat(prev["at"].replace("Z", "+00:00"))).total_seconds() < NDW_FILE_EVERY_H * 3600:
-            return None
-    except Exception:
-        pass
-    t0 = time.time()
-    out = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "url": NDW_FILE}
-    try:
+def nl_from_file(brands, now):
+    """All of the Netherlands from NDW's whole-country file (28 Nov 2026): one download of ~4.5 MB (75,000
+    charge points, each with its live availabilities and last_updated; refreshed about every minute) instead of
+    ~110 box calls that GitHub's shared addresses kept getting refused. Returns ({id: (site, counts)}, info)
+    like nl_scan, or (None, info) when it can't be used (failed, or its newest update older than
+    NDW_FILE_FRESH_MIN minutes): then the boxes are asked as before."""
+    info = {}
+    src = SRC["NDW file"]
+
+    def once():
         req = urllib.request.Request(NDW_FILE, headers={"User-Agent": "EVailability-occupancy", "Accept-Encoding": "gzip"})
-        with urllib.request.urlopen(req, timeout=90) as r:
-            out["headers"] = {k: r.headers.get(k) for k in ("Content-Length", "Content-Type", "Last-Modified", "ETag", "Cache-Control", "Expires") if r.headers.get(k)}
-            raw = r.read(300 * 1024 * 1024)
-        out["bytes"] = len(raw)
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read(100 * 1024 * 1024)
+        return raw
+    try:
+        raw = src.call(lambda: http_bytes(once))
+    except Exception as e:
+        info["error"] = short_err(e)
+        log("NDW file failed:", e)
+        return None, info
+    info["bytes"] = len(raw)
+    try:
         if raw[:2] == b"\x1f\x8b":
             raw = gzip.decompress(raw)
-        out["unzipped"] = len(raw)
         doc = json.loads(raw)
-        raw = None
-        feats = doc.get("features") if isinstance(doc, dict) else doc
-        feats = feats or []
-        out["features"] = len(feats)
-        if feats:
-            p0 = feats[0].get("properties") or {}
-            out["keys"] = sorted(p0.keys())[:40]
-            av = [f for f in feats if (f.get("properties") or {}).get("availabilities")]
-            out["withAvailabilities"] = len(av)
-            if av:
-                out["availabilityKeys"] = sorted(((av[0]["properties"]["availabilities"] or [{}])[0]).keys())
-            stamps = []
-            for f in feats:
-                for k, v in (f.get("properties") or {}).items():
-                    if "update" in k.lower() and isinstance(v, str):
-                        stamps.append(v)
-            if stamps:
-                out["newestUpdate"] = max(stamps)
-            byid = {str(f.get("id")): f for f in feats}
-            mine = [sid for sid in sites if sid in byid]
-            out["followedSites"] = len(sites)
-            out["followedInFile"] = len(mine)
-            if got:
-                same = sum(1 for sid in mine if sid in got and counts(byid[sid]) == got[sid])
-                out["comparedWithBoxes"] = sum(1 for sid in mine if sid in got)
-                out["sameCounts"] = same
     except Exception as e:
-        out["error"] = str(e)[:200]
-    out["secs"] = round(time.time() - t0, 1)
-    with open(path, "w") as f:
-        json.dump(out, f, separators=(",", ":"))
-    log("NDW file probe:", json.dumps(out))
-    return out
+        info["error"] = f"unreadable: {str(e)[:60]}"
+        src.failed += 1
+        log("NDW file unreadable:", e)
+        return None, info
+    raw = None
+    feats = (doc.get("features") if isinstance(doc, dict) else doc) or []
+    newest = max((str((f.get("properties") or {}).get("last_updated") or "") for f in feats), default="")
+    info["features"] = len(feats)
+    info["newest"] = newest
+    try:
+        age = (now - datetime.datetime.fromisoformat(newest.replace("Z", "+00:00"))).total_seconds() / 60
+    except Exception:
+        age = 1e9
+    info["ageMin"] = round(age, 1)
+    if age > NDW_FILE_FRESH_MIN:
+        info["error"] = f"newest update {age:.0f} min old"
+        log(f"NDW file: newest update {newest} ({age:.0f} min old): using the boxes")
+        return None, info
+    found = {}
+    for f in feats:
+        c = counts(f)
+        if not c:
+            continue
+        b = brand_of(f, brands)
+        if not b:
+            continue
+        lon, lat = ((f.get("geometry") or {}).get("coordinates") or [None, None])[:2]
+        if lat is None or lon is None:
+            continue
+        found[str(f.get("id"))] = ([b, round(lat, 5), round(lon, 5), (f.get("properties") or {}).get("address") or ""], c)
+    log(f"NDW file: {len(feats)} charge points, newest update {newest}, {len(found)} fast sites of the followed brands")
+    return found, info
+
+
+def http_bytes(fn):
+    """Run a download, turning HTTP 429/503 into RateLimited (like get())."""
+    try:
+        return fn()
+    except urllib.error.HTTPError as e:
+        if e.code in (429, 503):
+            raise RateLimited("NDW file", e.code, retry_after_s(e))
+        raise
 
 
 # ------------------------------------------------------------------ run log (28 Nov 2026)
@@ -1040,10 +1053,37 @@ def main():
     except Exception:
         nl_grid = {}
     grid_changed = False
-    nl_due = pacer.due("NDW")
-    got, nl_mode, nl_cursor = {}, None, None
+    got, nl_mode, nl_cursor, file_info, compare = {}, None, None, None, None
+    # NL from the whole-country file first (28 Nov 2026); the boxes only when it can't be used, and every
+    # NDW_FILE_EVERY_H hours as a check that both give the same counts.
+    file_due = pacer.due("NDW file")
+    if file_due:
+        found, file_info = nl_from_file(brands, now)
+        pacer.done("NDW file", SRC["NDW file"])
+        if found:
+            nl_mode = "file"
+            changed = nl.get("brands") != brand_sig
+            nl = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "brands": brand_sig, "scanCalls": nl.get("scanCalls") or SCAN_CALLS,
+                  "sites": {sid: site for sid, (site, _) in found.items()}, "source": "file", "checkedAt": nl.get("checkedAt")}
+            discovered = changed
+            got = {sid: c for sid, (_, c) in found.items()}
+    check_due = nl_mode == "file" and (not nl.get("checkedAt") or
+        (now - datetime.datetime.fromisoformat(nl["checkedAt"].replace("Z", "+00:00"))).total_seconds() >= NDW_FILE_EVERY_H * 3600)
+    nl_due = (nl_mode != "file" or check_due) and pacer.due("NDW")
+    if nl_mode == "file" and not nl_due:
+        pacer.why["NDW"] = "not needed: the file had everything"
     try:
         if not nl_due:
+            raise StopIteration
+        if nl_mode == "file":
+            # The check: the same sites by boxes, counts compared with the file's.
+            groups = nl_plan(nl["sites"], nl_grid)
+            before = PACE.calls
+            box_got, failed, _ = nl_status(nl["sites"], groups, 0)
+            both = [sid for sid in box_got if sid in got]
+            compare = {"compared": len(both), "same": sum(1 for sid in both if box_got[sid] == got[sid]), "boxCalls": PACE.calls - before}
+            nl["checkedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            log(f"NDW check: {compare['same']} of {compare['compared']} sites have the same counts by boxes as in the file")
             raise StopIteration
         scan_calls = int(nl.get("scanCalls") or SCAN_CALLS)
         groups = nl_plan(nl.get("sites") or {}, nl_grid)
@@ -1080,10 +1120,6 @@ def main():
             got, failed, rec["cursor"] = nl_status(nl["sites"], groups, cursor)
             nl_cursor = [cursor, rec["cursor"], boxes]
             log(f"NL: {len(got)} readings from {PACE.calls - before} calls")
-        for sid, c in got.items():
-            b, lat, lon, name = nl["sites"][sid]
-            if b in followed:
-                readings[f"nl:{sid}"] = ({"b": b, "cc": "NL", "lat": lat, "lon": lon, "n": name}, c)
     except StopIteration:
         pass
     except Exception as e:
@@ -1091,6 +1127,10 @@ def main():
         SRC["NDW"].failed += 1
         SRC["NDW"].calls += 1
         SRC["NDW"]._bad(e)
+    for sid, c in got.items():
+        b, lat, lon, name = nl["sites"].get(sid) or (None, 0, 0, "")
+        if b in followed:
+            readings[f"nl:{sid}"] = ({"b": b, "cc": "NL", "lat": lat, "lon": lon, "n": name}, c)
     if nl_due:
         pacer.done("NDW", SRC["NDW"])
         old = set(filter(None, prev_nl_sig.split(",")))
@@ -1130,10 +1170,6 @@ def main():
         put(sites_by_tile, key, info, c, now, keep_days)
     prune(sites_by_tile, now, keep_days)
 
-    # The whole-country file, now and then, while the run has time to spare (28 Nov 2026).
-    probe = None
-    if time.time() - t0 < 150:
-        probe = ndw_file_probe(state, now, nl.get("sites") or {}, got if nl_mode == "boxes" else {})
 
     # Write
     for path in glob.glob(os.path.join(state, "t_*.json")):
@@ -1169,15 +1205,15 @@ def main():
         return e
     nl_of = sum(1 for v in (nl.get("sites") or {}).values() if v[0] in followed)
     line = {"t": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "secs": secs,
-            "NDW": entry("NDW", nl_due, SRC["NDW"], nl_count, nl_of, mode=nl_mode, box=nl_cursor,
+            "NDW file": entry("NDW file", file_due, SRC["NDW file"], nl_count if nl_mode == "file" else 0, nl_of if nl_mode == "file" else None,
+                              **({k: file_info.get(k) for k in ("bytes", "features", "ageMin", "error")} if file_info else {})),
+            "NDW": entry("NDW", nl_due, SRC["NDW"], (compare or {}).get("same") if compare else nl_count, (compare or {}).get("compared") if compare else nl_of,
+                         mode="check" if compare else nl_mode, box=nl_cursor,
                          rate=round(1 / max(PACE.slowest, 1e-3), 2) if PACE.calls else None),
             "OCPDB": entry("OCPDB", oc_due, SRC["OCPDB"], sum(1 for i, _ in de.values() if i["cc"] == "DE"), len(brands)),
             "E-Control": entry("E-Control", at_due, SRC["E-Control"], len(at)),
             "FR": {"due": 1, "read": len(fr), **({"why": NOTES["FR"]} if "FR" in NOTES else {})},
             "PT": {"due": 1, "read": len(pt), **({"why": NOTES["PT"]} if "PT" in NOTES else {})}}
-    if probe:
-        line["NDW file"] = {k: probe.get(k) for k in ("bytes", "features", "withAvailabilities", "followedInFile",
-                                                     "comparedWithBoxes", "sameCounts", "newestUpdate", "secs", "error") if probe.get(k) is not None}
     write_runlog(state, now, line, keep_days)
 
     meta = {"at": stamp, "secs": secs, "brands": brand_sig, "keepDays": keep_days,

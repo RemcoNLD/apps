@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.10.0"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.10.1"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -419,7 +419,7 @@ function qosHtml(d) {
 // a tap the runs of that hour with their calls, tries, refusals and waits.
 const OL_URL = (date) => `https://raw.githubusercontent.com/RemcoNLD/apps/occ/log-${date}.jsonl?m=${Math.floor(Date.now() / 120000)}`;
 const OL_SOURCES = [
-  ["NDW", "NDW (Netherlands)", "One call per planned box of Dutch sites; complete = every followed Dutch site read."],
+  ["NL", "NDW (Netherlands)", "Since 28 Nov one download of NDW’s whole-country file per run (~4.5 MB, every Dutch charge point with its live status); when that fails or is stale, one call per planned box of Dutch sites, and every 6 h the boxes as a check against the file. Complete = every followed Dutch site read."],
   ["OCPDB", "OCPDB (Germany)", "One call per followed brand; complete = every brand answered."],
   ["E-Control", "E-Control (Austria)", "Through the Worker, a few sites per call."],
   ["FR", "France snapshot", "Read every run from the France live snapshot (no outside calls)."],
@@ -429,6 +429,15 @@ const olDate = (offset = 0) => new Date(Date.now() - offset * 86400000).toLocale
 let olDay = 0, olData = {}, olOpen = null; // olOpen = "SRC:hour"
 const olHm = (iso) => new Date(iso).toLocaleTimeString("en-GB", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit" });
 const olHour = (iso) => +new Date(iso).toLocaleTimeString("en-GB", { timeZone: "Europe/Amsterdam", hour: "2-digit", hourCycle: "h23" });
+// One source in one run. "NL" combines NDW's file (since 28 Nov) and its boxes: the file when it gave
+// readings (with the boxes' check, if any), else the boxes (with why the file couldn't be used).
+function olEntry(r, k) {
+  if (k !== "NL") return r[k];
+  const f = r["NDW file"], b = r.NDW;
+  if (f?.due && f.read > 0) return { ...f, via: "file", check: b?.due && b.mode === "check" ? b : null };
+  if (b?.due) return { ...b, via: "boxes", fileErr: f?.due ? (f.error || f.stop || "no readings") : null };
+  return f || b;
+}
 // A run's result for one source: share of a complete reading (0..1) and a class.
 function olRes(e) {
   if (!e) return { f: 0, c: "n" };
@@ -444,12 +453,15 @@ function olTries(e) {
   return parts.length === 1 && ok[1] === e.calls ? "all first try" : `worked: ${parts.join(", ")}`;
 }
 function olRunLine(r, k) {
-  const e = r[k], t = `<span class="t">${olHm(r.t)}</span>`;
+  const e = olEntry(r, k), t = `<span class="t">${olHm(r.t)}</span>`;
   if (!e) return `<div>${t}–</div>`;
   if (!e.due) return `<div class="muted">${t}skipped: ${esc(e.why || "not due")}</div>`;
   const res = olRes(e);
   const read = e.of ? `${fmt(e.read || 0)}/${fmt(e.of)}` : `${fmt(e.read || 0)} read`;
   const bits = [read];
+  if (e.via === "file") bits.push(`file${e.bytes ? ` ${(e.bytes / 1048576).toFixed(1)} MB` : ""}${e.ageMin != null ? `, ${e.ageMin} min old` : ""}`);
+  if (e.via === "boxes") bits.push(`boxes${e.fileErr ? ` (file: ${esc(e.fileErr)})` : ""}`);
+  if (e.check) bits.push(`check by boxes: ${fmt(e.check.read || 0)} of ${fmt(e.check.of || 0)} the same`);
   if (e.calls != null) bits.push(`${fmt(e.calls)} call${e.calls === 1 ? "" : "s"}${e.ok ? ` (${olTries(e)})` : ""}`);
   if (e.refused) bits.push(`${e.refused} refused${e.errs ? ` (${Object.entries(e.errs).map(([x, n]) => `${esc(x)} ×${n}`).join(", ")})` : ""}`);
   if (e.wait) bits.push(`waited ${e.wait} s`);
@@ -471,7 +483,7 @@ function olHtml() {
   const now = new Date();
   const slots = olDay ? 288 : Math.max(1, Math.floor((olHour(now.toISOString()) * 60 + now.getMinutes()) / 5) + 1);
   const rows = OL_SOURCES.map(([k, name, note], n) => {
-    const res = runs.map((r) => ({ r, ...olRes(r[k]) }));
+    const res = runs.map((r) => ({ r, ...olRes(olEntry(r, k)) }));
     const cov = Math.round((res.reduce((a, x) => a + x.f, 0) / slots) * 100);
     const hours = Array.from({ length: 24 }, (_, h) => {
       const inH = res.filter((x) => olHour(x.r.t) === h);
@@ -482,15 +494,17 @@ function olHtml() {
       const c = f >= 0.9 ? "g" : f >= 0.45 ? "o" : tried ? "r" : "p";
       return `<b class="${c}${olOpen === `${k}:${h}` ? " sel" : ""}" data-ol="${k}:${h}" title="${String(h).padStart(2, "0")}:00 ${Math.round(f * 100)}%"></b>`;
     }).join("");
-    const due = runs.filter((r) => r[k]?.due), sum = (f) => due.reduce((a, r) => a + (r[k][f] || 0), 0);
+    const ent = (r) => olEntry(r, k);
+    const due = runs.filter((r) => ent(r)?.due), sum = (f) => due.reduce((a, r) => a + (ent(r)[f] || 0), 0);
     const tries = {};
-    for (const r of due) for (const [t, v] of Object.entries(r[k].ok || {})) tries[t] = (tries[t] || 0) + v;
+    for (const r of due) for (const [t, v] of Object.entries(ent(r).ok || {})) tries[t] = (tries[t] || 0) + v;
     const full = res.filter((x) => x.c === "g").length, part = res.filter((x) => x.c === "o").length, bad = res.filter((x) => x.c === "r").length;
-    const lastBad = [...due].reverse().find((r) => r[k].stop || r[k].fail || r[k].refused);
+    const lastBad = [...due].reverse().find((r) => ent(r).stop || ent(r).fail || ent(r).refused);
     const id = `olnote-${n}`;
-    const det = `${esc(note)}<br>${fmt(runs.length)} runs, ${fmt(due.length)} read this source: ${full} complete, ${part} partly, ${bad} without result.`
+    const viaFile = k === "NL" ? due.filter((r) => ent(r).via === "file").length : 0;
+    const det = `${esc(note)}<br>${fmt(runs.length)} runs, ${fmt(due.length)} read this source: ${full} complete, ${part} partly, ${bad} without result.${viaFile ? ` ${viaFile} from the file, ${due.length - viaFile} by boxes.` : ""}`
       + (sum("calls") ? `<br>${fmt(sum("calls"))} calls; worked ${Object.entries(tries).map(([t, v]) => `${fmt(v)} ${t === "1" ? "at the first try" : `at try ${t}`}`).join(", ") || "none"}; ${fmt(sum("refused"))} refused, ${fmt(sum("fail"))} failed after their tries, ${fmt(sum("skipped"))} not tried; waited ${Math.round(sum("wait"))} s in all.` : "")
-      + (lastBad ? `<br>Last problem ${olHm(lastBad.t)}: ${esc(lastBad[k].stop || lastBad[k].bad || (lastBad[k].fail ? `${lastBad[k].fail} failed` : `${lastBad[k].refused} refused, worked after a retry`))}.` : "");
+      + (lastBad ? `<br>Last problem ${olHm(lastBad.t)}: ${(() => { const x = ent(lastBad); return esc(x.stop || x.bad || (x.fail ? `${x.fail} failed` : `${x.refused} refused, worked after a retry`)); })()}.` : "");
     const open = olOpen && olOpen.startsWith(`${k}:`) ? +olOpen.split(":")[1] : null;
     const list = open != null ? `<div class="ol-runs">${runs.filter((r) => olHour(r.t) === open).map((r) => olRunLine(r, k)).join("") || `<div class="muted">No runs in this hour.</div>`}</div>` : "";
     const cls = cov >= 90 ? " good" : cov >= 45 ? " warn" : " bad";

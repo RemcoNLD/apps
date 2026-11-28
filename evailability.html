@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.44.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.45.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -952,15 +952,15 @@
   .occ .occ-full-wk { fill: var(--danger); opacity: .75; stroke: none; }
   .occ .occ-week { fill: none; stroke: var(--line); stroke-width: 1.4; stroke-dasharray: 3 3; opacity: .6; }
   .occ .occ-grid { stroke: var(--muted); stroke-width: .6; opacity: .45; }
-  .occ .occ-now { stroke: var(--line); stroke-width: 1; stroke-dasharray: 1 2; opacity: .8; }
-  .occ .occ-arr { stroke: var(--sign-blue); stroke-width: 2; }
+  .occ .occ-now { fill: var(--muted); opacity: .8; }
+  .occ .occ-arr { fill: var(--sign-blue); }
   .occ .occ-arr-t { color: var(--sign-blue); font-weight: 700; }
   .occ .occ-lbl { fill: var(--muted); font-size: 9px; font-family: inherit; }
   .occ .occ-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: .8rem; color: var(--muted); }
   .occ .occ-legend i { display: inline-block; width: 16px; height: 0; margin-right: 5px; vertical-align: middle; border-top: 2.2px solid var(--free); }
   .occ .occ-legend i.wk { border-top: 1.4px dashed var(--line); opacity: .7; }
   .occ .occ-legend i.full { width: 12px; height: 10px; border: 0; background: var(--danger); opacity: .45; border-radius: 2px; }
-  .occ .occ-legend i.arr { width: 0; height: 11px; border-top: 0; border-left: 2px solid var(--sign-blue); margin-right: 6px; }
+  .occ .occ-legend i.arr { width: 0; height: 0; border-top: 7px solid var(--sign-blue); border-left: 5px solid transparent; border-right: 5px solid transparent; margin-right: 5px; vertical-align: 1px; }
   .occ .occ-note { display: block; margin-top: 4px; font-size: .85rem; color: var(--muted); line-height: 1.35; }
   .occ .occ-note b { color: var(--line); }
   .occ.old svg { opacity: .55; filter: grayscale(1); }
@@ -2245,7 +2245,7 @@ const HELP_I18N = {
     <li>Je <b>viapunten</b> (een wit bolletje met een blauwe rand) en <b>grenzen</b> (de vlag van het nieuwe land) staan op de lijn, met de afstand en tijd ernaartoe. Grenzen alleen als alle wegen getoond worden; viapunten altijd.</li>
     <li><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent.</li>
     <li><b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps, Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
-    <li>Voor Ionity en Fastned in Nederland, Duitsland, Oostenrijk, Frankrijk en Portugal <b>tik je op de lader</b> om er <b>vrije laders door de dag</b> onder te openen (één tegelijk; tik nog eens om te sluiten). De tik werkt hem ook bij. Een groene lijn voor vandaag, rood waar alle laders bezet waren, een stippellijn voor dezelfde dag vorige week, of gisteren zolang er nog geen week aan metingen is (rood onder de as waar hij vol was) en een blauwe lijn op je aankomsttijd. Zolang een locatie vol is, staat erbij wanneer hij meestal weer vrij is.</li>
+    <li>Voor Ionity en Fastned in Nederland, Duitsland, Oostenrijk, Frankrijk en Portugal <b>tik je op de lader</b> om er <b>vrije laders door de dag</b> onder te openen (één tegelijk; tik nog eens om te sluiten). De tik werkt hem ook bij. Een groene lijn voor vandaag, rood waar alle laders bezet waren, een stippellijn voor dezelfde dag vorige week, of gisteren zolang er nog geen week aan metingen is (rood onder de as waar hij vol was) en een blauw driehoekje erboven op je aankomsttijd. Zolang een locatie vol is, staat erbij wanneer hij meestal weer vrij is.</li>
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
     <li>Het scherm blijft aan tijdens het rijden. ${screenAwake() ? "" : "Op dit moment kan het uitgaan: tik tijdens het rijden één keer op het scherm. "}Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
     <li>Als je aankomt, is er een klein feestje.</li>
@@ -2330,7 +2330,7 @@ const HELP_I18N = {
     <li>Os seus <b>pontos intermédios</b> (um ponto branco com contorno azul) e as <b>fronteiras</b> (a bandeira do novo país) aparecem na linha, com a distância e o tempo até lá. As fronteiras só aparecem com todas as estradas visíveis; os pontos intermédios sempre.</li>
     <li><b>Toque no destino</b> para comparar outros percursos a partir de onde está.</li>
     <li><b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
-    <li>Para a Ionity e a Fastned nos Países Baixos, na Alemanha, na Áustria, em França e em Portugal, <b>toque no carregador</b> para abrir por baixo os <b>carregadores livres ao longo do dia</b> (um de cada vez; toque de novo para fechar). O toque também o atualiza. Uma linha verde para hoje, vermelho onde todos os carregadores estavam ocupados, uma linha tracejada para o mesmo dia da semana passada, ou ontem enquanto ainda não houver uma semana de leituras (vermelho por baixo do eixo onde esteve cheio) e uma linha azul à sua hora de chegada. Enquanto um local está cheio, indica quando costuma voltar a ter vagas.</li>
+    <li>Para a Ionity e a Fastned nos Países Baixos, na Alemanha, na Áustria, em França e em Portugal, <b>toque no carregador</b> para abrir por baixo os <b>carregadores livres ao longo do dia</b> (um de cada vez; toque de novo para fechar). O toque também o atualiza. Uma linha verde para hoje, vermelho onde todos os carregadores estavam ocupados, uma linha tracejada para o mesmo dia da semana passada, ou ontem enquanto ainda não houver uma semana de leituras (vermelho por baixo do eixo onde esteve cheio) e um triângulo azul por cima à sua hora de chegada. Enquanto um local está cheio, indica quando costuma voltar a ter vagas.</li>
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
     <li>O ecrã mantém-se ligado enquanto conduz. ${screenAwake() ? "" : "Neste momento pode desligar-se: toque uma vez no ecrã durante a condução. "}Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
     <li>Quando chega, há uma pequena celebração.</li>
@@ -2649,7 +2649,40 @@ const withDevice = (path) => DEVICE_ID ? `${path}${path.includes("?") ? "&" : "?
 const ACCESS_NAME_KEY = "evailability-access-name"; // the key's label, shown in Help
 const TRIAL_KEY = "evailability-trial"; // {until, routesLeft} for a trial key (from /me)
 const accessToken = () => { try { return localStorage.getItem(ACCESS_KEY) || ""; } catch (_) { return ""; } };
+// Requests to the Worker take turns by importance (0.45, Remco 28 Nov 2026: fetching the day charts mustn't
+// get in the way of the live updates). At most NET_MAX at a time; live status (and Belgian stalls) first,
+// then planning work (routes, detours, extra chargers), day charts and place names last. A chart waits while
+// a live-status request is running or waiting, for at most NET_LOW_WAIT_MS, so it's never stuck.
+const NET_MAX = 4, NET_LOW_WAIT_MS = 8000;
+const netPrio = (path) => (/^\/(status|be-evse|be-status)\b/.test(path) ? 0 : /^\/(occupancy|places|where|geocode)\b/.test(path) ? 2 : 1);
+const netQ = [];
+let netBusy = 0, netLive = 0, netTimer = null, netSeq = 0;
+function netSlot(prio) {
+  return new Promise((resolve) => {
+    netQ.push({ prio, at: Date.now(), seq: netSeq++, resolve });
+    netQ.sort((a, b) => a.prio - b.prio || a.seq - b.seq);
+    netPump();
+  });
+}
+function netPump() {
+  while (netQ.length && netBusy < NET_MAX) {
+    const next = netQ[0];
+    if (next.prio === 2 && netLive > 0 && Date.now() - next.at < NET_LOW_WAIT_MS) {
+      if (!netTimer) netTimer = setTimeout(() => { netTimer = null; netPump(); }, 400);
+      return;
+    }
+    netQ.shift();
+    netBusy++;
+    if (next.prio === 0) netLive++;
+    let done = false;
+    next.resolve(() => { if (done) return; done = true; netBusy--; if (next.prio === 0) netLive--; netPump(); });
+  }
+}
 async function api(path, body, timeoutMs, retry = true) {
+  const release = await netSlot(netPrio(path));
+  try { return await apiNow(path, body, timeoutMs, retry); } finally { release(); }
+}
+async function apiNow(path, body, timeoutMs, retry = true) {
   const headers = { "X-Access": accessToken() };
   const opts = body
     ? { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body) }
@@ -5417,7 +5450,7 @@ function occBridge(vals, slotMin) {
 }
 // The chart (0.39): today as a green step line up to now, with a red band over the whole height where
 // no charger was free; the same day last week dashed, its full stretches as a red strip under the axis;
-// a blue line at your arrival time when that's later today. Missing readings stay empty (not red).
+// your arrival time as a blue triangle above it (0.45; a line until then). Missing readings stay empty (not red).
 function occSvg(today, week, total, nowSlot, slots, arr) {
   const W = 320, H = 122, L = 18, R = 6, T = 14, B = 102;
   const top = Math.max(1, total, ...today.filter((v) => v != null), ...week.filter((v) => v != null));
@@ -5449,12 +5482,16 @@ function occSvg(today, week, total, nowSlot, slots, arr) {
   const upto = Math.min(slots, nowSlot + 1);
   const grid = [0, top].map((v) => `<line class="occ-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="occ-lbl" x="${L - 4}" y="${y(v) + 3}" text-anchor="end">${v}</text>`).join("");
   const ticks = [0, 6, 12, 18, 24].map((h) => `<text class="occ-lbl" x="${x(h * slots / 24)}" y="${H - 4}" text-anchor="${h === 0 ? "start" : h === 24 ? "end" : "middle"}">${String(h).padStart(2, "0")}</text>`).join("");
-  const now = `<line class="occ-now" x1="${x(upto)}" x2="${x(upto)}" y1="${T - 2}" y2="${B}"/>`;
-  let arrive = "";
-  if (arr && arr.slot > nowSlot && arr.slot < slots) {
-    const ax = L + (arr.min / 1440) * (W - L - R);
-    arrive = `<line class="occ-arr" x1="${ax.toFixed(1)}" x2="${ax.toFixed(1)}" y1="${T - 2}" y2="${B}"/>`; // the time is in the legend (0.40.2)
+  // Now and your arrival as small triangles above the plot (0.45, Remco 28 Nov 2026: the vertical lines
+  // covered the line near now when you were close). Same viewBox, so the chart keeps its size. Arriving
+  // within 10 minutes: only the blue one. The arrival time is in the legend (0.40.2).
+  const tri = (cx, cls) => { cx = Math.max(L + 4, Math.min(W - R - 4, cx)); return `<path class="${cls}" d="M${(cx - 4.5).toFixed(1)} 2.5H${(cx + 4.5).toFixed(1)}L${cx.toFixed(1)} 10Z"/>`; };
+  let arrive = "", ax = null;
+  if (arr && arr.slot >= nowSlot && arr.slot < slots) {
+    ax = L + (arr.min / 1440) * (W - L - R);
+    arrive = tri(ax, "occ-arr");
   }
+  const now = ax != null && ax - x(upto) < (10 / 1440) * (W - L - R) ? "" : tri(x(upto), "occ-now");
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-hidden="true">${fullRuns(today, upto, T, B, "occ-full")}${fullRuns(week, slots, B + 1, B + 4, "occ-full-wk")}${grid}${ticks}<path class="occ-week" d="${steps(week, slots)}"/><path class="occ-today" d="${steps(today, upto)}"/>${now}${arrive}</svg>`;
 }
 // The last stretch with no charger free (0.40): today up to now, else yesterday. Since 0.44 the live
@@ -7109,6 +7146,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.45", date: "2026-11-28", title: { en: "Fewer gaps in the day chart", nl: "Minder gaten in de daggrafiek", pt: "Menos falhas no gráfico do dia" },
+    items: { en: ["Free chargers through the day has fewer gaps: when a data source asks to slow down for a moment, the reading is now tried again instead of skipped.", "Now and your arrival are small triangles above the chart instead of lines through it, so the line near now stays visible when you're close.", "Live availability always goes first; the day chart loads right after it."],
+      nl: ["Vrije laders door de dag heeft minder gaten: als een gegevensbron even vraagt om rustiger aan te doen, wordt de meting nu opnieuw geprobeerd in plaats van overgeslagen.", "Nu en je aankomst zijn kleine driehoekjes boven de grafiek in plaats van lijnen erdoorheen, zodat de lijn rond nu zichtbaar blijft als je dichtbij bent.", "De live beschikbaarheid gaat altijd voor; de daggrafiek laadt direct daarna."],
+      pt: ["Os carregadores livres ao longo do dia têm menos falhas: quando uma fonte de dados pede para abrandar por um momento, a leitura é agora tentada de novo em vez de ser ignorada.", "Agora e a sua chegada são pequenos triângulos por cima do gráfico em vez de linhas a atravessá-lo, para que a linha perto de agora continue visível quando está perto.", "A disponibilidade em direto tem sempre prioridade; o gráfico do dia carrega logo a seguir."] } },
   { v: "0.44", date: "2026-11-26", title: { en: "When a full site frees up", nl: "Wanneer een volle locatie weer vrij is", pt: "Quando um local cheio volta a ter vagas" },
     items: { en: ["While a site is full, Free chargers through the day says when it's usually free again, from how long it stayed full on earlier occasions. The busiest and most free hour are gone.", "The chart now includes the live status from the ring, so the line, the red band and the note match what the ring shows."],
       nl: ["Zolang een locatie vol is, zegt Vrije laders door de dag wanneer hij meestal weer vrij is, op basis van hoe lang hij eerder vol bleef. Het drukste en het meest vrije uur zijn weg.", "De grafiek neemt nu de live stand van de ring mee, zodat de lijn, de rode band en de tekst kloppen met wat de ring laat zien."],
@@ -7387,7 +7428,7 @@ function helpHtml() {
     <li>Your <b>via points</b> (a white dot with a blue ring) and <b>borders</b> (the new country's flag) sit on the line, with the distance and time to them. Borders only show with every road shown; via points always.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
     <li><b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps, Waze or Flitsmeister, or copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
-    <li>For Ionity and Fastned in the Netherlands, Germany, Austria, France and Portugal, <b>tap the charger</b> to open <b>free chargers through the day</b> under it (one at a time; tap again to close). The tap also updates it. A green line for today, red where every charger was taken, a dashed line for the same day last week, or yesterday while there isn’t a week of readings yet (red under the axis where it was full) and a blue line at your arrival time. While a site is full, it says when it’s usually free again.</li>
+    <li>For Ionity and Fastned in the Netherlands, Germany, Austria, France and Portugal, <b>tap the charger</b> to open <b>free chargers through the day</b> under it (one at a time; tap again to close). The tap also updates it. A green line for today, red where every charger was taken, a dashed line for the same day last week, or yesterday while there isn’t a week of readings yet (red under the axis where it was full) and a blue triangle above it at your arrival time. While a site is full, it says when it’s usually free again.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${screenAwake() ? "" : "Right now it may turn off: tap the screen once while driving. "}If it still turns off, check that Low Power Mode is off.</li>
     <li>When you arrive, there's a small celebration.</li>

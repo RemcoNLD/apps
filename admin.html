@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.9.0"><!-- shown on the apps page; raise with each change -->
+<meta name="app-version" content="0.10.0"><!-- shown on the apps page; raise with each change -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Usage · EVailability</title>
@@ -158,10 +158,29 @@
   .qos-d { margin-top: 3px; }
   .qos:first-of-type { border-top: 0; }
   .qos-h { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
-  .qos-h .name { font-weight: 700; }
-  .qos-ok { font-weight: 800; font-variant-numeric: tabular-nums; }
-  .qos-ok small { font-weight: 500; color: var(--muted); }
+  .qos-h .name { font-weight: 700; flex: 1; min-width: 0; }
+  /* 0.10.0: one column on the right, the % signs under each other and the unit in its own column */
+  .qos-ok { flex: none; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .qos-ok .p { display: inline-block; min-width: 3.4em; text-align: right; }
+  .qos-ok small { display: inline-block; width: 2.9em; margin-left: .35em; font-weight: 500; color: var(--muted); text-align: left; }
   .qos-ok.good { color: var(--ok); } .qos-ok.warn { color: var(--warn); } .qos-ok.bad { color: var(--bad); }
+  /* 0.10.0: occupancy job log per source (from the branch occ, no Worker call) */
+  .ol-nav { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+  .ol-nav button { padding: 5px 12px; font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .ol-nav button:disabled { opacity: .35; }
+  .ol-nav b { flex: 1; text-align: center; }
+  .ol { padding: 7px 0; border-top: 1px solid var(--line); }
+  .ol:first-of-type { border-top: 0; }
+  .ol .qi .info { margin-left: 6px; }
+  .ol-hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; margin-top: 6px; }
+  .ol-hours b { height: 16px; border-radius: 2px; background: var(--line); cursor: pointer; }
+  .ol-hours b.g { background: var(--ok); } .ol-hours b.o { background: var(--warn); } .ol-hours b.r { background: var(--bad); }
+  .ol-hours b.p { background: var(--line); opacity: .5; } .ol-hours b.f { visibility: hidden; }
+  .ol-hours b.sel { outline: 2px solid var(--text); outline-offset: 1px; }
+  .ol-ax { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); margin-top: 2px; }
+  .ol-runs { margin-top: 6px; font-size: .85rem; line-height: 1.4; }
+  .ol-runs div { padding: 2px 0; } .ol-runs .t { display: inline-block; width: 3.2em; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .ol-runs .bad { color: var(--bad); } .ol-runs .warn { color: var(--warn); }
   /* Alerts (0.6.0): bells on rows that have a rule, the rule and incident dialogs, the incidents card */
   [data-alert] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
   [data-alert]:active { opacity: .7; }
@@ -382,7 +401,7 @@ function qosHtml(d) {
     const id = `qd-${qN++}`; // details behind the row's ⓘ (0.8.3)
     return `<div class="qos" data-alert="${esc(k)}">
       <div class="qos-h"><span class="name">${esc(QOS_NAMES[k] || k.replace(/^\w+:/, ""))}<button type="button" class="gtitle qi" data-note="${id}" aria-expanded="false" aria-label="Details"><span class="info" aria-hidden="true">i</span></button><i class="bell"></i></span>
-        <span class="qos-ok${cls(okT ?? okW)}">${okT != null ? `${okT}%<small> today</small>` : okW != null ? `${okW}%<small> 7 d</small>` : "–"}</span></div>
+        <span class="qos-ok${cls(okT ?? okW)}">${okT != null ? `<span class="p">${okT}%</span><small>today</small>` : okW != null ? `<span class="p">${okW}%</span><small>7 d</small>` : `<span class="p">–</span><small></small>`}</span></div>
       <div class="small muted qos-d" id="${id}" hidden>${t ? `${fmt(t.n)} today, typical ${qosMs(qosPct(t, .5))}, 9 in 10 ${qosMs(qosPct(t, .9))}, slowest ${qosMs(t.max)}` : "none today"}<br>7 days: ${fmt(w.n)}, ${okW}% worked, 9 in 10 ${qosMs(qosPct(w, .9))} · ${lf}</div>
     </div>`;
   };
@@ -394,6 +413,114 @@ function qosHtml(d) {
   }).join("");
   return `${infoH2("Service health", "Tap a row to set when it notifies you; its ⓘ shows counts and times (typical, 9 in 10, slowest) and the last failure. “Worked” = answered without a server error (or a refused key or rate limit for outside services). Times are from the Worker: for the app’s own calls from request to answer, for outside services the call itself.")}${notice}${cards}`;
 }
+// ---- Occupancy job log (0.10.0, 28 Nov 2026). The job (tools/build-occupancy.py) writes one line per
+// run to log-<local date>.jsonl on the branch occ; this page reads it straight from GitHub (public repo,
+// no Worker call, no KV). Per source: how much of the day got a reading, per hour a coloured cell, and on
+// a tap the runs of that hour with their calls, tries, refusals and waits.
+const OL_URL = (date) => `https://raw.githubusercontent.com/RemcoNLD/apps/occ/log-${date}.jsonl?m=${Math.floor(Date.now() / 120000)}`;
+const OL_SOURCES = [
+  ["NDW", "NDW (Netherlands)", "One call per planned box of Dutch sites; complete = every followed Dutch site read."],
+  ["OCPDB", "OCPDB (Germany)", "One call per followed brand; complete = every brand answered."],
+  ["E-Control", "E-Control (Austria)", "Through the Worker, a few sites per call."],
+  ["FR", "France snapshot", "Read every run from the France live snapshot (no outside calls)."],
+  ["PT", "Portugal snapshot", "Read every run from the Portugal live snapshot (no outside calls)."],
+];
+const olDate = (offset = 0) => new Date(Date.now() - offset * 86400000).toLocaleDateString("en-CA", { timeZone: "Europe/Amsterdam" });
+let olDay = 0, olData = {}, olOpen = null; // olOpen = "SRC:hour"
+const olHm = (iso) => new Date(iso).toLocaleTimeString("en-GB", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit" });
+const olHour = (iso) => +new Date(iso).toLocaleTimeString("en-GB", { timeZone: "Europe/Amsterdam", hour: "2-digit", hourCycle: "h23" });
+// A run's result for one source: share of a complete reading (0..1) and a class.
+function olRes(e) {
+  if (!e) return { f: 0, c: "n" };
+  if (!e.due) return { f: 0, c: "p" };
+  const stopped = !!e.stop || (e.fail || 0) > 0;
+  if (e.of) { const f = Math.min(1, (e.read || 0) / e.of); return { f: stopped && f >= 1 ? 0.99 : f, c: f >= 1 && !stopped ? "g" : f > 0 ? "o" : "r" }; }
+  if (e.read > 0) return { f: stopped ? 0.5 : 1, c: stopped ? "o" : "g" };
+  return { f: 0, c: e.why ? "r" : "r" };
+}
+function olTries(e) {
+  const ok = e.ok || {};
+  const parts = Object.entries(ok).map(([k, v]) => `${v} ${k === "1" ? "first try" : `try ${k}`}`);
+  return parts.length === 1 && ok[1] === e.calls ? "all first try" : `worked: ${parts.join(", ")}`;
+}
+function olRunLine(r, k) {
+  const e = r[k], t = `<span class="t">${olHm(r.t)}</span>`;
+  if (!e) return `<div>${t}–</div>`;
+  if (!e.due) return `<div class="muted">${t}skipped: ${esc(e.why || "not due")}</div>`;
+  const res = olRes(e);
+  const read = e.of ? `${fmt(e.read || 0)}/${fmt(e.of)}` : `${fmt(e.read || 0)} read`;
+  const bits = [read];
+  if (e.calls != null) bits.push(`${fmt(e.calls)} call${e.calls === 1 ? "" : "s"}${e.ok ? ` (${olTries(e)})` : ""}`);
+  if (e.refused) bits.push(`${e.refused} refused${e.errs ? ` (${Object.entries(e.errs).map(([x, n]) => `${esc(x)} ×${n}`).join(", ")})` : ""}`);
+  if (e.wait) bits.push(`waited ${e.wait} s`);
+  if (e.fail) bits.push(`<span class="bad">${e.fail} failed</span>`);
+  if (e.skipped) bits.push(`<span class="bad">${e.skipped} not tried</span>`);
+  if (e.stop) bits.push(`<span class="bad">stopped: ${esc(e.stop)}</span>`);
+  if (e.until) bits.push(`paused until ${esc(e.until)}`);
+  if (e.why) bits.push(esc(e.why));
+  return `<div class="${res.c === "o" ? "warn" : res.c === "r" ? "bad" : ""}">${t}${bits.join(" · ")}</div>`;
+}
+function olHtml() {
+  const date = olDate(olDay), d = olData[date];
+  const label = new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const nav = `<div class="ol-nav"><button type="button" data-ol-day="1"${olDay >= 7 ? " disabled" : ""}>‹</button><b>${olDay ? esc(label) : `Today, ${esc(label)}`}</b><button type="button" data-ol-day="-1"${olDay ? "" : " disabled"}>›</button></div>`;
+  const head = infoH2("Occupancy job", "What the occupancy job (every 5 minutes on GitHub) did per source: the day charts in the app come from these readings. The % is the share of the day’s 5-minute slots so far with a complete reading, so a source read every 10 minutes can reach 50% at most; that’s where gaps in the charts come from (the app bridges gaps up to 30 minutes). Cells: one per hour, green = complete readings, orange = partly, red = tried without result, grey = skipped (paused or not due). Tap a cell for that hour’s runs: calls, at which try they worked, refused answers (429 = too many requests, RA = the wait it asked for), seconds waited. Read straight from the branch occ, kept 8 days; not counted in Service health (that’s the Worker, i.e. the app’s own calls).");
+  if (!d) return `${head}${nav}<div class="card small muted">Loading…</div>`;
+  if (d.error) return `${head}${nav}<div class="card small muted">${esc(d.error)}</div>`;
+  const runs = d.runs;
+  const now = new Date();
+  const slots = olDay ? 288 : Math.max(1, Math.floor((olHour(now.toISOString()) * 60 + now.getMinutes()) / 5) + 1);
+  const rows = OL_SOURCES.map(([k, name, note], n) => {
+    const res = runs.map((r) => ({ r, ...olRes(r[k]) }));
+    const cov = Math.round((res.reduce((a, x) => a + x.f, 0) / slots) * 100);
+    const hours = Array.from({ length: 24 }, (_, h) => {
+      const inH = res.filter((x) => olHour(x.r.t) === h);
+      if (!inH.length) return `<b class="${!olDay && h > olHour(now.toISOString()) ? "f" : "n"}" data-ol="${k}:${h}"></b>`;
+      // The hour in progress counts only its slots so far.
+      const per = !olDay && h === olHour(now.toISOString()) ? Math.max(1, Math.floor(now.getMinutes() / 5) + 1) : 12;
+      const f = Math.min(1, inH.reduce((a, x) => a + x.f, 0) / per), tried = inH.some((x) => x.c !== "p");
+      const c = f >= 0.9 ? "g" : f >= 0.45 ? "o" : tried ? "r" : "p";
+      return `<b class="${c}${olOpen === `${k}:${h}` ? " sel" : ""}" data-ol="${k}:${h}" title="${String(h).padStart(2, "0")}:00 ${Math.round(f * 100)}%"></b>`;
+    }).join("");
+    const due = runs.filter((r) => r[k]?.due), sum = (f) => due.reduce((a, r) => a + (r[k][f] || 0), 0);
+    const tries = {};
+    for (const r of due) for (const [t, v] of Object.entries(r[k].ok || {})) tries[t] = (tries[t] || 0) + v;
+    const full = res.filter((x) => x.c === "g").length, part = res.filter((x) => x.c === "o").length, bad = res.filter((x) => x.c === "r").length;
+    const lastBad = [...due].reverse().find((r) => r[k].stop || r[k].fail || r[k].refused);
+    const id = `olnote-${n}`;
+    const det = `${esc(note)}<br>${fmt(runs.length)} runs, ${fmt(due.length)} read this source: ${full} complete, ${part} partly, ${bad} without result.`
+      + (sum("calls") ? `<br>${fmt(sum("calls"))} calls; worked ${Object.entries(tries).map(([t, v]) => `${fmt(v)} ${t === "1" ? "at the first try" : `at try ${t}`}`).join(", ") || "none"}; ${fmt(sum("refused"))} refused, ${fmt(sum("fail"))} failed after their tries, ${fmt(sum("skipped"))} not tried; waited ${Math.round(sum("wait"))} s in all.` : "")
+      + (lastBad ? `<br>Last problem ${olHm(lastBad.t)}: ${esc(lastBad[k].stop || lastBad[k].bad || (lastBad[k].fail ? `${lastBad[k].fail} failed` : `${lastBad[k].refused} refused, worked after a retry`))}.` : "");
+    const open = olOpen && olOpen.startsWith(`${k}:`) ? +olOpen.split(":")[1] : null;
+    const list = open != null ? `<div class="ol-runs">${runs.filter((r) => olHour(r.t) === open).map((r) => olRunLine(r, k)).join("") || `<div class="muted">No runs in this hour.</div>`}</div>` : "";
+    const cls = cov >= 90 ? " good" : cov >= 45 ? " warn" : " bad";
+    return `<div class="ol"><div class="qos-h"><span class="name">${esc(name)}<button type="button" class="gtitle qi" data-note="${id}" aria-expanded="false" aria-label="Details"><span class="info" aria-hidden="true">i</span></button></span>
+      <span class="qos-ok${cls}"><span class="p">${cov}%</span><small>read</small></span></div>
+      <div class="small muted qos-d" id="${id}" hidden>${det}</div>
+      <div class="ol-hours">${hours}</div>${list}</div>`;
+  }).join("");
+  const last = runs.at(-1);
+  const foot = last ? `<div class="small muted" style="margin-top:6px">Last run ${olHm(last.t)} (${last.secs} s)${last["NDW file"] ? "" : ""}.</div>` : "";
+  return `${head}${nav}<div class="card">${runs.length ? rows + `<div class="ol-ax"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>` + foot : `<span class="small muted">No runs logged on this day (the log started on 28 Nov 2026).</span>`}</div>`;
+}
+async function olLoad(force = false) {
+  const date = olDate(olDay);
+  if (olData[date] && !force && (olDay || Date.now() - olData[date].at < 120000)) return;
+  try {
+    const res = await fetch(OL_URL(date), { cache: "no-store" });
+    if (res.status === 404) olData[date] = { at: Date.now(), runs: [] };
+    else if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+    else olData[date] = { at: Date.now(), runs: (await res.text()).split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean) };
+  } catch (e) { olData[date] = { at: Date.now(), error: `Couldn’t read the job log: ${e.message}` }; }
+  olPaint();
+}
+function olPaint() { const el = $("occlog"); if (el) el.innerHTML = olHtml(); }
+document.addEventListener("click", (e) => {
+  const nav = e.target.closest("[data-ol-day]");
+  if (nav) { olDay = Math.max(0, Math.min(7, olDay + +nav.dataset.olDay)); olOpen = null; olPaint(); olLoad(); return; }
+  const cell = e.target.closest("[data-ol]");
+  if (cell) { olOpen = olOpen === cell.dataset.ol ? null : cell.dataset.ol; olPaint(); }
+});
 function render(d) {
   const todayRec = d.days.find((x) => x.day === d.today) || { calls: {}, ors: {} };
   // Today = saved + not yet saved.
@@ -534,7 +661,9 @@ function render(d) {
 `;
   }
   html += qosHtml(d);
+  html += `<div id="occlog">${olHtml()}</div>`;
   $("out").innerHTML = html;
+  olLoad();
   paintBells();
   // Tapping a bar shows that day's number under the row's bars; tapping it again hides it.
   $("out").onclick = (e) => {

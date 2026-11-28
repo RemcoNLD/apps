@@ -40,6 +40,21 @@ Files written (in STATE_DIR):
   meta.json      {at, secs, sites per country, NDW calls, discovery or not, pace}
   pace.json      per source (NDW, OCPDB, E-Control): how often it is read now and since when it is
       paused (see "Pace" below)
+  log-<YYYY-MM-DD>.jsonl  one line per run (local date, Europe/Amsterdam), kept keepDays: per source
+      whether it was due, its calls, how many worked at the 1st/2nd/3rd/4th try, failed, refused (429/503),
+      seconds waited, why it stopped, readings (28 Nov 2026, Remco: "per bron terughalen wanneer die iets
+      gedaan heeft en wat het resultaat was ... of er retry was en na hoeveel pogingen het wel gelukt is").
+      Read by the usage page straight from raw.githubusercontent.com: no Worker call, no KV.
+  ndw-file.json  what NDW's whole-country file (opendata.ndw.nu) looked like when last probed (every 6 h)
+
+Retries (28 Nov 2026): NDW and OCPDB refused calls now and then at only 1 call a second, OCPDB even at
+the first call of a run read every 30 minutes: GitHub's runners share their addresses with other users,
+so a 429 there usually means "someone else on this address", not us. Since 28 Nov a refused call waits
+(Retry-After + 1 s, else 1, 2, 4 s for NDW and 5, 10, 20 s for OCPDB, plus a little jitter) and is tried
+again, at most 4 times, while the source's waiting budget for the run lasts (NDW 40 s, OCPDB 60 s); NDW
+also halves its pace after each refusal and slowly speeds up again. Only when a call still fails after its
+tries, the budget is used up, or a source asks to wait over a minute (or answers 503), the source stops for
+the run and the pace below applies (Remco's rule: pause at least 10 minutes, then slower).
 
 Pace (25 Nov 2026, Remco: "als er een rate limiting optreedt ... meteen 10 minuten langer pauzeren ...
 pas weer de snelheid opvoeren als we het idee hebben dat het weer kan"): each source is read every
@@ -47,8 +62,9 @@ pas weer de snelheid opvoeren als we het idee hebben dat het weer kan"): each so
 more of its calls in a run fail, the rest of that run leaves it alone, it pauses at least 10 minutes
 (longer if it says Retry-After), and it steps down one level: 5 -> 10 -> 15 -> 30 minutes between
 reads. After a calm hour at a level it steps one level faster again, back to 5; a source that pushes
-back again needs a longer calm before speeding up (2, 3, at most 4 hours: "streak"), until it has
-been fine at 5 minutes for 3 hours. FR and PT come from snapshots that are made anyway, so they're
+back again needs a longer calm before speeding up. Since 28 Nov the calm needed is 30 minutes times the
+number of push-backs in the last 6 hours (at most 2 hours), and a pause ends at the run that starts within
+a minute of its end (before, a run starting 1 s early waited another full interval). FR and PT come from snapshots that are made anyway, so they're
 read every run.
 """
 import concurrent.futures
@@ -58,6 +74,7 @@ import gzip
 import json
 import math
 import os
+import random
 import re
 import sys
 import threading
@@ -88,11 +105,20 @@ SLOTS = 24 * 60 // SLOT_MIN
 PACE_LEVELS = [5, 10, 15, 30]             # minutes between reads of one source, fastest first
 PAUSE_MIN = 10                            # at least this long without calls after being rate limited
 CALM_MIN = 60                             # a calm hour at a level: one level faster (times the streak, max 4)
-STREAK_RESET_H = 3                        # fine at the fastest level this long: the streak starts over
 SOFT_RETRY_S = 5                          # NDW 429 asking to wait at most this long: obeyed once per run
 SOFT_BURST_S = 3                          # 429s within this many seconds of that one belong to the same burst
-PACE_V = 3                                # pace.json version: 2 = NDW calmer per second, 3 = planned boxes
-                                          # and a steady pace (26 Nov 2026)
+PACE_V = 4                                # pace.json version: 2 = NDW calmer per second, 3 = planned boxes
+                                          # and a steady pace (26 Nov 2026), 4 = retries (28 Nov 2026)
+PAUSE_SLACK_S = 60                        # a pause ending within this many seconds of a run's start is over
+CALM_STEP_MIN = 30                        # calm needed before speeding up: this x push-backs in RECENT_H
+RECENT_H = 6
+TRIES = 4                                 # attempts per call (the first plus 3 retries)
+LONG_RA_S = 60                            # a Retry-After longer than this: stop the source for the run
+RETRY = {"NDW": (1, 40), "OCPDB": (5, 60), "E-Control": (2, 20)}  # first wait (s, doubles), waiting budget per run
+OCPDB_GAP_S = 2                           # between OCPDB calls (one per brand)
+NDW_FILE = "https://opendata.ndw.nu/charging_point_locations.geojson.gz"
+NDW_FILE_EVERY_H = 6                      # probe the whole-country file this often (28 Nov 2026)
+LOG_TZ = "Europe/Amsterdam"
 BOX_FEATURES = 800                        # plan NDW boxes to hold at most this many features (cap 1,000)
 GRID = 100                                # feature density per 1/GRID degree (from the last full scan)
 NDW_RUN_S = 120                           # spread a run's NDW calls over about this many seconds:
@@ -129,6 +155,8 @@ def retry_after_s(e):
 
 
 def get(url, timeout=60, tries=3, source="?"):
+    """One GET as JSON. 429/503 raise RateLimited at once (the caller's Source decides about retrying);
+    network trouble and 5xx are tried `tries` times here (calls through a Source use tries=1: it counts)."""
     last = None
     for i in range(tries):
         try:
@@ -147,8 +175,110 @@ def get(url, timeout=60, tries=3, source="?"):
                 raise
         except Exception as e:  # network trouble: try again
             last = e
-        time.sleep(2 + 4 * i)
+        if i < tries - 1:
+            time.sleep(2 + 4 * i)
     raise last
+
+
+def short_err(e):
+    """A few words for the run log: "429", "429 RA 1", "503", "HTTP 404", "timeout", "network"."""
+    if isinstance(e, RateLimited):
+        return f"{e.status}" + (f" RA {e.retry_after}" if e.retry_after else "")
+    if isinstance(e, urllib.error.HTTPError):
+        return f"HTTP {e.code}"
+    t = str(e).lower()
+    return "timeout" if "timed out" in t or "timeout" in t else (type(e).__name__ if type(e).__name__ != "URLError" else "network")[:24]
+
+
+class Source:
+    """One outside source in this run (28 Nov 2026): every call goes through call(), which retries a
+    refused call (429/503) after a wait, and network trouble or a 5xx after 2, 4, 6 s, at most TRIES times,
+    and keeps the counts for the run log: calls (attempts), worked at try 1..4, failed after all tries,
+    refused answers, seconds waited, why it stopped. Once stopped (budget used up, Retry-After over a minute,
+    a 503 twice), every further call of the run raises at once."""
+    def __init__(self, name, first_wait=1, budget=40, tries=TRIES):
+        self.name, self.first_wait, self.budget, self.tries = name, first_wait, budget, tries
+        self.lock = threading.Lock()
+        self.calls = self.failed = self.refused = self.skipped = 0
+        self.ok = {}            # try number -> calls that worked at that try
+        self.errs = {}          # short error -> count (every attempt that went wrong)
+        self.waited = 0.0
+        self.stopped = None
+        self.first_bad = self.last_bad = None   # "HH:MM:SS 429 RA 1"
+
+    def _bad(self, e):
+        k = short_err(e)
+        self.errs[k] = self.errs.get(k, 0) + 1
+        stamp = f"{datetime.datetime.now(datetime.timezone.utc):%H:%M:%S} {k}"
+        self.first_bad = self.first_bad or stamp
+        self.last_bad = stamp
+
+    def stop(self, e):
+        with self.lock:
+            self.stopped = self.stopped or e
+        return self.stopped
+
+    def call(self, fn, on_refused=None):
+        for attempt in range(1, self.tries + 1):
+            with self.lock:
+                if self.stopped:
+                    self.skipped += 1
+                    raise self.stopped
+                self.calls += 1
+            try:
+                r = fn()
+                with self.lock:
+                    self.ok[attempt] = self.ok.get(attempt, 0) + 1
+                return r
+            except RateLimited as e:
+                with self.lock:
+                    self.refused += 1
+                    self._bad(e)
+                    wait = max(e.retry_after + 1, self.first_wait * 2 ** (attempt - 1)) * (1 + 0.3 * random.random())
+                    last = attempt == self.tries
+                    if e.retry_after > LONG_RA_S or (e.status == 503 and self.errs.get("503", 0) > 1) \
+                            or (not last and self.waited + wait > self.budget):
+                        self.stopped = self.stopped or e
+                        self.failed += 1
+                        raise
+                    if last:
+                        self.failed += 1
+                        raise
+                    self.waited += wait
+                if on_refused:
+                    on_refused(e, wait)
+                time.sleep(wait)
+            except urllib.error.HTTPError as e:  # 4xx other than 429: no use trying again
+                with self.lock:
+                    self._bad(e)
+                    self.failed += 1
+                raise
+            except Exception as e:  # network trouble or a 5xx
+                with self.lock:
+                    self._bad(e)
+                    if attempt == self.tries:
+                        self.failed += 1
+                        raise
+                time.sleep(2 * attempt)
+
+    def summary(self):
+        """For the run log: only what's not zero."""
+        out = {"calls": self.calls}
+        if self.ok:
+            out["ok"] = {str(k): v for k, v in sorted(self.ok.items())}
+        for k, v in (("fail", self.failed), ("refused", self.refused), ("skipped", self.skipped), ("wait", round(self.waited, 1))):
+            if v:
+                out[k] = v
+        if self.errs:
+            out["errs"] = self.errs
+        if self.stopped:
+            out["stop"] = str(self.stopped)
+        if self.first_bad:
+            out["bad"] = self.first_bad if self.first_bad == self.last_bad else f"{self.first_bad} … {self.last_bad}"
+        return out
+
+
+SRC = {k: Source(k, *RETRY[k]) for k in RETRY}
 
 
 def load_config():
@@ -164,49 +294,44 @@ def load_config():
 # ------------------------------------------------------------------ NDW (NL)
 
 class Pace:
-    """NDW refuses bursts: at most 3 starts a second over all threads (8 until 25 Nov 2026, 5 until 26 Nov,
-    when full scans of ~256 calls got "429, Retry-After 1 s" in most runs from 25 Nov 18:00 UTC on, even
-    every 30 min, so NDW sat at its slowest level with 20 push-backs overnight).
-    A 429 asking to wait a few seconds (Retry-After <= SOFT_RETRY_S) is obeyed once per run: wait, halve
-    the rate and carry on (calls refused in that same burst are tried once more). A second one in the same
-    run, a 503 or a longer Retry-After counts as overload (stop): every further call in this run is
-    skipped and the pace pauses NDW (at least 10 minutes) and slows it down a level."""
+    """NDW: an even pace over all threads (1-2 calls a second, NDW_RATE; its documented limit is 10).
+    History: 8 a second until 25 Nov 2026, 5 until 26 Nov, 3 on 26 Nov, then 1-2 with planned boxes; even at
+    1 a second NDW now and then answers "429, Retry-After 1 s" (other users of the runner's address). Since
+    28 Nov each refusal halves the pace (at most 1 call per 2 s) and holds every thread until the wait is
+    over; every 20 calls that work speed it up by a fifth again, up to the planned rate. The retry itself is
+    done by SRC["NDW"].call()."""
     def __init__(self, per_sec=2):
         self.gap, self.next, self.lock = 1.0 / per_sec, 0.0, threading.Lock()
+        self.base = self.gap
         self.calls = 0
-        self.stopped = None
-        self.soft = None       # the 429 obeyed in this run
-        self.soft_at = 0.0
+        self.good = 0
+        self.slowest = self.gap
 
     def rate(self, per_sec):
         with self.lock:
-            self.gap = 1.0 / per_sec
+            self.gap = self.base = 1.0 / per_sec
+            self.slowest = max(self.slowest, self.gap)
 
     def wait(self):
         with self.lock:
-            if self.stopped:
-                raise self.stopped
             now = time.time()
             at = max(now, self.next)
             self.next = at + self.gap
             self.calls += 1
+            self.good += 1
+            if self.good >= 20 and self.gap > self.base:
+                self.gap, self.good = max(self.base, self.gap / 1.2), 0
         if at > now:
             time.sleep(at - now)
 
-    def soften(self, e):
-        """NDW asked to wait a moment: True to try the call once more after waiting, False to stop."""
+    def slow(self, e, wait):
+        """NDW refused a call: everyone waits, and the pace halves for a while."""
         with self.lock:
-            now = time.time()
-            if self.stopped or e.status != 429 or e.retry_after > SOFT_RETRY_S:
-                return False
-            if self.soft and now - self.soft_at > SOFT_BURST_S:
-                return False  # a second push-back in this run: overload
-            if not self.soft:
-                self.soft, self.soft_at = e, now
-                self.gap = min(self.gap * 2, 1.0)
-                log(f"NDW: {e}: waiting {e.retry_after + 1} s, then {1 / self.gap:.1f} calls/s for the rest of this run")
-            self.next = max(self.next, now + e.retry_after + 1)
-            return True
+            self.gap = min(self.gap * 2, 2.0)
+            self.slowest = max(self.slowest, self.gap)
+            self.good = 0
+            self.next = max(self.next, time.time() + wait)
+        log(f"NDW: {e}: waiting {wait:.1f} s, then {1 / max(self.gap, 1e-3):.1f} calls/s for a while")
 
 
 PACE = Pace()
@@ -214,16 +339,11 @@ PACE = Pace()
 
 def ndw(box):
     bbox = ",".join(f"{v:.6f}" for v in box)
-    for attempt in (0, 1):
+
+    def once():
         PACE.wait()
-        try:
-            return get(f"{NDW}?bbox={bbox}", timeout=60, source="NDW").get("features", [])
-        except RateLimited as e:
-            if attempt == 0 and PACE.soften(e):
-                continue
-            with PACE.lock:
-                PACE.stopped = PACE.stopped or e
-            raise
+        return get(f"{NDW}?bbox={bbox}", timeout=60, tries=1, source="NDW").get("features", [])
+    return SRC["NDW"].call(once, on_refused=PACE.slow)
 
 
 def brand_of(feature, brands):
@@ -273,7 +393,7 @@ def nl_scan(brands):
             return box, depth, ndw(box)
         except Exception as e:  # one tile failing shouldn't cost the whole country
             failed[0] += 1
-            if not isinstance(e, RateLimited) or e is not PACE.stopped or failed[0] == 1:
+            if e is not SRC["NDW"].stopped or failed[0] == 1:
                 log("NDW tile failed:", box, e)
             return box, depth, []
 
@@ -401,7 +521,7 @@ def nl_status(sites, groups, cursor=0):
                 failed += 1
                 if first_failed is None:
                     first_failed = k
-                if not isinstance(e, RateLimited) or failed == 1:
+                if e is not SRC["NDW"].stopped or failed == 1:
                     log("NDW call failed:", e)
     return out, failed, (first_failed if first_failed is not None else cursor)
 
@@ -434,9 +554,11 @@ def fr_sites(path, followed):
     idx = json.load(open("data/fr-fast-sites.json"))
     if snapshot_age_min(snap, "at") > 30:
         log("FR snapshot older than 30 min: skipped")
+        NOTES["FR"] = f"snapshot {snapshot_age_min(snap, 'at'):.0f} min old"
         return {}
     if snap.get("index") and snap["index"] != idx.get("built"):
         log("FR snapshot from another index version: skipped")
+        NOTES["FR"] = "other index version"
         return {}
     out = {}
     for i, s in enumerate(idx["sites"]):
@@ -457,6 +579,7 @@ def pt_sites(path, followed):
     idx = json.load(open("data/pt-fast-sites.json"))
     if snapshot_age_min(snap, "pub") > 30:
         log("PT snapshot older than 30 min: skipped")
+        NOTES["PT"] = f"snapshot {snapshot_age_min(snap, 'pub'):.0f} min old"
         return {}
     out = {}
     for s in idx["sites"]:
@@ -514,26 +637,26 @@ def de_coords(loc):
         return None
 
 
-def de_sites(brands, pace=None):
+def de_sites(brands):
     """All of Germany: per brand one OCPDB call (operator_name contains the brand), grouped into sites
     like the Worker's summariseDe (the same charger can come twice: operator feed and federal register;
     merged by EVSE id, a live status wins; sites on the other side of the road stay apart)."""
     locs, calls = {}, 0
-    for b in brands:
+    src = SRC["OCPDB"]
+    for n, b in enumerate(brands):
         term = DE_OPERATOR.get(b["key"], b["key"])
         url = f"{OCPDB}?operator_name={urllib.parse.quote(term)}&limit={OCPDB_MAX}"
+        if n:
+            time.sleep(OCPDB_GAP_S)  # one brand after the other, not in a burst (28 Nov 2026)
         try:
             calls += 1
-            data = get(url, timeout=120, source="OCPDB")
-        except RateLimited as e:
-            log(f"DE {b['key']}: OCPDB rate limited, the other brands wait:", e)
-            if pace:
-                pace.limited("OCPDB", e)
-            break
+            data = src.call(lambda: get(url, timeout=120, tries=1, source="OCPDB"),
+                            on_refused=lambda e, w: log(f"DE {b['key']}: OCPDB {e}: waiting {w:.0f} s, then once more"))
         except Exception as e:
+            if src.stopped:
+                log(f"DE {b['key']}: OCPDB still refusing, the other brands wait:", e)
+                break
             log(f"DE {b['key']}: OCPDB failed:", e)
-            if pace:
-                pace.failed("OCPDB")
             continue
         items = data if isinstance(data, list) else (data.get("items") or [])
         if isinstance(data, dict):
@@ -594,21 +717,18 @@ def de_sites(brands, pace=None):
 
 # ------------------------------------------------------------------ E-Control via the Worker (AT)
 
-def at_sites(pace=None):
+def at_sites():
     out, calls, part, parts = {}, 0, 0, 1
     while part < parts and part < 40:
+        src = SRC["E-Control"]
         try:
             calls += 1
-            data = get(f"{WORKER}/occupancy/at?part={part}", timeout=60, tries=2, source="E-Control")
-        except RateLimited as e:
-            log(f"AT part {part}: rate limited, the other parts wait:", e)
-            if pace:
-                pace.limited("E-Control", e)
-            break
+            data = src.call(lambda: get(f"{WORKER}/occupancy/at?part={part}", timeout=60, tries=1, source="E-Control"))
         except Exception as e:
+            if src.stopped:
+                log(f"AT part {part}: rate limited, the other parts wait:", e)
+                break
             log(f"AT part {part} failed:", e)
-            if pace:
-                pace.failed("E-Control")
             part += 1
             continue
         if not data.get("ok"):
@@ -621,8 +741,7 @@ def at_sites(pace=None):
         part += 1
         if data.get("limited"):  # E-Control limited the Worker partway through this part
             log(f"AT part {part - 1}: E-Control rate limited the Worker, the other parts wait")
-            if pace:
-                pace.limited("E-Control", RateLimited("E-Control", 429))
+            SRC["E-Control"].stop(RateLimited("E-Control", 429))
             break
     log(f"AT: {len(out)} readings from {calls} Worker calls ({parts} parts)")
     return out, calls
@@ -638,27 +757,27 @@ class Pacer:
         self.path, self.now = path, now
         # The usage page's "Occupancy: fastest interval": never read a source more often than that.
         self.levels = [m for m in PACE_LEVELS if m >= fastest] or PACE_LEVELS[-1:]
+        self.why = {}
         try:
             self.state = json.load(open(path))
         except Exception:
             self.state = {}
         if self.state and self.state.get("v") != PACE_V:
-            # 26 Nov 2026: NDW is now called at 3 instead of 5 a second and a short Retry-After is obeyed, so
-            # the overnight push-backs (every 30 min, streak 19) say little about the new pace: start NDW
-            # again at 15 minutes (fine with full scans on 24-25 Nov) with a streak of 1.
-            # 26 Nov 2026 (v3): planned boxes (far fewer calls) at a steady 1-2 calls a second: same restart.
-            r = self.state.get("NDW")
-            if isinstance(r, dict):
-                r.update({"every": 15, "streak": 1, "calmSince": self._iso(now)})
-                r.pop("until", None)
-                log("NDW: fewer, calmer calls now (planned boxes), pace starts again at every 15 min")
+            # 28 Nov 2026 (v4): refused calls are now retried, so the push-backs counted before (NDW at every
+            # 30 with a streak of 27, OCPDB at 30 with 32) say little: NDW and OCPDB start again at every 10 min
+            # with a clean slate (v2, v3 on 26 Nov restarted NDW at 15 for the same kind of reason).
+            for src in ("NDW", "OCPDB"):
+                r = self.state.get(src)
+                if isinstance(r, dict):
+                    r.update({"every": 10, "streak": 0, "recent": [], "calmSince": self._iso(now)})
+                    r.pop("until", None)
+                    log(f"{src}: refused calls are retried now, pace starts again at every 10 min")
         self.state["v"] = PACE_V
         for src, r in list(self.state.items()):
             if not isinstance(r, dict):
                 continue
             if r.get("every") not in self.levels:
                 r["every"] = min((m for m in self.levels if m >= (r.get("every") or 0)), default=self.levels[-1])
-        self.run = {s: {"calls": 0, "failed": 0, "limited": None} for s in self.SOURCES}
 
     def lighter(self, src, why):
         """The load on src shrank (fewer brands followed): one level faster at once. Rate limiting still
@@ -683,55 +802,49 @@ class Pacer:
         return self.state.setdefault(src, {"every": self.levels[0]})
 
     def due(self, src):
-        """Read this source in this run? Not while paused, and not sooner than its interval (2 min slack:
-        runs start a little later or earlier than every 5 minutes)."""
+        """Read this source in this run? Not while paused (a pause ending within a minute counts as over),
+        and not sooner than its interval (2 min slack: runs start a little later or earlier than every
+        5 minutes). The reason it's skipped goes into the run log (self.why)."""
         r = self.rec(src)
         until, last = self._t(r.get("until") or ""), self._t(r.get("last") or "")
-        if until and self.now < until:
+        if until and (until - self.now).total_seconds() > PAUSE_SLACK_S:
             log(f"{src}: paused until {r['until']} (rate limited), every {r['every']} min")
+            self.why[src] = f"paused until {r['until'][11:16]}"
             return False
         if last and (self.now - last).total_seconds() < (r["every"] - 2) * 60:
-            log(f"{src}: read every {r['every']} min for now, next after {self._iso(last + datetime.timedelta(minutes=r['every']))}")
+            nxt = self._iso(last + datetime.timedelta(minutes=r["every"]))
+            log(f"{src}: read every {r['every']} min for now, next after {nxt}")
+            self.why[src] = f"every {r['every']} min, next {nxt[11:16]}"
             return False
         return True
 
-    def called(self, src, calls, failed):
-        self.run[src]["calls"] += calls
-        self.run[src]["failed"] += failed
-
-    def failed(self, src):
-        self.run[src]["calls"] += 1
-        self.run[src]["failed"] += 1
-
-    def limited(self, src, err):
-        self.run[src]["limited"] = self.run[src]["limited"] or err
-
-    def done(self, src):
-        """After reading src in this run: slow down when it pushed back, speed up after a calm hour."""
-        r, run = self.rec(src), self.run[src]
+    def done(self, src, s):
+        """After reading src (a Source) in this run: slow down when it kept refusing or too many calls
+        failed (after their retries), speed up after a calm period."""
+        r = self.rec(src)
         r["last"] = self._iso(self.now)
-        overload = run["limited"]
-        if not overload and run["calls"] >= 3 and run["failed"] >= FAIL_SHARE * run["calls"]:
-            overload = f"{run['failed']} of {run['calls']} calls failed"
+        cut = self.now - datetime.timedelta(hours=RECENT_H)
+        recent = [x for x in r.get("recent") or [] if (self._t(x) or cut) > cut]
+        overload = s.stopped
+        if not overload and s.calls >= 3 and s.failed >= FAIL_SHARE * s.calls:
+            overload = f"{s.failed} of {s.calls} calls failed"
         lvl = self.levels.index(r["every"]) if r["every"] in self.levels else 0
         if overload:
             wait = max(PAUSE_MIN * 60, getattr(overload, "retry_after", 0) or 0)
             until = self.now + datetime.timedelta(seconds=wait)
+            recent.append(self._iso(self.now))
             r.update({"every": self.levels[min(lvl + 1, len(self.levels) - 1)], "until": self._iso(until),
                       "calmSince": self._iso(until), "lastHit": self._iso(self.now), "why": str(overload),
-                      "hits": int(r.get("hits") or 0) + 1, "streak": int(r.get("streak") or 0) + 1})
+                      "hits": int(r.get("hits") or 0) + 1, "recent": recent, "streak": len(recent)})
             log(f"{src}: slowing down ({overload}): paused until {r['until']}, then every {r['every']} min")
             return
+        r["recent"], r["streak"] = recent, len(recent)
         calm = self._t(r.get("calmSince") or "")
-        need = CALM_MIN * min(4, max(1, int(r.get("streak") or 1)))
+        need = min(2 * CALM_MIN, CALM_STEP_MIN * max(1, len(recent)))
         if lvl > 0 and calm and (self.now - calm).total_seconds() >= need * 60:
             r["every"] = self.levels[lvl - 1]
             r["calmSince"] = self._iso(self.now)
-            log(f"{src}: calm for {need // 60} h, speeding up: every {r['every']} min")
-        hit = self._t(r.get("lastHit") or "")
-        if r["every"] == self.levels[0] and r.get("streak") and hit and (self.now - hit).total_seconds() >= STREAK_RESET_H * 3600:
-            r["streak"] = 0
-            r.pop("calmSince", None)
+            log(f"{src}: calm for {need} min, speeding up: every {r['every']} min")
 
     def save(self):
         with open(self.path, "w") as f:
@@ -781,6 +894,86 @@ def prune(sites_by_tile, now, keep_days):
                 del sites[key]
         if not sites:
             del sites_by_tile[tile]
+
+
+NOTES = {}  # source -> why it gave no readings (FR, PT), for the run log
+
+
+# ------------------------------------------------------------------ NDW's whole-country file (probe)
+
+def ndw_file_probe(state, now, sites, got):
+    """28 Nov 2026: NDW also publishes the whole country as one file (opendata.ndw.nu, "Consumption of the
+    Entire Netherlands" in its docs). If it carries live availability and is refreshed every few minutes,
+    one download per run could replace the ~110 box calls that keep getting refused. Its docs don't say
+    either, so every NDW_FILE_EVERY_H hours this downloads it once and records (ndw-file.json, the run log)
+    its size, headers, feature count, how many features carry availabilities, and for the followed Dutch
+    sites read by boxes in this same run how many counts agree. Nothing else uses the file yet."""
+    path = os.path.join(state, "ndw-file.json")
+    try:
+        prev = json.load(open(path))
+        if (now - datetime.datetime.fromisoformat(prev["at"].replace("Z", "+00:00"))).total_seconds() < NDW_FILE_EVERY_H * 3600:
+            return None
+    except Exception:
+        pass
+    t0 = time.time()
+    out = {"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "url": NDW_FILE}
+    try:
+        req = urllib.request.Request(NDW_FILE, headers={"User-Agent": "EVailability-occupancy", "Accept-Encoding": "gzip"})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            out["headers"] = {k: r.headers.get(k) for k in ("Content-Length", "Content-Type", "Last-Modified", "ETag", "Cache-Control", "Expires") if r.headers.get(k)}
+            raw = r.read(300 * 1024 * 1024)
+        out["bytes"] = len(raw)
+        if raw[:2] == b"\x1f\x8b":
+            raw = gzip.decompress(raw)
+        out["unzipped"] = len(raw)
+        doc = json.loads(raw)
+        raw = None
+        feats = doc.get("features") if isinstance(doc, dict) else doc
+        feats = feats or []
+        out["features"] = len(feats)
+        if feats:
+            p0 = feats[0].get("properties") or {}
+            out["keys"] = sorted(p0.keys())[:40]
+            av = [f for f in feats if (f.get("properties") or {}).get("availabilities")]
+            out["withAvailabilities"] = len(av)
+            if av:
+                out["availabilityKeys"] = sorted(((av[0]["properties"]["availabilities"] or [{}])[0]).keys())
+            stamps = []
+            for f in feats:
+                for k, v in (f.get("properties") or {}).items():
+                    if "update" in k.lower() and isinstance(v, str):
+                        stamps.append(v)
+            if stamps:
+                out["newestUpdate"] = max(stamps)
+            byid = {str(f.get("id")): f for f in feats}
+            mine = [sid for sid in sites if sid in byid]
+            out["followedSites"] = len(sites)
+            out["followedInFile"] = len(mine)
+            if got:
+                same = sum(1 for sid in mine if sid in got and counts(byid[sid]) == got[sid])
+                out["comparedWithBoxes"] = sum(1 for sid in mine if sid in got)
+                out["sameCounts"] = same
+    except Exception as e:
+        out["error"] = str(e)[:200]
+    out["secs"] = round(time.time() - t0, 1)
+    with open(path, "w") as f:
+        json.dump(out, f, separators=(",", ":"))
+    log("NDW file probe:", json.dumps(out))
+    return out
+
+
+# ------------------------------------------------------------------ run log (28 Nov 2026)
+
+def write_runlog(state, now, line, keep_days):
+    """Append one line for this run to log-<local date>.jsonl; drop days older than keep_days."""
+    local = now.astimezone(ZoneInfo(LOG_TZ))
+    path = os.path.join(state, f"log-{local:%Y-%m-%d}.jsonl")
+    with open(path, "a") as f:
+        f.write(json.dumps(line, ensure_ascii=False, separators=(",", ":")) + "\n")
+    first = (local.date() - datetime.timedelta(days=keep_days - 1)).isoformat()
+    for old in glob.glob(os.path.join(state, "log-*.jsonl")):
+        if os.path.basename(old)[4:14] < first:
+            os.remove(old)
 
 
 def main():
@@ -848,6 +1041,7 @@ def main():
         nl_grid = {}
     grid_changed = False
     nl_due = pacer.due("NDW")
+    got, nl_mode, nl_cursor = {}, None, None
     try:
         if not nl_due:
             raise StopIteration
@@ -855,6 +1049,7 @@ def main():
         groups = nl_plan(nl.get("sites") or {}, nl_grid)
         boxes = len(groups)
         if age_h > DISCOVER_H or nl.get("brands") != brand_sig or not nl.get("sites") or not nl_grid or boxes >= scan_calls:
+            nl_mode = "scan"
             if not nl_grid:
                 log("NL: no density grid yet: a full scan now, then planned boxes")
             before = PACE.calls
@@ -872,18 +1067,18 @@ def main():
                 nl["sites"].update({sid: site for sid, (site, _) in found.items()})
             got = {sid: c for sid, (_, c) in found.items()}
             nl["scanCalls"] = scan_calls
-            pacer.called("NDW", PACE.calls - before, failed)
             log(f"NL scan: {len(found)} sites of {brand_sig}, {failed} tiles failed, {scan_calls} calls, "
                 f"grid {sum(nl_grid.values())} features in {len(nl_grid)} cells; "
                 f"next runs: {len(nl_plan(nl['sites'], nl_grid))} planned boxes")
         else:
+            nl_mode = "boxes"
             rec = pacer.rec("NDW")
             cursor = int(rec.get("cursor") or 0) % max(1, boxes)
             log(f"NL: {len(nl['sites'])} sites in {boxes} planned boxes (a full scan takes {scan_calls} calls)"
                 + (f", starting at box {cursor}" if cursor else ""))
             before = PACE.calls
             got, failed, rec["cursor"] = nl_status(nl["sites"], groups, cursor)
-            pacer.called("NDW", PACE.calls - before, failed)
+            nl_cursor = [cursor, rec["cursor"], boxes]
             log(f"NL: {len(got)} readings from {PACE.calls - before} calls")
         for sid, c in got.items():
             b, lat, lon, name = nl["sites"][sid]
@@ -893,13 +1088,13 @@ def main():
         pass
     except Exception as e:
         log("NL failed:", e)
-        pacer.failed("NDW")
+        SRC["NDW"].failed += 1
+        SRC["NDW"].calls += 1
+        SRC["NDW"]._bad(e)
     if nl_due:
-        if PACE.stopped:
-            pacer.limited("NDW", PACE.stopped)
-        pacer.done("NDW")
+        pacer.done("NDW", SRC["NDW"])
         old = set(filter(None, prev_nl_sig.split(",")))
-        if discovered and not pacer.run["NDW"]["limited"] and old and followed < old \
+        if discovered and not SRC["NDW"].stopped and old and followed < old \
                 and len(nl_plan(nl["sites"], nl_grid)) < int(nl.get("scanCalls") or SCAN_CALLS):
             pacer.lighter("NDW", f"{len(nl['sites'])} Dutch sites in {len(nl_plan(nl['sites'], nl_grid))} boxes instead of a full scan")
     nl_count = sum(1 for k in readings if k.startswith("nl:"))
@@ -909,30 +1104,36 @@ def main():
     readings.update(fr)
     readings.update(pt)
     de, de_calls = {}, 0
-    if pacer.due("OCPDB"):
+    oc_due = pacer.due("OCPDB")
+    if oc_due:
         try:
-            de, de_calls = de_sites(brands, pacer)
-            pacer.called("OCPDB", 0, 0)
+            de, de_calls = de_sites(brands)
         except Exception as e:
             log("DE failed:", e)
-            pacer.failed("OCPDB")
-        pacer.run["OCPDB"]["calls"] = max(pacer.run["OCPDB"]["calls"], de_calls)
-        pacer.done("OCPDB")
+            SRC["OCPDB"].failed += 1
+            SRC["OCPDB"]._bad(e)
+        pacer.done("OCPDB", SRC["OCPDB"])
     readings.update(de)
     at, at_calls = {}, 0
-    if pacer.due("E-Control"):
+    at_due = pacer.due("E-Control")
+    if at_due:
         try:
-            at, at_calls = at_sites(pacer)
+            at, at_calls = at_sites()
         except Exception as e:
             log("AT failed:", e)
-            pacer.failed("E-Control")
-        pacer.run["E-Control"]["calls"] = max(pacer.run["E-Control"]["calls"], at_calls)
-        pacer.done("E-Control")
+            SRC["E-Control"].failed += 1
+            SRC["E-Control"]._bad(e)
+        pacer.done("E-Control", SRC["E-Control"])
     readings.update(at)
 
     for key, (info, c) in readings.items():
         put(sites_by_tile, key, info, c, now, keep_days)
     prune(sites_by_tile, now, keep_days)
+
+    # The whole-country file, now and then, while the run has time to spare (28 Nov 2026).
+    probe = None
+    if time.time() - t0 < 150:
+        probe = ndw_file_probe(state, now, nl.get("sites") or {}, got if nl_mode == "boxes" else {})
 
     # Write
     for path in glob.glob(os.path.join(state, "t_*.json")):
@@ -948,11 +1149,42 @@ def main():
         with open(os.path.join(state, "nl-grid.json"), "w") as f:
             json.dump({"at": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "cell": 1 / GRID, "cells": nl_grid}, f, separators=(",", ":"))
     pacer.save()
-    meta = {"at": stamp, "secs": round(time.time() - t0, 1), "brands": brand_sig, "keepDays": keep_days,
+    secs = round(time.time() - t0, 1)
+
+    # One line for this run in the day's log (28 Nov 2026): per source what it did and how it ended.
+    def entry(name, due, src=None, read=None, of=None, **extra):
+        r = pacer.state.get(name) if isinstance(pacer.state.get(name), dict) else {}
+        e = {"due": 1} if due else {"due": 0, "why": pacer.why.get(name, "")}
+        if due and src is not None:
+            e.update(src.summary())
+        if read is not None and due:
+            e["read"] = read
+        if of is not None and due:
+            e["of"] = of
+        if r.get("every"):
+            e["every"] = r["every"]
+        if r.get("until") and pacer._t(r["until"]) and pacer._t(r["until"]) > now:
+            e["until"] = r["until"][11:16]
+        e.update({k: v for k, v in extra.items() if v is not None})
+        return e
+    nl_of = sum(1 for v in (nl.get("sites") or {}).values() if v[0] in followed)
+    line = {"t": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "secs": secs,
+            "NDW": entry("NDW", nl_due, SRC["NDW"], nl_count, nl_of, mode=nl_mode, box=nl_cursor,
+                         rate=round(1 / max(PACE.slowest, 1e-3), 2) if PACE.calls else None),
+            "OCPDB": entry("OCPDB", oc_due, SRC["OCPDB"], sum(1 for i, _ in de.values() if i["cc"] == "DE"), len(brands)),
+            "E-Control": entry("E-Control", at_due, SRC["E-Control"], len(at)),
+            "FR": {"due": 1, "read": len(fr), **({"why": NOTES["FR"]} if "FR" in NOTES else {})},
+            "PT": {"due": 1, "read": len(pt), **({"why": NOTES["PT"]} if "PT" in NOTES else {})}}
+    if probe:
+        line["NDW file"] = {k: probe.get(k) for k in ("bytes", "features", "withAvailabilities", "followedInFile",
+                                                     "comparedWithBoxes", "sameCounts", "newestUpdate", "secs", "error") if probe.get(k) is not None}
+    write_runlog(state, now, line, keep_days)
+
+    meta = {"at": stamp, "secs": secs, "brands": brand_sig, "keepDays": keep_days,
             "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt),
                          "DE": sum(1 for i, _ in de.values() if i["cc"] == "DE"),
                          "AT": len(at) + sum(1 for i, _ in de.values() if i["cc"] == "AT")}, "ndwCalls": PACE.calls,
-            "ndwWaited": str(PACE.soft) if PACE.soft else None, "ocpdbCalls": de_calls, "workerAtCalls": at_calls,
+            "ndwRefused": SRC["NDW"].refused, "ocpdbCalls": de_calls, "workerAtCalls": at_calls,
             "discovery": discovered, "nlSites": len(nl.get("sites") or {}),
             "nlBoxes": len(nl_plan(nl.get("sites") or {}, nl_grid)),
             "tiles": len(sites_by_tile), "sites": sum(len(s) for s in sites_by_tile.values()),
@@ -960,6 +1192,7 @@ def main():
                      for src, r in pacer.state.items() if isinstance(r, dict)}, "fastest": pacer.levels[0]}
     with open(os.path.join(state, "meta.json"), "w") as f:
         json.dump(meta, f, separators=(",", ":"))
+    log("Run log:", json.dumps(line, ensure_ascii=False))
     log("Done:", json.dumps(meta))
     if not readings and nl_due:
         log("No readings at all")

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.45.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.46.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -3799,11 +3799,38 @@ function turnAt(i) {
 // Such a step is always shown, also when the routing service names the slip road after the motorway
 // ("keep right onto A27") or calls it straight on: otherwise the exit itself went missing (.90-.95)
 // and the next instruction was the roundabout after it.
-function leavesMotorway(t) {
+// Since 0.46 a motorway that runs on up to 1.5 km past the step still counts as left there: the map
+// often matches the first stretch of a slip road that runs alongside to the motorway itself.
+function motorwayLeft(t) {
   const before = mainRoadAt(t.km - 0.3);
-  if (!before || !/^A/i.test(before.ref || "") || before.toKm > t.km + 0.8) return false;
-  const after = mainRoadAt(t.km + 1);
-  return !after || after.ref !== before.ref;
+  if (!before || !/^A/i.test(before.ref || "") || before.toKm > t.km + 1.5) return null;
+  const after = mainRoadAt(Math.max(t.km + 1, before.toKm + 0.3));
+  return !after || after.ref !== before.ref ? before.ref : null;
+}
+const leavesMotorway = (t) => !!motorwayLeft(t);
+// The numbered exit a step sits at (within 1.2 km of the junction on your side of the road).
+function exitAt(km) {
+  const exits = state.route?.exits || [];
+  let best = null;
+  for (const x of exits) if (x[1] && Math.abs(x[0] - km) < 1.2 && (!best || Math.abs(x[0] - km) < Math.abs(best[0] - km))) best = x;
+  return best;
+}
+// Where a step that leaves a motorway leads (0.46). The routing service names the slip road after the
+// motorway you leave ("keep right onto A12" at Bodegraven, where the N11 starts after the ramp), so
+// that road is never the answer. In order: the first other numbered road on the timeline that starts
+// within 3 km (at a knooppunt that's the new motorway), a road number or street in the steps of the
+// next 3 km, the exit's name. Returns {road} | {ref} | {text} | null.
+function exitTarget(t, left) {
+  const road = roadParts().find((p) => p.ref !== left && p.fromKm >= t.km - 0.5 && p.fromKm <= t.km + 3);
+  if (road) return { road };
+  const turns = state.route.turns || [];
+  const names = [t.name];
+  for (let i = t.i + 1; i < turns.length && turns[i][0] - t.km <= 3; i++) names.push(turns[i][2] || "");
+  for (const n of names) { const r = refIn(n); if (r && r !== left) return { ref: r }; }
+  const street = names.find((n) => n && !refIn(n));
+  if (street) return { text: street };
+  const x = exitAt(t.km);
+  return x?.[2] ? { text: x[2] } : null;
 }
 function turnShown(t) {
   if ((t.type === 6 || [4, 5, 12, 13].includes(t.type)) && leavesMotorway(t)) return true;
@@ -3840,6 +3867,13 @@ function routeStreetAt(k) {
 // What the turn leads onto: the numbered road there (as on the timeline), else the step's street name.
 function turnTarget(t) {
   if (t.type === 10) return `<span class="turn-txt">${esc(shortPlace(state.to?.label) || "Destination")}</span>`;
+  const left = motorwayLeft(t);
+  if (left) {
+    const x = exitTarget(t, left);
+    if (x?.road) return roadPartBadge(withOverride(x.road));
+    if (x?.ref) return roadBadge(x.ref, countryAt(t.km, t.km + 1));
+    return x?.text ? `<span class="turn-txt">${esc(x.text)}</span>` : "";
+  }
   const road = mainRoadAt(t.km + 0.4);
   if (road && road.fromKm >= t.km - 1.5 && road.fromKm <= t.km + 1.5) return roadPartBadge(withOverride(road));
   const ref = refIn(t.name);
@@ -3881,8 +3915,10 @@ function turnRow() {
   const t = u.at != null && u.offKm <= ON_ROUTE_KM ? nextTurn() : null;
   if (!t) return `<span class="marker me" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M20 3 36 36 20 28 4 36Z"/></svg></span><div class="name">You</div>`;
   const ex = nextExit(t.km);
-  // Turning at an exit: its number goes with the turn ("↗ 1.2 km 18 A58").
-  const atExit = ex?.isTurn && ex[1] ? `<span class="exit-sign"><b>${esc(ex[1])}</b></span>` : "";
+  // Turning at an exit: its number goes with the turn ("↗ 1.2 km 12 N11"), also when other exits
+  // come first (0.46; before, only when it was the very next exit).
+  const tx = t.type !== 10 && t.type !== 9 ? exitAt(t.km) : null;
+  const atExit = tx && (ex?.isTurn || leavesMotorway(t)) ? `<span class="exit-sign"><b>${esc(tx[1])}</b></span>` : "";
   const right = ex && !ex.isTurn
     ? `<div class="next-exit">${exitSign(ex.ref, ex.name)}<span class="dist">${fmtDist(ex.km - u.km)}</span></div>` : "";
   // The last 500 m: the turn and its distance pulse white and black, so they stand out.
@@ -7146,6 +7182,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.46", date: "2026-11-28", title: { en: "Clearer motorway exits", nl: "Duidelijkere afritten", pt: "Saídas de autoestrada mais claras" },
+    items: { en: ["When you leave the motorway, your row now shows the road you're heading for (such as N11) with the exit number, instead of the motorway you're leaving."],
+      nl: ["Als je de snelweg verlaat, toont je rij nu de weg waar je naartoe gaat (zoals N11) met het afritnummer, in plaats van de snelweg die je verlaat."],
+      pt: ["Quando sai da autoestrada, a sua linha mostra agora a estrada para onde vai (como a N11) com o número da saída, em vez da autoestrada que está a deixar."] } },
   { v: "0.45", date: "2026-11-28", title: { en: "Fewer gaps in the day chart", nl: "Minder gaten in de daggrafiek", pt: "Menos falhas no gráfico do dia" },
     items: { en: ["Free chargers through the day has fewer gaps: when a data source asks to slow down for a moment, the reading is now tried again instead of skipped.", "Now and your arrival are small triangles above the chart instead of lines through it, so the line near now stays visible when you're close.", "Live availability always goes first; the day chart loads right after it."],
       nl: ["Vrije laders door de dag heeft minder gaten: als een gegevensbron even vraagt om rustiger aan te doen, wordt de meting nu opnieuw geprobeerd in plaats van overgeslagen.", "Nu en je aankomst zijn kleine driehoekjes boven de grafiek in plaats van lijnen erdoorheen, zodat de lijn rond nu zichtbaar blijft als je dichtbij bent.", "De live beschikbaarheid gaat altijd voor; de daggrafiek laadt direct daarna."],

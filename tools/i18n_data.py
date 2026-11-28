@@ -295,6 +295,7 @@ EXACT = {
 "Today": ("Vandaag", "Hoje"),
 "Same day last week": ("Zelfde dag vorige week", "Mesmo dia da semana passada"),
 "Yesterday": ("Gisteren", "Ontem"),
+"Usual": ("Normaal", "Habitual"),
 "The dashed line for the same day last week appears once a week of readings has been collected.": (
   "De stippellijn voor dezelfde dag vorige week verschijnt zodra er een week aan metingen is verzameld.",
   "A linha tracejada do mesmo dia da semana passada aparece quando houver uma semana de leituras."),

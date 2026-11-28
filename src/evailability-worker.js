@@ -79,7 +79,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.17.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.18.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -1293,7 +1293,8 @@ async function handleOccupancy(request, env, url) {
   }
   if (!best) return json(request, { ok: false, reason: "no data", at });
   const s = best.s;
-  return json(request, { ok: true, at, slotMin, key: best.key, name: s.n, total: s.t, cc: s.cc, tz: s.tz, days: s.d });
+  // usual (0.18.0): the site's usual line for its local date w, from the weekday profiles (tools/occ-profile.py).
+  return json(request, { ok: true, at, slotMin, key: best.key, name: s.n, total: s.t, cc: s.cc, tz: s.tz, days: s.d, usual: s.u || null });
 }
 
 // Austria for the occupancy job (Worker 0.12.0). E-Control's key is only a Worker secret, so the job

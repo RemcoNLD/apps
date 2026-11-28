@@ -888,12 +888,25 @@ def put(sites_by_tile, key, info, c, now, keep_days):
     tile[key] = rec
 
 
-def prune(sites_by_tile, now, keep_days):
+HOLD_DAYS = 30  # a day not yet archived stays in the tiles this long at most (occ-profile.py archives it)
+
+
+def folded_days(state):
+    """Dates already archived on branch occ-archive (tools/occ-profile.py, 28 Nov 2026): only those may
+    leave the tiles and the run log ("gooi geen data weg", Remco)."""
+    try:
+        return set(json.load(open(os.path.join(state, "profile.json"))).get("folded") or [])
+    except Exception:
+        return set()
+
+
+def prune(sites_by_tile, now, keep_days, folded=frozenset()):
     for tile, sites in list(sites_by_tile.items()):
         for key, rec in list(sites.items()):
-            first = (now.astimezone(ZoneInfo(rec.get("tz") or "Europe/Amsterdam")).date()
-                     - datetime.timedelta(days=keep_days - 1)).isoformat()
-            rec["d"] = {d: v for d, v in rec["d"].items() if d >= first}
+            today = now.astimezone(ZoneInfo(rec.get("tz") or "Europe/Amsterdam")).date()
+            first = (today - datetime.timedelta(days=keep_days - 1)).isoformat()
+            hold = (today - datetime.timedelta(days=HOLD_DAYS)).isoformat()
+            rec["d"] = {d: v for d, v in rec["d"].items() if d >= first or (d not in folded and d >= hold)}
             if not rec["d"]:
                 del sites[key]
         if not sites:
@@ -977,15 +990,16 @@ def http_bytes(fn):
 
 # ------------------------------------------------------------------ run log (28 Nov 2026)
 
-def write_runlog(state, now, line, keep_days):
-    """Append one line for this run to log-<local date>.jsonl; drop days older than keep_days."""
+def write_runlog(state, now, line, keep_days, folded=frozenset()):
+    """Append one line for this run to log-<local date>.jsonl; drop days older than keep_days once archived."""
     local = now.astimezone(ZoneInfo(LOG_TZ))
     path = os.path.join(state, f"log-{local:%Y-%m-%d}.jsonl")
     with open(path, "a") as f:
         f.write(json.dumps(line, ensure_ascii=False, separators=(",", ":")) + "\n")
     first = (local.date() - datetime.timedelta(days=keep_days - 1)).isoformat()
     for old in glob.glob(os.path.join(state, "log-*.jsonl")):
-        if os.path.basename(old)[4:14] < first:
+        day = os.path.basename(old)[4:14]
+        if day < first and (day in folded or day < (local.date() - datetime.timedelta(days=HOLD_DAYS)).isoformat()):
             os.remove(old)
 
 
@@ -1168,7 +1182,8 @@ def main():
 
     for key, (info, c) in readings.items():
         put(sites_by_tile, key, info, c, now, keep_days)
-    prune(sites_by_tile, now, keep_days)
+    folded = folded_days(state)
+    prune(sites_by_tile, now, keep_days, folded)
 
 
     # Write
@@ -1214,7 +1229,7 @@ def main():
             "E-Control": entry("E-Control", at_due, SRC["E-Control"], len(at)),
             "FR": {"due": 1, "read": len(fr), **({"why": NOTES["FR"]} if "FR" in NOTES else {})},
             "PT": {"due": 1, "read": len(pt), **({"why": NOTES["PT"]} if "PT" in NOTES else {})}}
-    write_runlog(state, now, line, keep_days)
+    write_runlog(state, now, line, keep_days, folded)
 
     meta = {"at": stamp, "secs": secs, "brands": brand_sig, "keepDays": keep_days,
             "readings": {"NL": nl_count, "FR": len(fr), "PT": len(pt),

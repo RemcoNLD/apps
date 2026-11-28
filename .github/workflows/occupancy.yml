@@ -1,6 +1,6 @@
 # Occupancy through the day: every 5 minutes (15 until 25 Nov 2026), how many chargers are free at the
 # followed brands' sites (NL from NDW, DE from OCPDB, AT through the Worker, FR and PT from their live
-# snapshots; a source that rate-limits is paused and read less often for a while, see pace.json), kept 8 days on the branch "occ" (force-pushed:
+# snapshots; a source that rate-limits is paused and read less often for a while, see pace.json), kept 8 days on the branch "occ" (and every finished day whole on "occ-archive", with the weekday profiles, see tools/occ-profile.py) (force-pushed:
 # one commit, no history, no Pages build). The Worker's GET /occupancy reads one tile of it for the
 # chart in the app's charger card. Switched on/off and brands chosen on the usage page (settings
 # "occupancy", "occupancyBrands"). Started by the Worker's timer; GitHub's own schedule is a backup.
@@ -41,10 +41,45 @@ jobs:
           code=$?
           if [ $code -eq 3 ]; then echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0; fi
           exit $code
+      # Once a day (28 Nov 2026, option D): finished days go whole into branch occ-archive (days/, logs/)
+      # and into the running weekday profiles (prof/), and today's usual line into the tiles. Only the
+      # profiles are downloaded (partial clone, sparse). profile.json (the archived dates, which the
+      # job may then drop from the tiles) is updated only after the archive was pushed.
+      - name: Fold finished days into the profiles and archive them
+        if: steps.read.outputs.skip != '1'
+        continue-on-error: true
+        env:
+          URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+        run: |
+          set -e
+          dates=$(python3 tools/occ-profile.py check /tmp/occ)
+          if [ -z "$dates" ]; then echo "Nothing to fold"; exit 0; fi
+          echo "To fold:" $dates
+          if git ls-remote --exit-code --heads "$URL" occ-archive > /dev/null; then
+            git clone -q --depth 1 --filter=blob:none --sparse -b occ-archive "$URL" /tmp/arch
+            git -C /tmp/arch sparse-checkout set prof
+          else
+            mkdir -p /tmp/arch
+            git -C /tmp/arch init -q -b occ-archive
+            git -C /tmp/arch remote add origin "$URL"
+          fi
+          python3 tools/occ-profile.py fold /tmp/occ /tmp/arch
+          cd /tmp/arch
+          git config user.name "occupancy-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add --sparse -A
+          # A commit without parent, force-pushed: the archived days are reused as they are (nothing is
+          # downloaded or sent again), while yesterday's profile versions drop out of the branch, so it
+          # grows only by the new day (~300 kB) instead of a full copy of the profiles every night.
+          commit=$(git commit-tree "$(git write-tree)" -m "Archive and profiles: $(echo $dates)")
+          git push -q --force origin "$commit:refs/heads/occ-archive"
+          mv /tmp/occ/profile.json.new /tmp/occ/profile.json
+          echo "Archived and folded:" $dates
       - name: Publish to the occ branch
         if: steps.read.outputs.skip != '1'
         run: |
           cd /tmp/occ
+          rm -f profile.json.new
           rm -rf .git
           git init -q -b occ
           git config user.name "occupancy-bot"

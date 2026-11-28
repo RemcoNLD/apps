@@ -79,7 +79,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.16.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.17.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -362,6 +362,10 @@ const SETTINGS = [
     help: "Tap to pick the brands to follow. Fewer Dutch brands means fewer NDW calls per run (one small call per site area instead of a full scan of NL), so NL can be read more often: about 21 calls for Ionity, 172 for Ionity + Fastned, a full scan of 284 for all Dutch brands (NDW accepts the full scan every 15 minutes). Germany costs one MobiData BW call per brand. KV writes stay zero." },
   { key: "occupancyMinutes", type: "choice", options: [5, 10, 15, 30], unit: "min", label: "Occupancy: fastest interval", def: () => 5,
     help: "How often the job reads each source at most. A source that rate-limits is still slowed down by itself (paused at least 10 minutes, then 10, 15 or 30 minutes between reads) and only speeds up again, never past this, after a calm hour. Slower than 5 also starts the job less often." },
+  { key: "cardMap", type: "choice", options: ["map", "satellite", "off"], label: "Charger card: map", def: () => "map",
+    help: "The small picture of the site in the app's press-and-hold card. Map: OpenStreetMap's own tiles (free, with credit; fair use, no key). Satellite: Esri World Imagery (free, no key, with credit). Off: no picture. Loaded by the phone straight from the tile server; no Worker calls, no KV." },
+  { key: "cardMapZoom", type: "choice", options: [14, 15, 16, 17, 18, 19], unit: "", label: "Charger card: map zoom", def: () => 17,
+    help: "Zoom level of that picture: 14 shows the junction and the surroundings, 17 the service area, 19 the parking bays (satellite)." },
   { key: "closuresHours", type: "choice", options: [6, 12, 24, 48], label: "Road closures: hours between updates", def: () => 12,
     help: "How often the GitHub job fetches planned closures (NL, DE). It wakes every 6 hours and skips until this much time has passed; Run workflow on GitHub always updates." },
 ];
@@ -3801,7 +3805,8 @@ async function route(request, env) {
     const deletePending = who && who.id !== "legacy" && who.id !== "admin"
       ? (await loadMessages(env)).some((m) => !m.done && m.kind === "delete" && m.userId === who.id) : false;
     return json(request, { name: who?.name || null, debug: !!who?.debug, legacy: who?.id === "legacy", deletePending,
-      trial: who?.trial ? trialInfo(who.trial) : null, occBrands: occBrands(env), occCountries: OCC_COUNTRIES });
+      trial: who?.trial ? trialInfo(who.trial) : null, occBrands: occBrands(env), occCountries: OCC_COUNTRIES,
+      cardMap: setting(env, "cardMap"), cardMapZoom: Number(setting(env, "cardMapZoom")) });
   }
 
   if (path === "/" && request.method === "GET") {

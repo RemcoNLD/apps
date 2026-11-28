@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.48.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.49.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -934,6 +934,22 @@
   .namesrc .cand.used { color: var(--line); font-weight: 600; }
   .namesrc .cand.skip { opacity: .6; }
   .namesrc .r { opacity: .75; font-weight: 400; font-size: .92em; }
+  /* 0.49: the free/in-use box sits beside the name, small; a map picture of the site under them */
+  .navsheet .navhead { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+  .navsheet .navinfo { flex: 1 1 auto; min-width: 0; }
+  .navsheet .navinfo .sub { margin-bottom: 6px; }
+  .navsheet .navinfo .addr { margin: 0; }
+  .navsheet .navhead .hist { flex: 0 1 46%; margin: 2px 0 0; padding: 7px 9px; font-size: .82rem; }
+  .navsheet .navhead .hist div { gap: 5px; line-height: 1.3; }
+  .navsheet .navhead .hist .muted, .navsheet .navhead .hist .tip { font-size: .76rem; }
+  .navsheet .navhead .hist .logo { width: 14px; height: 14px; }
+  .navsheet .navhead .hist div + div { margin-top: 3px; }
+  .navsheet .navmap { position: relative; height: 150px; margin: 0 0 12px; border-radius: 12px; overflow: hidden; background: var(--asphalt); }
+  .navsheet .navmap .tiles { position: absolute; left: 50%; top: 50%; width: 768px; height: 768px; }
+  .navsheet .navmap .tiles img { position: absolute; width: 256px; height: 256px; max-width: none; user-select: none; -webkit-user-drag: none; }
+  .navsheet .navmap .pin { position: absolute; left: 50%; top: 50%; width: 26px; height: 34px; transform: translate(-50%, -100%); filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
+  .navsheet .navmap .cr { position: absolute; right: 0; bottom: 0; padding: 1px 5px; font-size: .62rem; color: #333; background: rgba(255,255,255,.75); border-top-left-radius: 6px; }
+  .navsheet .navmap .cr a { color: inherit; text-decoration: none; }
   .navsheet .hist .tip { color: var(--free); font-size: .9rem; font-weight: 700; }
   /* Occupancy through the day (0.37): today against the same day last week */
   .navsheet { max-height: calc(var(--app-h, 100dvh) - 24px); overflow-y: auto; overscroll-behavior: contain; }
@@ -1455,10 +1471,15 @@
 
 <div class="backdrop" id="navBackdrop" hidden></div>
 <div class="navsheet" id="navSheet" hidden role="dialog" aria-modal="true" aria-labelledby="navTitle">
-  <h2 id="navTitle"></h2>
-  <div class="sub" id="navSub"></div>
-  <div class="addr" id="navAddr" hidden></div>
-  <div class="hist" id="navHist" hidden></div>
+  <div class="navhead">
+    <div class="navinfo">
+      <h2 id="navTitle"></h2>
+      <div class="sub" id="navSub"></div>
+      <div class="addr" id="navAddr" hidden></div>
+    </div>
+    <div class="hist" id="navHist" hidden></div>
+  </div>
+  <div class="navmap" id="navMap" hidden aria-hidden="true"></div>
   <div id="navSrc"></div>
   <div id="navList"></div>
   <button type="button" class="cancel" id="navCancel">Cancel</button>
@@ -1787,9 +1808,7 @@ const I18N_TEXT = {
 "Screen stays on (video).": "Scherm blijft aan (video).",
 "Screen stays on (wake lock and video).": "Scherm blijft aan (wake lock en video).",
 "Coordinates copied": "Coördinaten gekopieerd",
-"Coordinates copied: paste them in Flitsmeister": "Coördinaten gekopieerd: plak ze in Flitsmeister",
 "Couldn’t copy": "Kopiëren mislukt",
-"Copies coordinates": "Kopieert coördinaten",
 "Copy coordinates": "Coördinaten kopiëren",
 "Share…": "Delen…",
 "Route data copied": "Routegegevens gekopieerd",
@@ -2087,9 +2106,7 @@ const I18N_TEXT = {
 "Screen stays on (video).": "O ecrã mantém-se ligado (vídeo).",
 "Screen stays on (wake lock and video).": "O ecrã mantém-se ligado (wake lock e vídeo).",
 "Coordinates copied": "Coordenadas copiadas",
-"Coordinates copied: paste them in Flitsmeister": "Coordenadas copiadas: cole-as no Flitsmeister",
 "Couldn’t copy": "Não foi possível copiar",
-"Copies coordinates": "Copia as coordenadas",
 "Copy coordinates": "Copiar coordenadas",
 "Share…": "Partilhar…",
 "Route data copied": "Dados do percurso copiados",
@@ -2258,7 +2275,7 @@ const HELP_I18N = {
     <li><b>Scroll omhoog</b> voor laders verder vooruit. De blauwe pijl brengt je terug naar de volgende.</li>
     <li>Je <b>viapunten</b> (een wit bolletje met een blauwe rand) en <b>grenzen</b> (de vlag van het nieuwe land) staan op de lijn, met de afstand en tijd ernaartoe. Grenzen alleen als alle wegen getoond worden; viapunten altijd.</li>
     <li><b>Tik op de bestemming</b> om andere routes te vergelijken vanaf waar je bent.</li>
-    <li><b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps, Waze of Flitsmeister, of om zijn coördinaten te kopiëren. Op iPhone krijgt Flitsmeister de coördinaten gekopieerd, om in de zoekbalk te plakken.</li>
+    <li><b>Houd een lader ingedrukt</b> om te zien sinds wanneer hij vol is (of wanneer hij laatst vol was), en om hem te tonen in Apple Kaarten, Google Maps of Waze, of om zijn coördinaten te kopiëren.</li>
     <li>Voor Ionity en Fastned in Nederland, Duitsland, Oostenrijk, Frankrijk en Portugal <b>tik je op de lader</b> om er <b>vrije laders door de dag</b> onder te openen (één tegelijk; tik nog eens om te sluiten). De tik werkt hem ook bij. Een groene lijn voor vandaag, rood waar alle laders bezet waren, een stippellijn voor dezelfde dag vorige week, of gisteren zolang er nog geen week aan metingen is (rood onder de as waar hij vol was) en een blauw driehoekje erboven op je aankomsttijd. Zolang een locatie vol is, staat erbij wanneer hij meestal weer vrij is.</li>
     <li>Ga je van de route af, dan <b>plant de app vanzelf een nieuwe route</b> en vertelt welke kant die op gaat.</li>
     <li>Het scherm blijft aan tijdens het rijden. ${screenAwake() ? "" : "Op dit moment kan het uitgaan: tik tijdens het rijden één keer op het scherm. "}Gaat het toch uit, controleer dan of de energiebesparingsmodus uit staat.</li>
@@ -2273,7 +2290,7 @@ const HELP_I18N = {
 
   <div class="credits">
     <h3>Gegevens en bronnen</h3>
-    <p>Routes en plaatsen: <b>openrouteservice</b> van HeiGIT. Kaartgegevens © <b>OpenStreetMap</b>-bijdragers (ODbL).</p>
+    <p>Routes en plaatsen: <b>openrouteservice</b> van HeiGIT. Kaartgegevens © <b>OpenStreetMap</b>-bijdragers (ODbL). Kaartje op de detailkaart: tegels van <b>OpenStreetMap</b> of luchtfoto’s van <b>Esri</b> (Maxar, Earthstar Geographics).</p>
     <p>Laders: <b>Open Charge Map</b> (CC BY 4.0), aangevuld met de locaties uit de bronnen voor live status. Live status: <b>NDW</b> (Nederland), <b>MobiData BW</b> (Duitsland), <b>E-Control</b> (Oostenrijk), <b>transport.data.gouv.fr</b> (Frankrijk, Licence Ouverte 2.0), <b>Eco-Movement</b> via het Belgische toegangspunt (België), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
     <p>Wegafsluitingen: <b>NDW</b> en <b>Die Autobahn GmbH des Bundes</b>.</p>
     <p>Merknamen en logo's zijn van hun eigenaren. EVailability is onafhankelijk en niet verbonden aan een laadnetwerk of gegevensleverancier. <a href="privacy.html?back=help">Privacybeleid</a></p>
@@ -2344,7 +2361,7 @@ const HELP_I18N = {
     <li><b>Deslize para cima</b> para ver carregadores mais à frente. A seta azul leva-o de volta aos próximos.</li>
     <li>Os seus <b>pontos intermédios</b> (um ponto branco com contorno azul) e as <b>fronteiras</b> (a bandeira do novo país) aparecem na linha, com a distância e o tempo até lá. As fronteiras só aparecem com todas as estradas visíveis; os pontos intermédios sempre.</li>
     <li><b>Toque no destino</b> para comparar outros percursos a partir de onde está.</li>
-    <li><b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, ou copiar as coordenadas. No iPhone, o Flitsmeister recebe as coordenadas copiadas, para colar na pesquisa.</li>
+    <li><b>Mantenha premido</b> um carregador para ver desde quando está cheio (ou quando esteve cheio pela última vez), e para o mostrar nos Mapas da Apple, Google Maps ou Waze, ou copiar as coordenadas.</li>
     <li>Para a Ionity e a Fastned nos Países Baixos, na Alemanha, na Áustria, em França e em Portugal, <b>toque no carregador</b> para abrir por baixo os <b>carregadores livres ao longo do dia</b> (um de cada vez; toque de novo para fechar). O toque também o atualiza. Uma linha verde para hoje, vermelho onde todos os carregadores estavam ocupados, uma linha tracejada para o mesmo dia da semana passada, ou ontem enquanto ainda não houver uma semana de leituras (vermelho por baixo do eixo onde esteve cheio) e um triângulo azul por cima à sua hora de chegada. Enquanto um local está cheio, indica quando costuma voltar a ter vagas.</li>
     <li>Se sair do percurso, a app <b>planeia sozinha um novo percurso</b> e diz-lhe por onde vai.</li>
     <li>O ecrã mantém-se ligado enquanto conduz. ${screenAwake() ? "" : "Neste momento pode desligar-se: toque uma vez no ecrã durante a condução. "}Se mesmo assim se desligar, verifique se o modo de pouca energia está desativado.</li>
@@ -2359,7 +2376,7 @@ const HELP_I18N = {
 
   <div class="credits">
     <h3>Dados e créditos</h3>
-    <p>Percursos e locais: <b>openrouteservice</b> da HeiGIT. Dados do mapa © contribuidores do <b>OpenStreetMap</b> (ODbL).</p>
+    <p>Percursos e locais: <b>openrouteservice</b> da HeiGIT. Dados do mapa © contribuidores do <b>OpenStreetMap</b> (ODbL). Mapa no cartão de detalhes: mosaicos do <b>OpenStreetMap</b> ou imagens de satélite da <b>Esri</b> (Maxar, Earthstar Geographics).</p>
     <p>Carregadores: <b>Open Charge Map</b> (CC BY 4.0), completado com os locais das fontes de estado em direto. Estado em direto: <b>NDW</b> (Países Baixos), <b>MobiData BW</b> (Alemanha), <b>E-Control</b> (Áustria), <b>transport.data.gouv.fr</b> (França, Licence Ouverte 2.0), <b>Eco-Movement</b> através do ponto de acesso belga (Bélgica), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
     <p>Cortes de estrada: <b>NDW</b> e <b>Die Autobahn GmbH des Bundes</b>.</p>
     <p>Os nomes e logótipos das marcas pertencem aos respetivos proprietários. O EVailability é independente e não está associado a nenhuma rede de carregamento nem fornecedor de dados. <a href="privacy.html?back=help">Política de privacidade</a></p>
@@ -3507,6 +3524,7 @@ async function refreshMe() {
       me.trial ? localStorage.setItem(TRIAL_KEY, JSON.stringify(me.trial)) : localStorage.removeItem(TRIAL_KEY);
       if (Array.isArray(me.occBrands)) localStorage.setItem(OCC_BRANDS_KEY, JSON.stringify(me.occBrands));
       if (Array.isArray(me.occCountries)) localStorage.setItem(OCC_COUNTRIES_KEY, JSON.stringify(me.occCountries));
+      if (me.cardMap) localStorage.setItem(CARD_MAP_KEY, JSON.stringify({ style: me.cardMap, zoom: me.cardMapZoom }));
       if (typeof me.deletePending === "boolean") me.deletePending ? localStorage.setItem(DELETE_PENDING, "1") : localStorage.removeItem(DELETE_PENDING);
       if (!me.trial && localStorage.getItem(UPGRADE_ASKED)) { localStorage.removeItem(UPGRADE_ASKED); localStorage.removeItem(ASK_KEY); }
     } catch (_) {}
@@ -5602,11 +5620,6 @@ const NAV_APPS = [
       : `comgooglemaps://?daddr=${p.lat},${p.lon}&directionsmode=driving` },
   { key: "waze", name: "Waze", color: "#33ccff", ico: "W",
     url: (p) => `https://waze.com/ul?ll=${p.lat},${p.lon}${show ? "&z=16" : "&navigate=yes"}` },
-  // Flitsmeister has no public link to start navigation on iPhone: copy the coordinates to paste there.
-  // On Android, a geo: link offers it (and any other navigation app).
-  { key: "flitsmeister", name: "Flitsmeister", color: "#ff7a00", ico: "F",
-    note: isIOS ? "Copies coordinates" : "",
-    url: isIOS ? null : (p) => `geo:${p.lat},${p.lon}?q=${p.lat},${p.lon}(${encodeURIComponent(p.name)})` },
 ];
 let navTarget = null;
 function navOrder() {
@@ -5640,6 +5653,7 @@ function openNavSheet(ids) {
   $("navAddr").hidden = !addr;
   $("navHist").innerHTML = historyHtml(members);
   $("navHist").hidden = !$("navHist").innerHTML;
+  renderNavMap(navTarget.lat, navTarget.lon);
   navTarget.ids = ids;
   // How the name was chosen: only with the debug line on (Help), it's for tuning, not for driving.
   $("navSrc").innerHTML = debugOn() ? nameSourceHtml(members, label) + statusDebugHtml(members) : "";
@@ -5963,6 +5977,44 @@ function historyLine(m, members) {
       (changed ? `<div><span class="muted">Last change at the site: ${changed.clock} (${changed.ago})</span></div>` : "");
   }
 }
+// 0.49: a small picture of the site in the card, from map tiles loaded straight by the phone (no
+// Worker calls). Map or satellite and the zoom level are set on the usage page (Settings, "Charger
+// card"), and reach the app through /me.
+const CARD_MAP_KEY = "evailability-card-map";
+const CARD_MAPS = {
+  map: { url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`, max: 19,
+    credit: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' },
+  satellite: { url: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`, max: 19,
+    credit: "Esri, Maxar, Earthstar Geographics" },
+};
+function cardMapSettings() {
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(CARD_MAP_KEY) || "null"); } catch (_) {}
+  const style = v?.style === "off" || CARD_MAPS[v?.style] ? v.style : "map";
+  const zoom = Number.isFinite(+v?.zoom) ? Math.min(19, Math.max(3, Math.round(+v.zoom))) : 17;
+  return { style, zoom };
+}
+function renderNavMap(lat, lon) {
+  const box = $("navMap"), { style, zoom } = cardMapSettings(), src = CARD_MAPS[style];
+  if (!src || !Number.isFinite(lat) || !Number.isFinite(lon)) { box.hidden = true; box.innerHTML = ""; return; }
+  const z = Math.min(zoom, src.max), n = 2 ** z;
+  // Position of the site in tile units (Web Mercator); the 3×3 tiles around it, shifted so the site is in the middle.
+  const fx = (lon + 180) / 360 * n;
+  const r = lat * Math.PI / 180;
+  const fy = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n;
+  const tx = Math.floor(fx), ty = Math.floor(fy);
+  const imgs = [];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const x = ((tx + dx) % n + n) % n, y = ty + dy;
+    if (y < 0 || y >= n) continue;
+    imgs.push(`<img alt="" loading="eager" decoding="async" referrerpolicy="strict-origin-when-cross-origin" src="${src.url(z, x, y)}" style="left:${(dx + 1) * 256}px;top:${(dy + 1) * 256}px" onerror="this.style.visibility='hidden'">`);
+  }
+  const offX = -Math.round((fx - tx + 1) * 256), offY = -Math.round((fy - ty + 1) * 256);
+  box.innerHTML = `<div class="tiles" style="transform:translate(${offX}px,${offY}px)">${imgs.join("")}</div>` +
+    `<svg class="pin" viewBox="0 0 26 34"><path d="M13 33C13 33 2 20.5 2 12.5a11 11 0 0 1 22 0C24 20.5 13 33 13 33z" fill="#e0574f" stroke="#fff" stroke-width="2"/><circle cx="13" cy="12.5" r="4.2" fill="#fff"/></svg>` +
+    `<div class="cr">${src.credit}</div>`;
+  box.hidden = false;
+}
 function closeNavSheet() { $("navSheet").hidden = true; $("navBackdrop").hidden = true; }
 $("navCancel").addEventListener("click", closeNavSheet);
 $("navBackdrop").addEventListener("click", closeNavSheet);
@@ -5992,12 +6044,9 @@ $("navList").addEventListener("click", async (e) => {
     return;
   }
   const app = NAV_APPS.find((a) => a.key === key);
+  if (!app) return;
   try { localStorage.setItem(NAV_KEY, key); } catch (_) {}
   closeNavSheet();
-  if (!app.url) { // Flitsmeister on iPhone
-    toast((await copyText(coords)) ? "Coordinates copied: paste them in Flitsmeister" : "Couldn’t copy", 4000);
-    return;
-  }
   if (app.app) {
     // Google Maps app if installed; otherwise the web link after a moment.
     const fallback = setTimeout(() => { if (document.visibilityState === "visible") location.href = app.url(p); }, 1200);
@@ -7432,6 +7481,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.49", date: "2026-11-28", title: { en: "A map in the details card", nl: "Een kaartje op de detailkaart", pt: "Um mapa no cartão de detalhes" },
+    items: { en: ["Press and hold a charger: the card now shows a small map of the site, with how many chargers are free in a compact box beside the name.", "Flitsmeister is no longer in the list; Apple Maps, Google Maps, Waze, copying the coordinates and sharing stay."],
+      nl: ["Houd een lader ingedrukt: de kaart toont nu een klein kaartje van de locatie, met hoeveel laders vrij zijn in een compact vak naast de naam.", "Flitsmeister staat niet meer in de lijst; Apple Kaarten, Google Maps, Waze, coördinaten kopiëren en delen blijven."],
+      pt: ["Mantenha premido um carregador: o cartão mostra agora um pequeno mapa do local, com quantos carregadores estão livres numa caixa compacta ao lado do nome.", "O Flitsmeister já não está na lista; os Mapas da Apple, o Google Maps, o Waze, copiar as coordenadas e partilhar continuam."] } },
   { v: "0.48", date: "2026-11-28", title: { en: "Exits, forks and arriving", nl: "Afritten, splitsingen en aankomen", pt: "Saídas, bifurcações e chegada" },
     items: { en: ["Exits after a short stretch of motorway now show the exit number and where you're heading, not the motorway itself, also when the map couldn't be loaded when you planned.", "Keep left or keep right on an exit's slip road is now shown.", "The next instruction comes as soon as your movement shows you're past the exit, turn or roundabout; the roundabout's exit is only in the icon.", "\u201cYou've arrived\u201d comes when you're there (or have parked just short of it), not 150 m before.", "After arriving you see the chargers within 15 km of your destination; Go plans a route to one."],
       nl: ["Afritten na een kort stuk snelweg tonen nu het afritnummer en waar je heen gaat, niet de snelweg zelf, ook als de kaart bij het plannen niet geladen kon worden.", "Links of rechts houden op de afrit wordt nu getoond.", "De volgende aanwijzing komt zodra aan je beweging te zien is dat je de afrit, afslag of rotonde voorbij bent; de afslag van de rotonde staat alleen nog in het icoon.", "\u201cJe bent er\u201d komt als je er bent (of net ervoor geparkeerd staat), niet 150 m ervoor.", "Na aankomst zie je de laders binnen 15 km van je bestemming; met Ga plan je er een route naartoe."],
@@ -7593,9 +7646,9 @@ const CHANGELOG = [
       nl: ["De app vraagt één keer per apparaat om een toegangscode."],
       pt: ["A app pede um código de acesso uma vez por dispositivo."] } },
   { v: "0.8", date: "2026-11-14", title: { en: "Tap and press and hold", nl: "Tikken en ingedrukt houden", pt: "Tocar e manter premido" },
-    items: { en: ["Tap a charger to update it now.", "Press and hold a charger for its <b>details card</b>: address, distance, detour, power and since when it’s been full.", "From the card, open it in Apple Maps, Google Maps, Waze or Flitsmeister, copy its coordinates or <b>share</b> it."],
-      nl: ["Tik op een lader om hem nu bij te werken.", "Houd een lader ingedrukt voor zijn <b>detailkaart</b>: adres, afstand, omrijden, vermogen en sinds wanneer hij vol is.", "Open hem vanaf de kaart in Apple Kaarten, Google Maps, Waze of Flitsmeister, kopieer de coördinaten of <b>deel</b> hem."],
-      pt: ["Toque num carregador para o atualizar já.", "Mantenha premido um carregador para ver o <b>cartão de detalhes</b>: morada, distância, desvio, potência e desde quando está cheio.", "A partir do cartão, abra-o nos Mapas da Apple, Google Maps, Waze ou Flitsmeister, copie as coordenadas ou <b>partilhe-o</b>."] } },
+    items: { en: ["Tap a charger to update it now.", "Press and hold a charger for its <b>details card</b>: address, distance, detour, power and since when it’s been full.", "From the card, open it in Apple Maps, Google Maps or Waze, copy its coordinates or <b>share</b> it."],
+      nl: ["Tik op een lader om hem nu bij te werken.", "Houd een lader ingedrukt voor zijn <b>detailkaart</b>: adres, afstand, omrijden, vermogen en sinds wanneer hij vol is.", "Open hem vanaf de kaart in Apple Kaarten, Google Maps of Waze, kopieer de coördinaten of <b>deel</b> hem."],
+      pt: ["Toque num carregador para o atualizar já.", "Mantenha premido um carregador para ver o <b>cartão de detalhes</b>: morada, distância, desvio, potência e desde quando está cheio.", "A partir do cartão, abra-o nos Mapas da Apple, Google Maps ou Waze, copie as coordenadas ou <b>partilhe-o</b>."] } },
   { v: "0.7", date: "2026-11-14", title: { en: "Introduction, Help and a compact start screen", nl: "Introductie, Help en een compact startscherm", pt: "Introdução, Ajuda e um ecrã inicial compacto" },
     items: { en: ["A short introduction on first use and Help behind the <b>?</b>.", "A start screen that fits on one phone screen, with up to two via points."],
       nl: ["Een korte introductie bij het eerste gebruik en Help achter de <b>?</b>.", "Een startscherm dat op één telefoonscherm past, met maximaal twee viapunten."],
@@ -7726,7 +7779,7 @@ function helpHtml() {
     <li><b>Scroll up</b> to see chargers further ahead. The blue arrow brings you back to the next ones.</li>
     <li>Your <b>via points</b> (a white dot with a blue ring) and <b>borders</b> (the new country's flag) sit on the line, with the distance and time to them. Borders only show with every road shown; via points always.</li>
     <li><b>Tap the destination</b> to compare other routes from where you are.</li>
-    <li><b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps, Waze or Flitsmeister, or copy its coordinates. On iPhone, Flitsmeister gets the coordinates copied, to paste in its search.</li>
+    <li><b>Press and hold</b> a charger to see since when it's been full (or when it was last full), and to show it in Apple Maps, Google Maps or Waze, or copy its coordinates.</li>
     <li>For Ionity and Fastned in the Netherlands, Germany, Austria, France and Portugal, <b>tap the charger</b> to open <b>free chargers through the day</b> under it (one at a time; tap again to close). The tap also updates it. A green line for today, red where every charger was taken, a dashed line for the same day last week, or yesterday while there isn’t a week of readings yet (red under the axis where it was full) and a blue triangle above it at your arrival time. While a site is full, it says when it’s usually free again.</li>
     <li>Leave the route and the app <b>plans a new route</b> by itself and tells you which way it goes.</li>
     <li>The screen stays on while you drive. ${screenAwake() ? "" : "Right now it may turn off: tap the screen once while driving. "}If it still turns off, check that Low Power Mode is off.</li>
@@ -7741,7 +7794,7 @@ function helpHtml() {
 
   <div class="credits">
     <h3>Data and credits</h3>
-    <p>Routes and places: <b>openrouteservice</b> by HeiGIT. Map data © <b>OpenStreetMap</b> contributors (ODbL).</p>
+    <p>Routes and places: <b>openrouteservice</b> by HeiGIT. Map data © <b>OpenStreetMap</b> contributors (ODbL). Map picture on the details card: tiles from <b>OpenStreetMap</b> or aerial imagery from <b>Esri</b> (Maxar, Earthstar Geographics).</p>
     <p>Chargers: <b>Open Charge Map</b> (CC BY 4.0), completed with the sites the live-status sources list. Live status: <b>NDW</b> (Netherlands), <b>MobiData BW</b> (Germany), <b>E-Control</b> (Austria), <b>transport.data.gouv.fr</b> (France, Licence Ouverte 2.0), <b>Eco-Movement</b> via the Belgian access point (Belgium), <b>MOBI.E / NAP Portugal</b> (Portugal).</p>
     <p>Road closures: <b>NDW</b> and <b>Die Autobahn GmbH des Bundes</b>.</p>
     <p>Brand names and logos belong to their owners. EVailability is independent and not affiliated with any charging network or data provider. <a href="privacy.html?back=help">Privacy policy</a></p>

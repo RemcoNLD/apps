@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.49.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.49.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -939,11 +939,16 @@
   .navsheet .navinfo { flex: 1 1 auto; min-width: 0; }
   .navsheet .navinfo .sub { margin-bottom: 6px; }
   .navsheet .navinfo .addr { margin: 0; }
-  .navsheet .navhead .hist { flex: 0 1 46%; margin: 2px 0 0; padding: 7px 9px; font-size: .82rem; }
-  .navsheet .navhead .hist div { gap: 5px; line-height: 1.3; }
-  .navsheet .navhead .hist .muted, .navsheet .navhead .hist .tip { font-size: .76rem; }
-  .navsheet .navhead .hist .logo { width: 14px; height: 14px; }
-  .navsheet .navhead .hist div + div { margin-top: 3px; }
+  .navsheet .navhead .hist { flex: 0 0 auto; max-width: 42%; margin: 2px 0 0; padding: 6px 10px; display: block; }
+  .navsheet .navhead .hist .nb { display: block; line-height: 1.2; }
+  .navsheet .navhead .hist .nb + .nb { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(128,128,128,.25); }
+  .navsheet .navhead .hist .nb-m { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: .95rem; }
+  .navsheet .navhead .hist .nb-m b { font-size: 1.15rem; font-weight: 800; }
+  .navsheet .navhead .hist .nb.ok .nb-m b { color: var(--free); }
+  .navsheet .navhead .hist .nb.full .nb-m b { color: var(--danger); }
+  .navsheet .navhead .hist .nb.off .nb-m, .navsheet .navhead .hist .nb.stale .nb-m b { color: var(--muted); }
+  .navsheet .navhead .hist .nb-f { display: block; color: var(--muted); font-size: .76rem; white-space: nowrap; margin-top: 1px; }
+  .navsheet .navhead .hist .logo { width: 16px; height: 16px; align-self: center; }
   .navsheet .navmap { position: relative; height: 150px; margin: 0 0 12px; border-radius: 12px; overflow: hidden; background: var(--asphalt); }
   .navsheet .navmap .tiles { position: absolute; left: 50%; top: 50%; width: 768px; height: 768px; }
   .navsheet .navmap .tiles img { position: absolute; width: 256px; height: 256px; max-width: none; user-select: none; -webkit-user-drag: none; }
@@ -1815,6 +1820,15 @@ const I18N_TEXT = {
 "Tap when read": "Tik als gelezen",
 "Clear all errors": "Alle fouten wissen",
 "Free": "Vrij",
+"via an exit": "via een afrit",
+"Here": "Hier",
+"free": "vrij",
+"not live?": "niet live?",
+"full since": "vol sinds",
+"changed": "gewijzigd",
+"last change": "laatste wijziging",
+"last full": "laatst vol",
+"checked": "gecheckt",
 "All in use": "Alles bezet",
 "Out of order": "Buiten gebruik",
 "Other side": "Overkant",
@@ -2113,6 +2127,15 @@ const I18N_TEXT = {
 "Tap when read": "Toque depois de ler",
 "Clear all errors": "Limpar todos os erros",
 "Free": "Livre",
+"via an exit": "por uma saída",
+"Here": "Aqui",
+"free": "livres",
+"not live?": "não está ao vivo?",
+"full since": "cheio desde",
+"changed": "alterado",
+"last change": "última alteração",
+"last full": "último cheio",
+"checked": "verificado",
 "All in use": "Tudo ocupado",
 "Out of order": "Avariado",
 "Other side": "Outro lado",
@@ -5641,17 +5664,19 @@ function openNavSheet(ids) {
   const kw = Math.max(0, ...members.map(kwOf).map((v) => v || 0));
   const brands = [...new Set(members.map((m) => (BRAND[brandKey(m)] || BRAND.ionity).name))];
   const how = reach === "roundtrip" ? "turn around" : reach === "exit" ? "via an exit" : "";
-  $("navSub").textContent = [
-    way.km < 0.1 ? "Here" : `${fmtKm(way.km)} km · ${fmtClock(way.min)}`,
-    dm != null && dm >= SHOW_DETOUR_FROM ? `+${dm} min detour${how ? ` (${how})` : ""}` : how,
-    kw ? `${kw} kW` : "",
-    brands.join(", "),
+  // Each part in its own element, so each is translated on its own (0.49.1: "+15 min detour (turn around)" stayed English).
+  const sp = (t) => `<span>${esc(t)}</span>`;
+  $("navSub").innerHTML = [
+    way.km < 0.1 ? sp("Here") : sp(`${fmtKm(way.km)} km · ${fmtClock(way.min)}`),
+    dm != null && dm >= SHOW_DETOUR_FROM ? sp(`+${dm} min detour`) + (how ? ` (${sp(how)})` : "") : how ? sp(how) : "",
+    kw ? sp(`${kw} kW`) : "",
+    brands.length ? sp(brands.join(", ")) : "",
   ].filter(Boolean).join(" · ");
   // The street address where there is one (Open Charge Map, or NDW for sites it found).
   const addr = members.map((m) => m.address).find((a) => a && a !== label) || "";
   $("navAddr").textContent = addr;
   $("navAddr").hidden = !addr;
-  $("navHist").innerHTML = historyHtml(members);
+  $("navHist").innerHTML = navBoxHtml(members);
   $("navHist").hidden = !$("navHist").innerHTML;
   renderNavMap(navTarget.lat, navTarget.lon);
   navTarget.ids = ids;
@@ -5943,6 +5968,30 @@ function lastKnownLine(m) {
   if (!m.status || !m.statusAt || Date.now() - m.statusAt <= staleMs(m)) return "";
   const t = clockAndAgo(new Date(m.statusAt).toISOString());
   return t ? `<div><span class="muted">Last known, checked at ${t.clock} (${t.ago})</span></div>` : "";
+}
+// 0.49.1: the small box beside the name in the card: per brand the free count big, and one or two
+// short facts under it (when it changed, since when full, when last full, or how old the value is).
+// The long sentences of historyHtml() didn't fit beside the name (Remco, 28 Nov 11:26).
+function navBoxHtml(members) {
+  const hm = (iso) => clockAndAgo(iso)?.clock || "";
+  return members.map((m) => {
+    const st = m.status;
+    if (!st || st.available == null) return "";
+    const logo = members.length > 1 ? logoHtml(brandKey(m)) : "";
+    const stale = m.statusAt && Date.now() - m.statusAt > staleMs(m);
+    const facts = [];
+    let cls = st.available > 0 ? "ok" : "full", main;
+    if (st.state === "likely_offline") { cls = "off"; main = `<span class="w">Offline</span>`; }
+    else if (frozenFor(st)) { cls = "off"; main = `<b>${st.available}/${st.total}</b> <span class="w">not live?</span>`; }
+    else main = `<b>${st.available}/${st.total}</b> <span class="w">free</span>`;
+    if (st.state === "full") { const t = hm(st.fullSince || st.seenSince); if (t) facts.push(`<span>full since</span> ${t}`); }
+    else if (st.changedAt && cls !== "off") { const t = hm(st.changedAt); if (t) facts.push(`<span>changed</span> ${t}`); }
+    else if (st.changedAt) { const t = hm(st.changedAt); if (t) facts.push(`<span>last change</span> ${t}`); }
+    const lf = st.state !== "full" && clockAndAgo(st.lastFullAt);
+    if (lf && lf.min <= 120) facts.push(`<span>last full</span> ${lf.clock}`);
+    if (stale) facts.push(`<span>checked</span> ${hm(new Date(m.statusAt).toISOString())}`);
+    return `<div class="nb ${cls}${stale ? " stale" : ""}"><div class="nb-m">${logo}${main}</div>${facts.map((f) => `<div class="nb-f">${f}</div>`).join("")}</div>`;
+  }).filter(Boolean).join("");
 }
 function historyHtml(members) {
   const lines = members.map((m) => {

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.48.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.48.1"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -3919,6 +3919,48 @@ function turnShown(t) {
   }
   return true;
 }
+// When you're past a step, judged from your GPS fixes (0.48.1, Remco: "kijk … met de draaiing van de
+// auto … of dat je van een punt afgaat in plaats van dat je er naartoe gaat"):
+//  - moving away: you came within 50 m of the step's point (a roundabout: its exit, where the next
+//    step starts) and are now 15 m further from it than your closest fix, without being behind it
+//    on the route;
+//  - turning: for a real turn (30°+, not a roundabout) your heading has turned at least 60% of the
+//    step's angle the same way, compared with your heading on the way in, within 80 m of the point.
+// Kept per route (not saved: after a reload the safety net of nextTurn() decides).
+const turnTrack = new WeakMap();
+function turnTrackOf() {
+  const r = state.route;
+  if (!r) return null;
+  if (!turnTrack.has(r)) turnTrack.set(r, { passed: new Set(), rec: new Map() });
+  return turnTrack.get(r);
+}
+const turnPassed = (i) => !!turnTrackOf()?.passed.has(i);
+const signedDiff = (a, b) => ((a - b + 540) % 360) - 180;
+function trackTurnPassing(lonlat, acc) {
+  const tt = turnTrackOf(), turns = state.route?.turns;
+  if (!tt || !turns?.length || (acc != null && acc > 50)) return;
+  const k = state.user.km, h = state.heading;
+  for (let i = 0; i < turns.length; i++) {
+    const tk = turns[i][0];
+    if (tk > k + 0.2) break;
+    if (tk < k - 0.6 || tt.passed.has(i)) continue;
+    const round = turns[i][1] === 7 || (turns[i][5] || "").includes("r");
+    const atKm = round ? Math.min(turns[i + 1]?.[0] ?? tk, tk + 0.5) : tk;
+    const d = haversine(lonlat, pointAtKm(atKm));
+    let rec = tt.rec.get(i);
+    if (!rec) { rec = { minD: Infinity, h0: null }; tt.rec.set(i, rec); }
+    // Your heading on the way in: 30–150 m before the step.
+    if (h != null && tk - k > 0.03 && tk - k < 0.15) rec.h0 = h;
+    if (d < rec.minD) rec.minD = d;
+    let passed = rec.minD < 0.05 && d > rec.minD + 0.015 && k >= atKm - 0.03;
+    const angle = turns[i][4];
+    if (!passed && !round && rec.h0 != null && h != null && angle != null && Math.abs(angle) >= 30 && d < 0.08) {
+      const turned = signedDiff(h, rec.h0);
+      passed = Math.sign(turned) === Math.sign(angle) && Math.abs(turned) >= Math.min(60, Math.abs(angle) * 0.6);
+    }
+    if (passed) { tt.passed.add(i); tt.rec.delete(i); }
+  }
+}
 function nextTurn() {
   const turns = state.route?.turns;
   if (!turns?.length) return null;
@@ -3926,10 +3968,13 @@ function nextTurn() {
   for (let i = 0; i < turns.length; i++) {
     // A step stays until you're past it (0.48; before, the next one came 30 m before it): at an exit
     // 80 m past the junction, at a roundabout until its exit (where the next step starts).
+    // 0.48.1: "passed" comes from how you actually move (turnPassed(), fed by every GPS fix);
+    // the distance along the route is only a safety net.
     const tk = turns[i][0];
+    if (turnPassed(i)) continue;
     const round = turns[i][1] === 7 || (turns[i][5] || "").includes("r");
-    const hold = round ? Math.min(0.4, Math.max(0.05, (turns[i + 1]?.[0] ?? tk) - tk)) : 0.08;
-    if (tk + hold <= k) continue;
+    const cap = round ? Math.min(tk + 0.5, (turns[i + 1]?.[0] ?? tk) + 0.03) : tk + 0.15;
+    if (cap <= k) continue;
     const t = turnAt(i);
     // An exit the routing service calls "straight on": shown as keep right (exits are on the right in NL/DE).
     if (turnShown(t)) return { ...t, type: t.type === 6 ? 13 : t.type, next: turns[i + 1] };
@@ -4576,6 +4621,7 @@ function onPosition(lonlat, accuracy, heading = null, speed = null) {
   state.user = { km: pr.km, min: pr.min, offKm: pr.d, acc: accuracy, at: Date.now(), lonlat };
   state.lastFix = { lonlat, acc: accuracy, at: Date.now() };
   trackHeading(lonlat, heading, speed);
+  trackTurnPassing(lonlat, accuracy);
   updateLocation();
   const reliable = accuracy == null || accuracy < 100;
   state.offCount = reliable && pr.d > OFF_ROUTE_KM ? state.offCount + 1 : 0;
@@ -7387,9 +7433,9 @@ $("introNext").addEventListener("click", () => {
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
   { v: "0.48", date: "2026-11-28", title: { en: "Exits, forks and arriving", nl: "Afritten, splitsingen en aankomen", pt: "Saídas, bifurcações e chegada" },
-    items: { en: ["Exits after a short stretch of motorway now show the exit number and where you're heading, not the motorway itself, also when the map couldn't be loaded when you planned.", "Keep left or keep right on an exit's slip road is now shown.", "An instruction stays until you're past the exit or out of the roundabout; the roundabout's exit is only in the icon.", "\u201cYou've arrived\u201d comes when you're there (or have parked just short of it), not 150 m before.", "After arriving you see the chargers within 15 km of your destination; Go plans a route to one."],
-      nl: ["Afritten na een kort stuk snelweg tonen nu het afritnummer en waar je heen gaat, niet de snelweg zelf, ook als de kaart bij het plannen niet geladen kon worden.", "Links of rechts houden op de afrit wordt nu getoond.", "Een aanwijzing blijft staan tot je de afslag voorbij bent of de rotonde af bent; de afslag van de rotonde staat alleen nog in het icoon.", "\u201cJe bent er\u201d komt als je er bent (of net ervoor geparkeerd staat), niet 150 m ervoor.", "Na aankomst zie je de laders binnen 15 km van je bestemming; met Ga plan je er een route naartoe."],
-      pt: ["As saídas depois de um troço curto de autoestrada mostram agora o número da saída e para onde vai, não a própria autoestrada, também quando o mapa não pôde ser carregado ao planear.", "Manter à esquerda ou à direita no ramal de saída é agora indicado.", "Uma indicação fica até ter passado a saída ou saído da rotunda; a saída da rotunda aparece só no ícone.", "\u201cChegou ao destino\u201d aparece quando lá está (ou estacionou mesmo antes), não 150 m antes.", "Depois de chegar vê os carregadores a menos de 15 km do destino; Ir planeia um percurso até um deles."] } },
+    items: { en: ["Exits after a short stretch of motorway now show the exit number and where you're heading, not the motorway itself, also when the map couldn't be loaded when you planned.", "Keep left or keep right on an exit's slip road is now shown.", "The next instruction comes as soon as your movement shows you're past the exit, turn or roundabout; the roundabout's exit is only in the icon.", "\u201cYou've arrived\u201d comes when you're there (or have parked just short of it), not 150 m before.", "After arriving you see the chargers within 15 km of your destination; Go plans a route to one."],
+      nl: ["Afritten na een kort stuk snelweg tonen nu het afritnummer en waar je heen gaat, niet de snelweg zelf, ook als de kaart bij het plannen niet geladen kon worden.", "Links of rechts houden op de afrit wordt nu getoond.", "De volgende aanwijzing komt zodra aan je beweging te zien is dat je de afrit, afslag of rotonde voorbij bent; de afslag van de rotonde staat alleen nog in het icoon.", "\u201cJe bent er\u201d komt als je er bent (of net ervoor geparkeerd staat), niet 150 m ervoor.", "Na aankomst zie je de laders binnen 15 km van je bestemming; met Ga plan je er een route naartoe."],
+      pt: ["As saídas depois de um troço curto de autoestrada mostram agora o número da saída e para onde vai, não a própria autoestrada, também quando o mapa não pôde ser carregado ao planear.", "Manter à esquerda ou à direita no ramal de saída é agora indicado.", "A indicação seguinte aparece assim que o seu movimento mostra que passou a saída, a viragem ou a rotunda; a saída da rotunda aparece só no ícone.", "\u201cChegou ao destino\u201d aparece quando lá está (ou estacionou mesmo antes), não 150 m antes.", "Depois de chegar vê os carregadores a menos de 15 km do destino; Ir planeia um percurso até um deles."] } },
   { v: "0.47", date: "2026-11-28", title: { en: "Belgium checks what you tap", nl: "België controleert wat je aantikt", pt: "A Bélgica verifica o que toca" },
     items: { en: ["Tapping a Belgian site now checks it straight away, even while another Belgian site is still being checked; that one carries on later where it stopped. A site that's no longer shown is no longer checked by itself."],
       nl: ["Een Belgische locatie aantikken controleert die nu meteen, ook als er nog een andere Belgische locatie wordt gecontroleerd; die gaat later verder waar hij gebleven was. Een locatie die niet meer getoond wordt, wordt niet meer vanzelf gecontroleerd."],

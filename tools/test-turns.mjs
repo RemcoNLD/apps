@@ -75,7 +75,7 @@ const CASES = [
     roads: [], turnRoads: [["A27", 2.1, 4.9]], exits: [[4.55, "28", "Nieuwegein-Zuid"]],
     turns: NIEUWEGEIN,
     target: "Jutphaseweg", exit: "", expectKm: 5.0 },
-  { name: "Nieuwegein: then keep right", km: 5.1,
+  { name: "Nieuwegein: then keep right (no fixes: past the 150 m safety net)", km: 5.2,
     roads: [], turnRoads: [["A27", 2.1, 4.9]], exits: [[4.55, "28", "Nieuwegein-Zuid"]],
     turns: NIEUWEGEIN,
     target: "Jutphaseweg", exit: "", expectKm: 5.4 },
@@ -125,6 +125,35 @@ for (const c of CASES) {
   if (!ok) failed++;
   console.log(`${ok ? "ok  " : "FAIL"} ${c.name}\n      row: ${JSON.stringify(got.text)} exit ${JSON.stringify(got.exit)} turn at ${got.km}`);
 }
+// Passing from movement (0.48.1): a route north 1 km, then a right turn east 1 km. Fixes every 10 m
+// (~1 s at 36 km/h) with the heading of travel; the turn at km 1.0 must stop being shown within
+// 30 m after the corner, not only after the 150 m safety net. And an exit at a slight angle (keep
+// right, 15°) by moving away from its point.
+for (const m of [
+  { name: "Movement: right turn passed by turning", turn: [1.0, 1, "Oost", 0, 90, "", "Noord"], within: 0.03 },
+  { name: "Movement: keep right (15°) passed by moving away", turn: [1.0, 13, "", 0, 15, "", "A27"], within: 0.04 },
+]) {
+  const got = await page.evaluate((m) => {
+    const lat0 = 52, lon0 = 5, dLat = 1 / 111.2, dLon = 1 / (111.2 * Math.cos(52 * Math.PI / 180));
+    state.stations = []; state.roadOverride = null;
+    state.route = { distanceKm: 2, coords: [[lon0, lat0], [lon0, lat0 + dLat], [lon0 + dLon, lat0 + dLat]], km: [0, 1, 2], min: [0, 1, 2],
+      roads: [], exits: [], borders: [], turns: [m.turn, [2, 10, "", 0, 0, "", ""]] };
+    state.user = { km: 0, min: 0, offKm: 0, acc: 5, at: Date.now() };
+    let gone = null;
+    for (let k = 0.5; k <= 1.3; k += 0.01) {
+      const p = pointAtKm(k);
+      state.user = { ...state.user, km: k, at: Date.now(), lonlat: p };
+      state.heading = k < 1.0 ? 0 : 90;
+      trackTurnPassing(p, 5);
+      const t = nextTurn();
+      if (gone == null && (!t || t.km !== 1.0)) gone = k;
+    }
+    return gone;
+  }, m);
+  const ok = got != null && got - 1.0 <= m.within + 1e-9 && got > 1.0 - 1e-9;
+  if (!ok) failed++;
+  console.log(`${ok ? "ok  " : "FAIL"} ${m.name}\n      next instruction from km ${got?.toFixed(2)}`);
+}
 await browser.close();
-console.log(failed ? `${failed} of ${CASES.length} failed` : `all ${CASES.length} passed`);
+console.log(failed ? `${failed} of ${CASES.length + 2} failed` : `all ${CASES.length + 2} passed`);
 process.exit(failed ? 1 : 0);

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.50.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.51.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -948,6 +948,8 @@
   .navsheet .navhead .hist .nb.full .nb-m b { color: var(--danger); }
   .navsheet .navhead .hist .nb.off .nb-m, .navsheet .navhead .hist .nb.stale .nb-m b { color: var(--muted); }
   .navsheet .navhead .hist .nb-f { display: block; color: var(--muted); font-size: .76rem; white-space: nowrap; margin-top: 1px; }
+  .navsheet .navhead .hist .nb[data-pick] { cursor: pointer; -webkit-tap-highlight-color: transparent; margin-left: -6px; margin-right: -6px; padding-left: 6px; padding-right: 6px; border-radius: 8px; }
+  .navsheet .navhead .hist .nb.pick { background: rgba(224,87,79,.14); box-shadow: inset 3px 0 0 #e0574f; }
   .navsheet .navhead .hist .logo { width: 16px; height: 16px; align-self: center; }
   .navsheet .navmap { cursor: pointer; -webkit-tap-highlight-color: transparent; position: relative; height: 150px; margin: 0 0 12px; border-radius: 12px; overflow: hidden; background: var(--asphalt); }
   .navsheet .navmap .tiles { position: absolute; left: 50%; top: 50%; width: 768px; height: 768px; }
@@ -4762,10 +4764,10 @@ async function loadNearby() {
   }
 }
 // Go: a new route from where you are to this charger (it becomes the destination).
-async function driveTo(ids) {
+async function driveTo(ids, pickId) {
   const members = state.stations.filter((m) => ids.includes(m.id));
   if (!members.length) return;
-  const s = members.find((m) => brandKey(m) === "ionity") || members[0];
+  const s = members.find((m) => m.id === pickId) || members.find((m) => brandKey(m) === "ionity") || members[0];
   const label = siteLabel(members);
   const brand = (BRAND[brandKey(s)] || {}).name || "";
   const prev = { to: state.to, vias: state.vias, from: state.from, avoid: state.avoid, arrived: state.arrived,
@@ -5683,13 +5685,15 @@ function openNavSheet(ids) {
   navMapStep = 0;
   renderNavMap(navTarget.lat, navTarget.lon);
   navTarget.ids = ids;
+  navTarget.pick = s.id;
+  markNavPick();
   // How the name was chosen: only with the debug line on (Help), it's for tuning, not for driving.
   $("navSrc").innerHTML = debugOn() ? nameSourceHtml(members, label) + statusDebugHtml(members) : "";
   fetchPlaces(members); // this charger first, if it still needs a name
   const appBtn = (a) => `<button type="button" class="navbtn" data-nav="${a.key}"><span class="ico" style="background:${a.color}">${a.ico}</span>${esc(a.name)}${a.note ? `<small>${esc(a.note)}</small>` : ""}</button>`;
   $("navList").innerHTML = `<button type="button" class="navbtn" data-nav="route"><span class="ico" style="background:var(--sign-blue)">➜</span>Plan route here<small>EVailability</small></button>` +
     navOrder().map(appBtn).join("") +
-    `<button type="button" class="navbtn" data-nav="copy"><span class="ico" style="background:var(--muted)">⧉</span>Copy coordinates<small>${navTarget.lat}, ${navTarget.lon}</small></button>` +
+    `<button type="button" class="navbtn" data-nav="copy"><span class="ico" style="background:var(--muted)">⧉</span>Copy coordinates<small id="navCoords">${navTarget.lat}, ${navTarget.lon}</small></button>` +
     (navigator.share ? `<button type="button" class="navbtn" data-nav="share"><span class="ico" style="background:var(--muted)">↗</span>Share…</button>` : "");
   $("navBackdrop").hidden = false;
   $("navSheet").hidden = false;
@@ -6010,7 +6014,8 @@ function navBoxHtml(members) {
     const lf = st.state !== "full" && clockAndAgo(st.lastFullAt);
     if (lf && lf.min <= 120) facts.push(`<span>last full</span> ${lf.clock}`);
     if (stale) facts.push(`<span>checked</span> ${hm(new Date(m.statusAt).toISOString())}`);
-    return `<div class="nb ${cls}${stale ? " stale" : ""}"><div class="nb-m">${logo}${main}</div>${facts.map((f) => `<div class="nb-f">${f}</div>`).join("")}</div>`;
+    const pick = members.length > 1 ? ` data-pick="${esc(m.id)}" role="button"` : "";
+    return `<div class="nb ${cls}${stale ? " stale" : ""}"${pick}><div class="nb-m">${logo}${main}</div>${facts.map((f) => `<div class="nb-f">${f}</div>`).join("")}</div>`;
   }).filter(Boolean).join("");
 }
 function historyHtml(members) {
@@ -6063,18 +6068,19 @@ function cardMapSettings() {
   const zoom = Number.isFinite(+v?.zoom) ? Math.min(19, Math.max(3, Math.round(+v.zoom))) : 17;
   return { style, zoom };
 }
-// 0.49.2: a tap on the map steps through three zoom levels, starting zoomed out; the usage page's
-// zoom is the middle one (Remco, 28 Nov 14:04). Two levels apart, kept within the source's maximum.
+// 0.49.2: a tap on the map steps through the zoom levels, starting zoomed out (Remco, 28 Nov 14:04);
+// 0.51: four levels, a further zoomed-out one added (14:38), so the usage page's zoom is the third
+// (17 → 13, 15, 17, 19). Two levels apart, kept within the source's maximum.
 let navMapStep = 0;
-const NAV_MAP_STEP = 2;
+const NAV_MAP_STEP = 2, NAV_MAP_LEVELS = 4;
 function navMapZooms(zoom, max) {
   const top = Math.min(max, zoom + NAV_MAP_STEP);
-  return [top - 2 * NAV_MAP_STEP, top - NAV_MAP_STEP, top].map((z) => Math.max(3, z));
+  return Array.from({ length: NAV_MAP_LEVELS }, (_, i) => Math.max(3, top - (NAV_MAP_LEVELS - 1 - i) * NAV_MAP_STEP));
 }
 function renderNavMap(lat, lon) {
   const box = $("navMap"), { style, zoom } = cardMapSettings(), src = CARD_MAPS[style];
   if (!src || !Number.isFinite(lat) || !Number.isFinite(lon)) { box.hidden = true; box.innerHTML = ""; return; }
-  const z = navMapZooms(zoom, src.max)[navMapStep % 3], n = 2 ** z;
+  const z = navMapZooms(zoom, src.max)[navMapStep % NAV_MAP_LEVELS], n = 2 ** z;
   // Position of the site in tile units (Web Mercator); the 3×3 tiles around it, shifted so the site is in the middle.
   const fx = (lon + 180) / 360 * n;
   const r = lat * Math.PI / 180;
@@ -6095,7 +6101,28 @@ function renderNavMap(lat, lon) {
 $("navMap").addEventListener("click", (e) => {
   e.stopPropagation();
   if (e.target.closest("a") || !navTarget) return;
-  navMapStep = (navMapStep + 1) % 3;
+  navMapStep = (navMapStep + 1) % NAV_MAP_LEVELS;
+  renderNavMap(navTarget.lat, navTarget.lon);
+});
+// 0.51: a site with several brands (several stations at slightly different places): a tap on a brand
+// in the box moves the pin (and the map) to that station, and Plan route here, the map apps,
+// the coordinates and sharing go there (Remco, 28 Nov 14:38).
+function markNavPick() {
+  const blocks = [...$("navHist").querySelectorAll(".nb[data-pick]")];
+  blocks.forEach((b) => b.classList.toggle("pick", b.dataset.pick === String(navTarget?.pick)));
+}
+$("navHist").addEventListener("click", (e) => {
+  const b = e.target.closest(".nb[data-pick]");
+  if (!b || !navTarget) return;
+  e.stopPropagation();
+  const m = state.stations.find((x) => String(x.id) === b.dataset.pick);
+  if (!m || !Number.isFinite(m.lat) || !Number.isFinite(m.lon)) return;
+  navTarget.pick = m.id;
+  navTarget.lat = +m.lat.toFixed(5);
+  navTarget.lon = +m.lon.toFixed(5);
+  markNavPick();
+  const c = $("navCoords");
+  if (c) c.textContent = `${navTarget.lat}, ${navTarget.lon}`;
   renderNavMap(navTarget.lat, navTarget.lon);
 });
 function closeNavSheet() { $("navSheet").hidden = true; $("navBackdrop").hidden = true; }
@@ -6115,7 +6142,7 @@ $("navList").addEventListener("click", async (e) => {
   if (!btn || !navTarget) return;
   const p = navTarget, key = btn.dataset.nav;
   const coords = `${p.lat}, ${p.lon}`;
-  if (key === "route") { closeNavSheet(); driveTo(p.ids); return; }
+  if (key === "route") { closeNavSheet(); driveTo(p.ids, p.pick); return; }
   if (key === "copy") {
     closeNavSheet();
     toast((await copyText(coords)) ? "Coordinates copied" : "Couldn’t copy");
@@ -7564,6 +7591,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.51", date: "2026-11-28", title: { en: "The map in the details card", nl: "Het kaartje op de detailkaart", pt: "O mapa no cartão de detalhes" },
+    items: { en: ["Tap the map to zoom in, now in four steps, starting further out.", "A site with several brands: tap a brand in the box to move the pin to its chargers; Plan route here, the map apps and the coordinates then go there."],
+      nl: ["Tik op het kaartje om in te zoomen, nu in vier stappen, verder uitgezoomd beginnend.", "Een locatie met meerdere merken: tik op een merk in het vak om de pin naar diens laders te verplaatsen; Route hierheen plannen, de kaart-apps en de coördinaten gaan dan daarheen."],
+      pt: ["Toque no mapa para aproximar, agora em quatro passos, a começar mais afastado.", "Um local com várias marcas: toque numa marca na caixa para mover o alfinete para os carregadores dessa marca; Planear percurso até aqui, as apps de mapas e as coordenadas vão então para lá."] } },
   { v: "0.50", date: "2026-11-28", title: { en: "What’s usual", nl: "Wat normaal is", pt: "O habitual" },
     items: { en: ["Free chargers through the day: the dashed line now shows what’s usual on this weekday, an average that builds up over the coming weeks (Monday to Thursday help each other at first), with red under the axis where a site is usually full. Until then it still shows last week or yesterday."],
       nl: ["Vrije laders door de dag: de stippellijn toont nu wat normaal is op deze weekdag, een gemiddelde dat de komende weken opbouwt (maandag tot en met donderdag helpen elkaar in het begin), met rood onder de as waar een locatie meestal vol is. Tot die tijd blijft hij vorige week of gisteren tonen."],

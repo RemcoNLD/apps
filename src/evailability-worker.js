@@ -23,6 +23,9 @@
 //   GET  /where?lat=&lon=       street and town at a point (for the location line off the main roads)
 //   GET  /debug/route/<id>      a routing result kept by a /plan with debug:true (app in debug mode), 30 days in KV
 //                               ?part=request|app|ors for one part (ors = the routing service's raw answer)
+//   POST /nearby                {at:[lon,lat], km?:15, brands} -> chargers of those brands within km (max 25) of the
+//                               point, nearest first (Open Charge Map, the same cached boxes as /plan); the app asks
+//                               live status for the rows it shows. Used after arrival (app 0.48).
 //   POST /alternatives          {from, to, tune?} -> up to 3 route options (roads, cities, time, Ionity count)
 //   GET  /closures/schedule     hours between road-closure updates (read by the GitHub job .github/workflows/closures.yml)
 //   POST /extra-sites           {pts:[[lon,lat],…] (max 150), brands} -> fast chargers of those brands within 1.5 km of the
@@ -76,7 +79,7 @@
 //   OCM_IONITY_OPERATOR_ID   only needed if the automatic lookup fails (now also on the usage page, Settings)
 
 // Bumped with each change to this file, shown in the app's debug line.
-const WORKER_VERSION = "0.15.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
+const WORKER_VERSION = "0.16.0"; // 0.x.y like the app: x = feature (per chat), y = deploys while working on it
 const ORS_BASE = "https://api.heigit.org/openrouteservice/v2";
 const PELIAS_BASE = "https://api.heigit.org/pelias/v1";
 const OCM_BASE = "https://api.openchargemap.io/v3";
@@ -2197,6 +2200,32 @@ async function statusForMany(stations, env) {
 
 // ---------------------------------------------------------------- handlers
 
+// Chargers around one point (app 0.48: after arrival, the chargers around your destination, further
+// than the 5 km corridor of the route). No live status here: the app asks for the rows it shows.
+async function handleNearby(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const at = body.at;
+  if (!Array.isArray(at) || at.length !== 2 || !at.every(Number.isFinite)) throw new HttpError(400, "Send at as [lon, lat]");
+  const km = Math.min(Math.max(Number(body.km) || 15, 1), 25);
+  const brands = [...new Set((Array.isArray(body.brands) ? body.brands : ["ionity"]).filter((k) => BRAND[k]))];
+  if (!brands.length) brands.push("ionity");
+  const [lon, lat] = at;
+  const dLat = km / 111, dLon = km / (111 * Math.cos(toRad(lat)));
+  const pois = await sitesInBox(env, [lon - dLon, lat - dLat, lon + dLon, lat + dLat], brands);
+  const stations = pois.map((p) => {
+    const a = p.AddressInfo || {};
+    const maxKw = Math.max(0, ...(p.Connections || []).map((c) => c.PowerKW || 0));
+    return {
+      id: `ocm-${p.ID}`, brand: p._brand || "ionity", name: a.Title || brandOf(p._brand).name,
+      address: [a.AddressLine1, a.Town].filter(Boolean).join(", "), country: a.Country?.ISOCode || null,
+      lat: a.Latitude, lon: a.Longitude, maxKw: maxKw || null, points: p.NumberOfPoints || null,
+      distKm: Math.round(haversineKm(at, [a.Longitude, a.Latitude]) * 100) / 100,
+    };
+  }).filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon) && s.distKm <= km)
+    .sort((a, b) => a.distKm - b.distKm).slice(0, 60);
+  return json(request, { at, km, brands, stations });
+}
+
 async function handlePlan(request, env) {
   const body = await request.json().catch(() => ({}));
   const { from, to, via } = body;
@@ -3856,6 +3885,7 @@ async function route(request, env) {
   if (path.startsWith("/debug/route/") && request.method === "GET") {
     return handleDebugRoute(request, env, path.slice(13).toLowerCase(), url.searchParams.get("part"));
   }
+  if (path === "/nearby" && request.method === "POST") return handleNearby(request, env);
   if (path === "/alternatives" && request.method === "POST") return handleAlternatives(request, env);
   if (path === "/detours" && request.method === "POST") return handleDetours(request, env);
   if (path === "/ndw-sites" && request.method === "POST") return handleNdwSites(request, env);

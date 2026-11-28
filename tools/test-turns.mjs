@@ -12,6 +12,9 @@ const html = readFileSync(process.argv[2] || new URL("../evailability.html", imp
 // turns: [km, type, name, exitNo, angle, flags, prevName] as the Worker sends them (turnsOf()).
 // roads: the timeline's numbered roads; exits: [km, ref, name] on your side of the motorway.
 // Each case: where you are (km), what the row should say (target) and which exit number goes with it.
+// [km, type, name, exitNo, angle, flags, prev]: merge onto the A27, exit (slip road named A27), fork, turn.
+const NIEUWEGEIN = [[0.5, 1, "Rondweg", 0, 90, "", "De Polder"], [2.0, 12, "A27", 0, -10, "", ""], [4.6, 13, "A27", 0, 15, "", "A27"],
+  [5.0, 12, "A27", 0, -10, "", "A27"], [5.4, 13, "", 0, 12, "", "A27"], [7.0, 1, "Jutphaseweg", 0, 90, "", ""]];
 const CASES = [
   { name: "Bodegraven: A12 exit to the N11, slip road named A12 (screenshot 28 Nov)", km: 4,
     roads: [["A12", 0, 21.0], ["N11", 22.3, 40], ["N434", 40, 45]],
@@ -53,6 +56,33 @@ const CASES = [
     exits: [[20.1, "12", "Bodegraven"]],
     turns: [[20.2, 12, "A12", 0, -8, "", "A12"], [59.0, 13, "", 0, 20, "", "A12"]],
     skipTo: 59.0 },
+  // Drive Houten → Makadocenter (28 Nov 09:17, app 0.46): 2.5 km of A27 (under the timeline's 3 km),
+  // the map lookup had failed at planning (offline). Showed "1.0 km A27" without a number; the fork on
+  // the slip road (keep left, keep right) wasn't mentioned.
+  { name: "Nieuwegein, no map roads at all: the steps show the exit", km: 3.6,
+    roads: [], exits: [],
+    turns: NIEUWEGEIN,
+    target: "Jutphaseweg", exit: "", expectKm: 4.6 },
+  { name: "Nieuwegein with the map: short A27 stretch kept for turn by turn, exit number", km: 3.6,
+    roads: [], turnRoads: [["A27", 2.1, 4.9]], exits: [[4.55, "28", "Nieuwegein-Zuid"]],
+    turns: NIEUWEGEIN,
+    target: "Jutphaseweg", exit: "28", expectKm: 4.6 },
+  { name: "Nieuwegein: 50 m past the exit it still shows the exit", km: 4.65,
+    roads: [], turnRoads: [["A27", 2.1, 4.9]], exits: [[4.55, "28", "Nieuwegein-Zuid"]],
+    turns: NIEUWEGEIN,
+    target: "Jutphaseweg", exit: "28", expectKm: 4.6 },
+  { name: "Nieuwegein: on the slip road, keep left is shown, not as A27", km: 4.75,
+    roads: [], turnRoads: [["A27", 2.1, 4.9]], exits: [[4.55, "28", "Nieuwegein-Zuid"]],
+    turns: NIEUWEGEIN,
+    target: "Jutphaseweg", exit: "", expectKm: 5.0 },
+  { name: "Nieuwegein: then keep right", km: 5.1,
+    roads: [], turnRoads: [["A27", 2.1, 4.9]], exits: [[4.55, "28", "Nieuwegein-Zuid"]],
+    turns: NIEUWEGEIN,
+    target: "Jutphaseweg", exit: "", expectKm: 5.4 },
+  { name: "Roundabout: still shown inside it (until its exit), no \"1st exit\" text", km: 10.1,
+    roads: [], exits: [],
+    turns: [[10.0, 7, "Sluyterlaan", 1, 80, "r", "Laan"], [10.15, 6, "Sluyterlaan", 0, 0, "", "Sluyterlaan"], [12, 0, "Kruyderlaan", 0, -90, "", "Sluyterlaan"]],
+    target: "Sluyterlaan", exit: "", expectKm: 10.0, noText: "1st" },
 ];
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME || "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome" });
@@ -70,7 +100,8 @@ for (const c of CASES) {
     state.roadOverride = null;
     state.route = { distanceKm: 100, coords: [[5, 52], [5.1, 52.5]], km: [0, 100], min: [0, 60],
       roads: c.roads.map(([ref, fromKm, toKm]) => ({ ref, country: /^B\d/.test(ref) ? "DE" : "NL", fromKm, toKm })),
-      exits: c.exits, turns: c.turns, borders: [] };
+      exits: c.exits, turns: c.turns, borders: [],
+      turnRoads: c.turnRoads ? c.turnRoads.map(([ref, fromKm, toKm]) => ({ ref, country: "NL", fromKm, toKm })) : undefined };
     state.user = { km: c.km, min: 0, offKm: 0, acc: 10, at: Date.now() };
     const t = nextTurn();
     if (!t) return { none: true };
@@ -87,9 +118,12 @@ for (const c of CASES) {
     const tgt = got.targetHtml.replace(/<[^>]+>/g, "").replace(/\s+/g, "");
     ok = tgt.includes(c.target.replace(/\s+/g, "")) && !/^A\d/.test(c.target) === !/^A\d/.test(tgt) && got.exit === c.exit;
     if (ok && c.roads[0] && c.target !== c.roads[0][0] && tgt.includes(c.roads[0][0])) ok = false; // never the motorway you leave
+    if (ok && c.turnRoads && tgt.includes(c.turnRoads[0][0])) ok = false;
+    if (ok && c.expectKm != null && got.km !== c.expectKm) ok = false;
+    if (ok && c.noText && got.text.includes(c.noText)) ok = false;
   }
   if (!ok) failed++;
-  console.log(`${ok ? "ok  " : "FAIL"} ${c.name}\n      row: ${JSON.stringify(got.text)} exit ${JSON.stringify(got.exit)}${c.skipTo != null ? ` next turn at ${got.km}` : ""}`);
+  console.log(`${ok ? "ok  " : "FAIL"} ${c.name}\n      row: ${JSON.stringify(got.text)} exit ${JSON.stringify(got.exit)} turn at ${got.km}`);
 }
 await browser.close();
 console.log(failed ? `${failed} of ${CASES.length} failed` : `all ${CASES.length} passed`);

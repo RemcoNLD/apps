@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="0.47.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
+<meta name="app-version" content="0.48.0"><!-- THE version, 0.x.y: x = a feature (one per chat, raised at the start of the next chat), y = deploys while working on it. Shown on the apps page, the splash, the start screen and Help, and read by the app itself. Add user-facing changes to CHANGELOG. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -323,6 +323,11 @@
   }
   .reach .sidemark { position: static; transform: none; }
   .reach .dmin { margin: 0; font-size: .82rem; line-height: 1; }
+  /* After arrival (0.48): Go plans a route to a charger near your destination */
+  .go-btn {
+    font: inherit; font-size: .85rem; font-weight: 800; line-height: 1; padding: 7px 10px; border: 0; border-radius: 999px;
+    background: var(--sign-blue); color: #fff; cursor: pointer; touch-action: manipulation;
+  }
   .sidemark.round { width: 18px; height: 18px; color: var(--danger); }
   .detour {
     font-size: 1.05rem; font-weight: 800; padding: 1px 8px 0; border-radius: 6px;
@@ -1766,6 +1771,10 @@ const I18N_TEXT = {
 "Road closures couldn’t be loaded: closed roads won’t show.": "Wegafsluitingen konden niet worden geladen: afgesloten wegen worden niet getoond.",
 "Looking for more chargers…": "Meer laders zoeken…",
 "Looking further ahead…": "Verderop zoeken…",
+"No chargers within 15 km of your destination.": "Geen laders binnen 15 km van je bestemming.",
+"Looking for chargers near your destination…": "Laders bij je bestemming zoeken…",
+"Go": "Ga",
+"Plan route here": "Route hierheen plannen",
 "No more chargers within 5 km of your route.": "Geen laders meer binnen 5 km van je route.",
 "On your side of the road": "Aan jouw kant van de weg",
 "On the other side of the road": "Aan de overkant van de weg",
@@ -2062,6 +2071,10 @@ const I18N_TEXT = {
 "Road closures couldn’t be loaded: closed roads won’t show.": "Não foi possível carregar os cortes de estrada: as estradas cortadas não serão mostradas.",
 "Looking for more chargers…": "A procurar mais carregadores…",
 "Looking further ahead…": "A procurar mais à frente…",
+"No chargers within 15 km of your destination.": "Não há carregadores a menos de 15 km do seu destino.",
+"Looking for chargers near your destination…": "A procurar carregadores perto do seu destino…",
+"Go": "Ir",
+"Plan route here": "Planear percurso até aqui",
 "No more chargers within 5 km of your route.": "Não há mais carregadores a menos de 5 km do seu percurso.",
 "On your side of the road": "Do seu lado da estrada",
 "On the other side of the road": "Do outro lado da estrada",
@@ -2176,7 +2189,7 @@ const I18N_TEXT = {
 "Destination · 108 km": "Destino · 108 km"
 }
 };
-const I18N_PATTERNS = [["^Full since (\\d\\d:\\d\\d); last reading (\\d\\d:\\d\\d)\\.$", "Vol sinds $1; laatste meting $2.", "Cheio desde as $1; última leitura às $2."], ["^Usually free again in about (\\d+) min \\(around (\\d\\d:\\d\\d)\\)\\.$", "Meestal over ongeveer $1 min weer vrij (rond $2).", "Costuma voltar a ter vagas dentro de cerca de $1 min (por volta das $2)."], ["^Full for longer than usual \\(usually (\\d+) min\\)\\.$", "Langer vol dan gebruikelijk (meestal $1 min).", "Cheio há mais tempo do que o habitual (normalmente $1 min)."], ["^Last full at (\\d\\d:\\d\\d) for (\\d+) minutes\\.$", "Laatst vol om $1 gedurende $2 minuten.", "Esteve cheio pela última vez às $1 durante $2 minutos."], ["^Last full yesterday at (\\d\\d:\\d\\d) for (\\d+) minutes\\.$", "Gisteren laatst vol om $1 gedurende $2 minuten.", "Esteve cheio pela última vez ontem às $1 durante $2 minutos."], ["^Arrive (.+)$", "Aankomst $1", "Chegada $1"], ["^Signed in as (.+)$", "Ingelogd als $1", "Sessão iniciada como $1"], ["^(\\d+) of (\\d+) free\\.$", "$1 van $2 vrij.", "$1 de $2 livres."], ["^(\\d+) of (\\d+) free$", "$1 van $2 vrij", "$1 de $2 livres"], ["^(\\d+) in use, (\\d+) out of order\\.$", "$1 in gebruik, $2 buiten gebruik.", "$1 em uso, $2 avariados."], ["^(\\d+) in use\\.$", "$1 in gebruik.", "$1 em uso."], ["^(\\d+) out of order\\.$", "$1 buiten gebruik.", "$1 avariados."], ["^(\\d+) in use$", "$1 in gebruik", "$1 em uso"], ["^(\\d+) out of order$", "$1 buiten gebruik", "$1 avariados"], ["^Last known, checked at (.+) \\((.+)\\)$", "Laatst bekend, gecontroleerd om $1 ({t:$2})", "Último estado conhecido, verificado às $1 ({t:$2})"], ["^Last change at the site: (.+) \\((.+)\\)$", "Laatste wijziging op de locatie: $1 ({t:$2})", "Última alteração no local: $1 ({t:$2})"], ["^(\\d+) min ago$", "$1 min geleden", "há $1 min"], ["^(\\d+) h (\\d+) min ago$", "$1 u $2 min geleden", "há $1 h $2 min"], ["^(\\d+) h ago$", "$1 u geleden", "há $1 h"], ["^All in use since (.+)$", "Alles bezet sinds $1", "Tudo ocupado desde $1"], ["^\\((.+)\\)$", "({t:$1})", "({t:$1})"], ["^, no change since (.+) \\((.+)\\)$", ", geen wijziging sinds $1 ({t:$2})", ", sem alterações desde $1 ({t:$2})"], ["^Last full at (.+) \\((.+)\\)\\.$", "Laatst vol om $1 ({t:$2}).", "Esteve cheio pela última vez às $1 ({t:$2})."], ["^Checked (\\d+) s ago · next update in (.+)$", "$1 s geleden gecontroleerd · volgende update over $2", "Verificado há $1 s · próxima atualização daqui a $2"], ["^Checked (.+) ago · next update in (.+)$", "$1 geleden gecontroleerd · volgende update over $2", "Verificado há $1 · próxima atualização daqui a $2"], ["^Updated less than a minute ago · next in (.+)$", "Minder dan een minuut geleden bijgewerkt · volgende over $1", "Atualizado há menos de um minuto · próxima daqui a $1"], ["^France checked (.+) ago · next update in (.+)$", "Frankrijk {t:$1} geleden gecontroleerd · volgende update over $2", "França verificada há {t:$1} · próxima atualização daqui a $2"], ["^France paused after an error · next update in (.+)$", "Frankrijk gepauzeerd na een fout · volgende update over $1", "França em pausa após um erro · próxima atualização daqui a $1"], ["^France couldn’t be updated; paused for (\\d+) min$", "Frankrijk kon niet worden bijgewerkt; $1 min gepauzeerd", "Não foi possível atualizar a França; em pausa durante $1 min"], ["^Belgium: switching from (.+) to this site$", "België: van $1 naar deze locatie", "Bélgica: a passar de $1 para este local"], ["^Belgium: still checking (.+) · one site at a time$", "België: nog bezig met $1 · één locatie tegelijk", "Bélgica: ainda a verificar $1 · um local de cada vez"], ["^Belgium: checking (\\d+) stalls? · about (.+)$", "België: $1 laadpunt(en) controleren · ongeveer $2", "Bélgica: a verificar $1 posto(s) · cerca de $2"], ["^(\\d+) fast stalls · tap to check$", "$1 snellaadpunten · tik om te controleren", "$1 postos rápidos · toque para verificar"], ["^(\\d+) of (\\d+) stalls without live status$", "$1 van $2 laadpunten zonder live status", "$1 de $2 postos sem estado em direto"], ["^(\\d+) not checked$", "$1 niet gecontroleerd", "$1 não verificados"], ["^(\\d+) without live status$", "$1 zonder live status", "$1 sem estado em direto"], ["^(\\d+)(st|nd|rd|th) exit$", "$1e afslag", "$1.ª saída"], ["^(\\d+) min$", "$1 min", "$1 min"], ["^(\\d+) min old · tap to retry$", "$1 min oud · tik om opnieuw te proberen", "$1 min de idade · toque para tentar novamente"], ["^(.+) km off route$", "$1 km van de route", "$1 km fora do percurso"], ["^Trial: (\\d+) days? and (\\d+) routes? left · live status in the Netherlands only$", "Proef: nog $1 dag(en) en $2 route(s) · live status alleen in Nederland", "Experiência: faltam $1 dia(s) e $2 percurso(s) · estado em direto só nos Países Baixos"], ["^· (\\d+) days? · (\\d+) routes? left$", "· nog $1 dag(en) · $2 route(s)", "· faltam $1 dia(s) · $2 percurso(s)"], ["^· (\\d+) days? and (\\d+) routes? left$", "· nog $1 dag(en) en $2 route(s)", "· faltam $1 dia(s) e $2 percurso(s)"], ["^Live status in the Netherlands · full access via the start screen$", "Live status in Nederland · volledige toegang via het startscherm", "Estado em direto nos Países Baixos · acesso completo no ecrã inicial"], ["^Thanks for trying EVailability! You can extend it once by (\\d+) days? and (\\d+) routes, or ask for a full key\\.$", "Bedankt voor het proberen van EVailability! Je kunt de proefperiode één keer verlengen met $1 dag en $2 routes, of een volledige sleutel aanvragen.", "Obrigado por experimentar o EVailability! Pode prolongá-lo uma vez por $1 dia e $2 percursos, ou pedir uma chave completa."], ["^(.+) Your request for full access is waiting; this app opens again by itself once it’s approved\\.$", "{t:$1} Je aanvraag voor volledige toegang staat open; de app opent vanzelf weer zodra die is goedgekeurd.", "{t:$1} O seu pedido de acesso completo está pendente; a app volta a abrir sozinha quando for aprovado."], ["^(.+) Ask the person who gave it to you for a new one\\.$", "{t:$1} Vraag degene die hem je gaf om een nieuwe.", "{t:$1} Peça uma nova a quem lha deu."], ["^Couldn’t compare routes \\((.+)\\)\\. Planned the fastest\\.$", "Routes vergelijken mislukt ({t:$1}). De snelste is gepland.", "Não foi possível comparar percursos ({t:$1}). Foi planeado o mais rápido."], ["^Couldn’t replan: (.+)$", "Opnieuw plannen mislukt: {t:$1}", "Não foi possível voltar a planear: {t:$1}"], ["^Couldn’t reroute: (.+)$", "Nieuwe route mislukt: {t:$1}", "Não foi possível recalcular: {t:$1}"], ["^New route around (.+)\\.$", "Nieuwe route om {t:$1} heen.", "Novo percurso a contornar {t:$1}."], ["^Planning a route around (.+)…$", "Route om {t:$1} heen plannen…", "A planear um percurso a contornar {t:$1}…"], ["^No way around (.+) found\\. The route still goes through\\.$", "Geen weg om {t:$1} heen gevonden. De route gaat er nog doorheen.", "Não foi encontrada alternativa a {t:$1}. O percurso continua a passar por lá."], ["^Couldn’t plan a route around (.+)\\. Try again in a moment\\.$", "Kon geen route om {t:$1} heen plannen. Probeer het zo opnieuw.", "Não foi possível planear um percurso a contornar {t:$1}. Tente daqui a pouco."], ["^this closure$", "deze afsluiting", "este corte"], ["^these closures$", "deze afsluitingen", "estes cortes"], ["^the closure$", "de afsluiting", "o corte"], ["^(\\d+) closures$", "$1 afsluitingen", "$1 cortes"], ["^(.+) closed$", "$1 afgesloten", "$1 cortada"], ["^until (.+)$", "tot $1", "até $1"], ["^from (.+) to (.+)$", "van $1 tot $2", "de $1 até $2"], ["^Add (\\d+) and replan$", "$1 toevoegen en opnieuw plannen", "Adicionar $1 e voltar a planear"], ["^No more easy-to-reach chargers\\. (\\d+) that needs? a longer detour (?:is|are) hidden\\.$", "Geen makkelijk bereikbare laders meer. $1 met langer omrijden verborgen.", "Não há mais carregadores de fácil acesso. $1 com desvio maior ocultos."], ["^(\\d+) Ionity sites? along the way$", "$1 Ionity-locatie(s) onderweg", "$1 local(is) Ionity pelo caminho"], ["^Via (.+) \\(your via point\\)$", "Via $1 (jouw viapunt)", "Por $1 (o seu ponto intermédio)"], ["^The route service \\(openrouteservice\\) isn’t answering properly right now \\((\\d+)\\)\\. It’s usually back within a few minutes; try again then\\.$", "De routeservice (openrouteservice) reageert nu niet goed ($1). Meestal werkt het binnen een paar minuten weer; probeer het dan opnieuw.", "O serviço de rotas (openrouteservice) não está a responder bem neste momento ($1). Normalmente volta dentro de alguns minutos; tente nessa altura."], ["^Probably not live: no change at the site for (\\d+) h\\. Last reported (\\d+) of (\\d+) free$", "Waarschijnlijk niet live: $1 u geen wijziging op de locatie. Laatst gemeld $2 van $3 vrij", "Provavelmente não está em direto: sem alterações no local há $1 h. Último registo: $2 de $3 livres"], ["^The source last reported (\\d+) of (\\d+) free, but nothing has changed at the site since (.+) \\((.+)\\)\\. The real state is unknown\\.$", "De bron meldde laatst $1 van $2 vrij, maar er is sinds $3 ({t:$4}) niets veranderd op de locatie. De werkelijke stand is onbekend.", "A fonte registou por último $1 de $2 livres, mas nada mudou no local desde $3 ({t:$4}). O estado real é desconhecido."], ["^(.+)\\. Tap to update$", "$1. Tik om bij te werken", "$1. Toque para atualizar"], ["^Beyond an exit, on the (left|right)$", "Na een afrit, aan de {t:$1}", "Depois de uma saída, à {t:$1}"], ["^left$", "linkerkant", "esquerda"], ["^right$", "rechterkant", "direita"], ["^\\+(\\d+) min detour(.*)$", "+$1 min omrijden$2", "+$1 min de desvio$2"], ["^(\\d+) minutes extra to get there and back$", "$1 minuten extra heen en terug", "$1 minutos extra para ir e voltar"], ["^Detours: (.+)$", "Omrijden: $1", "Desvios: $1"], ["^(\\d+) of (\\d+)$", "$1 van $2", "$1 de $2"]];
+const I18N_PATTERNS = [["^Full since (\\d\\d:\\d\\d); last reading (\\d\\d:\\d\\d)\\.$", "Vol sinds $1; laatste meting $2.", "Cheio desde as $1; última leitura às $2."], ["^Usually free again in about (\\d+) min \\(around (\\d\\d:\\d\\d)\\)\\.$", "Meestal over ongeveer $1 min weer vrij (rond $2).", "Costuma voltar a ter vagas dentro de cerca de $1 min (por volta das $2)."], ["^Full for longer than usual \\(usually (\\d+) min\\)\\.$", "Langer vol dan gebruikelijk (meestal $1 min).", "Cheio há mais tempo do que o habitual (normalmente $1 min)."], ["^Last full at (\\d\\d:\\d\\d) for (\\d+) minutes\\.$", "Laatst vol om $1 gedurende $2 minuten.", "Esteve cheio pela última vez às $1 durante $2 minutos."], ["^Last full yesterday at (\\d\\d:\\d\\d) for (\\d+) minutes\\.$", "Gisteren laatst vol om $1 gedurende $2 minuten.", "Esteve cheio pela última vez ontem às $1 durante $2 minutos."], ["^Arrive (.+)$", "Aankomst $1", "Chegada $1"], ["^Planning a route to (.+)…$", "Route naar $1 plannen…", "A planear o percurso até $1…"], ["^Route to (.+) planned$", "Route naar $1 gepland", "Percurso até $1 planeado"], ["^Couldn’t plan a route: (.+)$", "Kon geen route plannen: $1", "Não foi possível planear o percurso: $1"], ["^Signed in as (.+)$", "Ingelogd als $1", "Sessão iniciada como $1"], ["^(\\d+) of (\\d+) free\\.$", "$1 van $2 vrij.", "$1 de $2 livres."], ["^(\\d+) of (\\d+) free$", "$1 van $2 vrij", "$1 de $2 livres"], ["^(\\d+) in use, (\\d+) out of order\\.$", "$1 in gebruik, $2 buiten gebruik.", "$1 em uso, $2 avariados."], ["^(\\d+) in use\\.$", "$1 in gebruik.", "$1 em uso."], ["^(\\d+) out of order\\.$", "$1 buiten gebruik.", "$1 avariados."], ["^(\\d+) in use$", "$1 in gebruik", "$1 em uso"], ["^(\\d+) out of order$", "$1 buiten gebruik", "$1 avariados"], ["^Last known, checked at (.+) \\((.+)\\)$", "Laatst bekend, gecontroleerd om $1 ({t:$2})", "Último estado conhecido, verificado às $1 ({t:$2})"], ["^Last change at the site: (.+) \\((.+)\\)$", "Laatste wijziging op de locatie: $1 ({t:$2})", "Última alteração no local: $1 ({t:$2})"], ["^(\\d+) min ago$", "$1 min geleden", "há $1 min"], ["^(\\d+) h (\\d+) min ago$", "$1 u $2 min geleden", "há $1 h $2 min"], ["^(\\d+) h ago$", "$1 u geleden", "há $1 h"], ["^All in use since (.+)$", "Alles bezet sinds $1", "Tudo ocupado desde $1"], ["^\\((.+)\\)$", "({t:$1})", "({t:$1})"], ["^, no change since (.+) \\((.+)\\)$", ", geen wijziging sinds $1 ({t:$2})", ", sem alterações desde $1 ({t:$2})"], ["^Last full at (.+) \\((.+)\\)\\.$", "Laatst vol om $1 ({t:$2}).", "Esteve cheio pela última vez às $1 ({t:$2})."], ["^Checked (\\d+) s ago · next update in (.+)$", "$1 s geleden gecontroleerd · volgende update over $2", "Verificado há $1 s · próxima atualização daqui a $2"], ["^Checked (.+) ago · next update in (.+)$", "$1 geleden gecontroleerd · volgende update over $2", "Verificado há $1 · próxima atualização daqui a $2"], ["^Updated less than a minute ago · next in (.+)$", "Minder dan een minuut geleden bijgewerkt · volgende over $1", "Atualizado há menos de um minuto · próxima daqui a $1"], ["^France checked (.+) ago · next update in (.+)$", "Frankrijk {t:$1} geleden gecontroleerd · volgende update over $2", "França verificada há {t:$1} · próxima atualização daqui a $2"], ["^France paused after an error · next update in (.+)$", "Frankrijk gepauzeerd na een fout · volgende update over $1", "França em pausa após um erro · próxima atualização daqui a $1"], ["^France couldn’t be updated; paused for (\\d+) min$", "Frankrijk kon niet worden bijgewerkt; $1 min gepauzeerd", "Não foi possível atualizar a França; em pausa durante $1 min"], ["^Belgium: switching from (.+) to this site$", "België: van $1 naar deze locatie", "Bélgica: a passar de $1 para este local"], ["^Belgium: still checking (.+) · one site at a time$", "België: nog bezig met $1 · één locatie tegelijk", "Bélgica: ainda a verificar $1 · um local de cada vez"], ["^Belgium: checking (\\d+) stalls? · about (.+)$", "België: $1 laadpunt(en) controleren · ongeveer $2", "Bélgica: a verificar $1 posto(s) · cerca de $2"], ["^(\\d+) fast stalls · tap to check$", "$1 snellaadpunten · tik om te controleren", "$1 postos rápidos · toque para verificar"], ["^(\\d+) of (\\d+) stalls without live status$", "$1 van $2 laadpunten zonder live status", "$1 de $2 postos sem estado em direto"], ["^(\\d+) not checked$", "$1 niet gecontroleerd", "$1 não verificados"], ["^(\\d+) without live status$", "$1 zonder live status", "$1 sem estado em direto"], ["^(\\d+)(st|nd|rd|th) exit$", "$1e afslag", "$1.ª saída"], ["^(\\d+) min$", "$1 min", "$1 min"], ["^(\\d+) min old · tap to retry$", "$1 min oud · tik om opnieuw te proberen", "$1 min de idade · toque para tentar novamente"], ["^(.+) km off route$", "$1 km van de route", "$1 km fora do percurso"], ["^Trial: (\\d+) days? and (\\d+) routes? left · live status in the Netherlands only$", "Proef: nog $1 dag(en) en $2 route(s) · live status alleen in Nederland", "Experiência: faltam $1 dia(s) e $2 percurso(s) · estado em direto só nos Países Baixos"], ["^· (\\d+) days? · (\\d+) routes? left$", "· nog $1 dag(en) · $2 route(s)", "· faltam $1 dia(s) · $2 percurso(s)"], ["^· (\\d+) days? and (\\d+) routes? left$", "· nog $1 dag(en) en $2 route(s)", "· faltam $1 dia(s) e $2 percurso(s)"], ["^Live status in the Netherlands · full access via the start screen$", "Live status in Nederland · volledige toegang via het startscherm", "Estado em direto nos Países Baixos · acesso completo no ecrã inicial"], ["^Thanks for trying EVailability! You can extend it once by (\\d+) days? and (\\d+) routes, or ask for a full key\\.$", "Bedankt voor het proberen van EVailability! Je kunt de proefperiode één keer verlengen met $1 dag en $2 routes, of een volledige sleutel aanvragen.", "Obrigado por experimentar o EVailability! Pode prolongá-lo uma vez por $1 dia e $2 percursos, ou pedir uma chave completa."], ["^(.+) Your request for full access is waiting; this app opens again by itself once it’s approved\\.$", "{t:$1} Je aanvraag voor volledige toegang staat open; de app opent vanzelf weer zodra die is goedgekeurd.", "{t:$1} O seu pedido de acesso completo está pendente; a app volta a abrir sozinha quando for aprovado."], ["^(.+) Ask the person who gave it to you for a new one\\.$", "{t:$1} Vraag degene die hem je gaf om een nieuwe.", "{t:$1} Peça uma nova a quem lha deu."], ["^Couldn’t compare routes \\((.+)\\)\\. Planned the fastest\\.$", "Routes vergelijken mislukt ({t:$1}). De snelste is gepland.", "Não foi possível comparar percursos ({t:$1}). Foi planeado o mais rápido."], ["^Couldn’t replan: (.+)$", "Opnieuw plannen mislukt: {t:$1}", "Não foi possível voltar a planear: {t:$1}"], ["^Couldn’t reroute: (.+)$", "Nieuwe route mislukt: {t:$1}", "Não foi possível recalcular: {t:$1}"], ["^New route around (.+)\\.$", "Nieuwe route om {t:$1} heen.", "Novo percurso a contornar {t:$1}."], ["^Planning a route around (.+)…$", "Route om {t:$1} heen plannen…", "A planear um percurso a contornar {t:$1}…"], ["^No way around (.+) found\\. The route still goes through\\.$", "Geen weg om {t:$1} heen gevonden. De route gaat er nog doorheen.", "Não foi encontrada alternativa a {t:$1}. O percurso continua a passar por lá."], ["^Couldn’t plan a route around (.+)\\. Try again in a moment\\.$", "Kon geen route om {t:$1} heen plannen. Probeer het zo opnieuw.", "Não foi possível planear um percurso a contornar {t:$1}. Tente daqui a pouco."], ["^this closure$", "deze afsluiting", "este corte"], ["^these closures$", "deze afsluitingen", "estes cortes"], ["^the closure$", "de afsluiting", "o corte"], ["^(\\d+) closures$", "$1 afsluitingen", "$1 cortes"], ["^(.+) closed$", "$1 afgesloten", "$1 cortada"], ["^until (.+)$", "tot $1", "até $1"], ["^from (.+) to (.+)$", "van $1 tot $2", "de $1 até $2"], ["^Add (\\d+) and replan$", "$1 toevoegen en opnieuw plannen", "Adicionar $1 e voltar a planear"], ["^No more easy-to-reach chargers\\. (\\d+) that needs? a longer detour (?:is|are) hidden\\.$", "Geen makkelijk bereikbare laders meer. $1 met langer omrijden verborgen.", "Não há mais carregadores de fácil acesso. $1 com desvio maior ocultos."], ["^(\\d+) Ionity sites? along the way$", "$1 Ionity-locatie(s) onderweg", "$1 local(is) Ionity pelo caminho"], ["^Via (.+) \\(your via point\\)$", "Via $1 (jouw viapunt)", "Por $1 (o seu ponto intermédio)"], ["^The route service \\(openrouteservice\\) isn’t answering properly right now \\((\\d+)\\)\\. It’s usually back within a few minutes; try again then\\.$", "De routeservice (openrouteservice) reageert nu niet goed ($1). Meestal werkt het binnen een paar minuten weer; probeer het dan opnieuw.", "O serviço de rotas (openrouteservice) não está a responder bem neste momento ($1). Normalmente volta dentro de alguns minutos; tente nessa altura."], ["^Probably not live: no change at the site for (\\d+) h\\. Last reported (\\d+) of (\\d+) free$", "Waarschijnlijk niet live: $1 u geen wijziging op de locatie. Laatst gemeld $2 van $3 vrij", "Provavelmente não está em direto: sem alterações no local há $1 h. Último registo: $2 de $3 livres"], ["^The source last reported (\\d+) of (\\d+) free, but nothing has changed at the site since (.+) \\((.+)\\)\\. The real state is unknown\\.$", "De bron meldde laatst $1 van $2 vrij, maar er is sinds $3 ({t:$4}) niets veranderd op de locatie. De werkelijke stand is onbekend.", "A fonte registou por último $1 de $2 livres, mas nada mudou no local desde $3 ({t:$4}). O estado real é desconhecido."], ["^(.+)\\. Tap to update$", "$1. Tik om bij te werken", "$1. Toque para atualizar"], ["^Beyond an exit, on the (left|right)$", "Na een afrit, aan de {t:$1}", "Depois de uma saída, à {t:$1}"], ["^left$", "linkerkant", "esquerda"], ["^right$", "rechterkant", "direita"], ["^\\+(\\d+) min detour(.*)$", "+$1 min omrijden$2", "+$1 min de desvio$2"], ["^(\\d+) minutes extra to get there and back$", "$1 minuten extra heen en terug", "$1 minutos extra para ir e voltar"], ["^Detours: (.+)$", "Omrijden: $1", "Desvios: $1"], ["^(\\d+) of (\\d+)$", "$1 van $2", "$1 de $2"]];
 // Help manual and intro texts in Dutch and Portuguese (pt-PT). Same structure as the English ones;
 // the ${…} bits (rings, marks, settings) are filled in the same way.
 const HELP_I18N = {
@@ -2197,7 +2210,8 @@ const HELP_I18N = {
   <p>Je bestemming staat bovenaan, jij onderaan, en de laders daartussen in de volgorde waarin je ze tegenkomt. Elke rij toont de afstand en rijtijd tot de lader zelf (na een afrit of aan de overkant inclusief het stuk erheen en het keren) en het maximale vermogen (<span class="kw">${BOLT}</span>).</p>
   <p>Ook de hoofdwegen tot je bestemming staan op de lijn, in de stijl van de borden in dat land, elk met hoe ver vooruit hij begint en hoe lang hij is (↕). Bovenaan staan de weg waarop je rijdt en de volgende twee. Liever minder rijen? Tik op een wegrij, of zet in de merkenknop (linksboven) <b>Hoofdwegen op de lijn</b> op <b>Alleen wisselingen</b>: dan staat er alleen een wegnummer waar de weg verandert. Tik op een wegnummer op de lijn om de rijen terug te halen.</p>
   <p>Het <b>☰ menu</b> linksboven bevat Route wijzigen en Help. Rechtsboven staat hoe oud de <b>status van de laders</b> is; tik erop om bij te werken.</p>
-  <p>Jouw eigen rij toont de <b>volgende afslag</b>: een grote pijl, de aftellende afstand en de weg die je op gaat. Bij een rotonde zie je welke afslag je neemt. In de laatste 500 m pulseert de rij in de richting van je afslag. Op een snelweg telt rechts de <b>volgende afrit</b> aan jouw kant af.</p>
+  <p>Jouw eigen rij toont de <b>volgende afslag</b>: een grote pijl, de aftellende afstand en de weg die je op gaat. Bij een rotonde zie je welke afslag je neemt. In de laatste 500 m pulseert de rij in de richting van je afslag. Op een snelweg telt rechts de <b>volgende afrit</b> aan jouw kant af. Een aanwijzing blijft staan tot je hem voorbij bent.</p>
+  <p>Ben je <b>aangekomen</b>, dan toont de lijst de laders binnen 15 km van je bestemming, de dichtstbijzijnde onderaan. Tik op <b>Ga</b> (of houd een lader ingedrukt en kies Route hierheen plannen) om erheen te rijden.</p>
   <p>De onderste regel toont een kompas, de tijd van je laatste locatie-update, en de weg waarop je rijdt met de eerstvolgende afrit of plaats (bijvoorbeeld A17 Zevenbergen), of op kleinere wegen de plaats en straat.</p>
 
   <h3>Wegafsluitingen</h3>
@@ -2282,7 +2296,8 @@ const HELP_I18N = {
   <p>O seu destino está em cima, você em baixo, e os carregadores pelo meio, pela ordem em que os encontra. Cada linha mostra a distância e o tempo de condução até ao próprio carregador (depois de uma saída ou do outro lado da estrada, incluindo o caminho até lá e a inversão de marcha) e a potência máxima (<span class="kw">${BOLT}</span>).</p>
   <p>As estradas principais até ao destino também estão na linha, com o estilo da sinalização de cada país, cada uma com a que distância começa e quanto mede (↕). Em cima aparece a estrada em que está e as duas seguintes. Prefere menos linhas? Toque numa linha de estrada, ou no botão das marcas (canto superior esquerdo) defina <b>Estradas principais na linha</b> como <b>Só mudanças</b>: o número da estrada só aparece onde a estrada muda. Toque num número de estrada na linha para voltar a mostrar as linhas.</p>
   <p>O <b>menu ☰</b> no canto superior esquerdo tem Alterar percurso e Ajuda. No canto superior direito vê a idade do <b>estado dos carregadores</b>; toque para atualizar.</p>
-  <p>A sua própria linha mostra a <b>próxima manobra</b>: uma seta grande, a distância a diminuir e a estrada para onde vira. Numa rotunda vê qual a saída a tomar. Nos últimos 500 m a linha pulsa no sentido da manobra. Numa autoestrada, a <b>próxima saída</b> do seu lado conta para trás à direita.</p>
+  <p>A sua própria linha mostra a <b>próxima manobra</b>: uma seta grande, a distância a diminuir e a estrada para onde vira. Numa rotunda vê qual a saída a tomar. Nos últimos 500 m a linha pulsa no sentido da manobra. Numa autoestrada, a <b>próxima saída</b> do seu lado conta para trás à direita. Uma indicação fica até a ter passado.</p>
+  <p>Quando <b>chega ao destino</b>, a lista mostra os carregadores a menos de 15 km do destino, o mais próximo em baixo. Toque em <b>Ir</b> (ou mantenha premido um carregador e escolha Planear percurso até aqui) para ir até lá.</p>
   <p>A linha de baixo mostra uma bússola, a hora da última atualização de localização e a estrada em que está com a saída ou localidade seguinte (por exemplo A17 Zevenbergen), ou em estradas menores a localidade e a rua.</p>
 
   <h3>Cortes de estrada</h3>
@@ -3639,8 +3654,7 @@ async function matchRoads(route, run) {
     route.exits = [...exits.values()].sort((a, b) => a[0] - b[0]);
     nearCache.key = null; save(); render();
   }
-  // Only numbered roads are asked for, so town streets stay unmatched: a quarter is plenty.
-  if (run !== mapRun || state.route !== route || !n || anyMatched / n < 0.25) return;
+  if (run !== mapRun || state.route !== route || !n) return;
   // Stretches of the same number; gaps without a number (ramps, junctions) up to 3 km join the same road.
   const parts = [];
   for (const sm of samples) {
@@ -3650,19 +3664,28 @@ async function matchRoads(route, run) {
     if (last && last.ref === ref && sm.k - last.toKm <= 3) { last.toKm = sm.k + STEP; if (sm.intRef) last.intRef = sm.intRef; }
     else parts.push({ ref, intRef: sm.intRef, fromKm: sm.k, toKm: sm.k + STEP });
   }
-  const roads = [];
+  const roads = [], turnRoads = [];
+  const add = (list, ref, country, p) => {
+    const last = list[list.length - 1];
+    if (last && last.ref === ref) { last.toKm = Math.round(Math.min(p.toKm, total) * 10) / 10; return; }
+    list.push({ ref, country, fromKm: Math.round(p.fromKm * 10) / 10, toKm: Math.round(Math.min(p.toKm, total) * 10) / 10 });
+  };
   for (const p of parts) {
     const country = countryAt(p.fromKm, p.toKm);
     let ref = p.ref;
     if (ref[0] === "D" && country !== "FR") continue; // D numbers only mean a road in France
     if (country === "BE" && ref[0] === "A" && p.intRef?.[0] === "E") ref = p.intRef; // Belgium signs its motorways by E number
+    // Turn by turn (0.48) keeps every stretch of 400 m or more: a short hop on a motorway (2.5 km of A27
+    // from Houten to Nieuwegein) is still a motorway you leave at an exit. The timeline skips those.
+    if (p.toKm - p.fromKm >= 0.4) add(turnRoads, ref, country, p);
     const min = /^[NBRM]/.test(ref) ? 1 : ref[0] === "D" ? 2 : 3;
     if (p.toKm - p.fromKm < min) continue;
-    const last = roads[roads.length - 1];
-    if (last && last.ref === ref) { last.toKm = p.toKm; continue; }
-    roads.push({ ref, country, fromKm: Math.round(p.fromKm * 10) / 10, toKm: Math.round(Math.min(p.toKm, total) * 10) / 10 });
+    add(roads, ref, country, p);
   }
-  if (!roads.length) return;
+  if (turnRoads.length) { route.turnRoads = turnRoads; save(); render(); }
+  // Only numbered roads are asked for, so town streets stay unmatched: a quarter is plenty
+  // for the timeline (a short trip through town may match less, its turn roads still count).
+  if (anyMatched / n < 0.25 || !roads.length) return;
   route.stepRoads = route.stepRoads || route.roads; // the routing service's list, kept for comparison
   route.roads = roads;
   route.mapRoads = true;
@@ -3801,11 +3824,59 @@ function turnAt(i) {
 // and the next instruction was the roundabout after it.
 // Since 0.46 a motorway that runs on up to 1.5 km past the step still counts as left there: the map
 // often matches the first stretch of a slip road that runs alongside to the motorway itself.
+// Since 0.48 turn by turn reads the map's roads including short stretches (route.turnRoads: the A27
+// hop from Houten to Nieuwegein is under the timeline's 3 km minimum, so the exit went unnoticed and
+// showed "A27"). Without any map roads (offline when planning) the routing service's steps decide.
+function turnParts() { const r = state.route?.turnRoads; return r?.length ? r : roadParts(); }
+function roadAtIn(parts, km) {
+  const i = parts.findIndex((p) => p.toKm >= km - 0.2);
+  if (i < 0) return null;
+  const p = parts[i];
+  if (p.fromKm <= km + 0.2) return p;
+  return i > 0 && p.fromKm - parts[i - 1].toKm <= 3 ? p : null;
+}
+// Leaving a motorway by the steps alone: the road before is an A road, the step keeps or goes straight,
+// and within 3 km a step turns, takes a roundabout, arrives, or names a street or another road.
+const KEEPISH = [4, 5, 6, 12, 13], TURNISH = [0, 1, 2, 3, 7, 9, 10];
+function leftBySteps(t) {
+  const m = refIn(t.prev);
+  if (!m || !/^A/.test(m) || !KEEPISH.includes(t.type)) return null;
+  const turns = state.route.turns || [];
+  for (let j = t.i + 1; j < turns.length && turns[j][0] - t.km <= 3; j++) {
+    const [, type, name, , , flags] = turns[j];
+    if (TURNISH.includes(type) || (flags || "").includes("r")) return m;
+    if (name && refIn(name) !== m) return m;
+  }
+  return null;
+}
+function motorwayLeftRaw(t) {
+  const parts = turnParts();
+  if (!parts.length) return leftBySteps(t);
+  // On the motorway just before the step (not a road you're only about to join from a ramp).
+  const before = parts.find((p) => p.fromKm <= t.km - 0.2 && p.toKm >= t.km - 0.8);
+  if (!before || !/^A/i.test(before.ref || "")) return null;
+  const after = roadAtIn(parts, Math.max(t.km + 1, before.toKm + 0.3));
+  if (after && after.ref === before.ref) return null;
+  // The match may run on well past the step where the slip road runs alongside (Nieuwegein): then
+  // the steps have to agree.
+  if (before.toKm <= t.km + 1.5) return before.ref;
+  return leftBySteps(t) === before.ref ? before.ref : null;
+}
+// The motorway an earlier step (within 3 km) left: this step is on that exit's slip road, where the
+// routing service still names the road after the motorway ("keep left onto A27").
+function slipFrom(t) {
+  const turns = state.route?.turns || [];
+  for (let i = t.i - 1; i >= 0 && t.km - turns[i][0] <= 3; i--) {
+    const r = motorwayLeftRaw(turnAt(i));
+    if (!r) continue;
+    // Already on the next motorway (a knooppunt): that's not a slip road any more.
+    const cur = turnParts().find((p) => p.fromKm <= t.km - 0.2 && p.toKm >= t.km);
+    return cur && /^A/i.test(cur.ref || "") && cur.ref !== r ? null : r;
+  }
+  return null;
+}
 function motorwayLeft(t) {
-  const before = mainRoadAt(t.km - 0.3);
-  if (!before || !/^A/i.test(before.ref || "") || before.toKm > t.km + 1.5) return null;
-  const after = mainRoadAt(Math.max(t.km + 1, before.toKm + 0.3));
-  return !after || after.ref !== before.ref ? before.ref : null;
+  return slipFrom(t) ? null : motorwayLeftRaw(t);
 }
 const leavesMotorway = (t) => !!motorwayLeft(t);
 // The numbered exit a step sits at (within 1.2 km of the junction on your side of the road).
@@ -3821,7 +3892,7 @@ function exitAt(km) {
 // within 3 km (at a knooppunt that's the new motorway), a road number or street in the steps of the
 // next 3 km, the exit's name. Returns {road} | {ref} | {text} | null.
 function exitTarget(t, left) {
-  const road = roadParts().find((p) => p.ref !== left && p.fromKm >= t.km - 0.5 && p.fromKm <= t.km + 3);
+  const road = turnParts().find((p) => p.ref !== left && p.fromKm >= t.km - 0.5 && p.fromKm <= t.km + 3);
   if (road) return { road };
   const turns = state.route.turns || [];
   const names = [t.name];
@@ -3836,6 +3907,9 @@ function turnShown(t) {
   if ((t.type === 6 || [4, 5, 12, 13].includes(t.type)) && leavesMotorway(t)) return true;
   if (t.type === 6 || t.type === 8 || t.type === 11) return false;
   if (t.round || t.type === 9 || t.type === 10) return true;
+  // On an exit's slip road a keep left/right picks the lanes for where you're going (0.48: the fork
+  // after the A27 exit at Nieuwegein went unmentioned because the slip road is named A27 too).
+  if ([4, 5, 12, 13].includes(t.type) && slipFrom(t)) return true;
   if ([4, 5, 12, 13].includes(t.type)) {
     const ref = refIn(t.name);
     const same = ref && ref === refIn(t.prev);
@@ -3850,7 +3924,12 @@ function nextTurn() {
   if (!turns?.length) return null;
   const k = state.user.km;
   for (let i = 0; i < turns.length; i++) {
-    if (turns[i][0] <= k + 0.03) continue;
+    // A step stays until you're past it (0.48; before, the next one came 30 m before it): at an exit
+    // 80 m past the junction, at a roundabout until its exit (where the next step starts).
+    const tk = turns[i][0];
+    const round = turns[i][1] === 7 || (turns[i][5] || "").includes("r");
+    const hold = round ? Math.min(0.4, Math.max(0.05, (turns[i + 1]?.[0] ?? tk) - tk)) : 0.08;
+    if (tk + hold <= k) continue;
     const t = turnAt(i);
     // An exit the routing service calls "straight on": shown as keep right (exits are on the right in NL/DE).
     if (turnShown(t)) return { ...t, type: t.type === 6 ? 13 : t.type, next: turns[i + 1] };
@@ -3867,14 +3946,14 @@ function routeStreetAt(k) {
 // What the turn leads onto: the numbered road there (as on the timeline), else the step's street name.
 function turnTarget(t) {
   if (t.type === 10) return `<span class="turn-txt">${esc(shortPlace(state.to?.label) || "Destination")}</span>`;
-  const left = motorwayLeft(t);
+  const left = motorwayLeft(t) || slipFrom(t); // on the slip road too: never the motorway you left
   if (left) {
     const x = exitTarget(t, left);
     if (x?.road) return roadPartBadge(withOverride(x.road));
     if (x?.ref) return roadBadge(x.ref, countryAt(t.km, t.km + 1));
     return x?.text ? `<span class="turn-txt">${esc(x.text)}</span>` : "";
   }
-  const road = mainRoadAt(t.km + 0.4);
+  const road = roadAtIn(turnParts(), t.km + 0.4);
   if (road && road.fromKm >= t.km - 1.5 && road.fromKm <= t.km + 1.5) return roadPartBadge(withOverride(road));
   const ref = refIn(t.name);
   if (ref) return roadBadge(ref, countryAt(t.km, t.km));
@@ -3882,17 +3961,19 @@ function turnTarget(t) {
   const name = t.name || (t.next && t.next[0] - t.km < 2 ? t.next[2] : "");
   return name ? `<span class="turn-txt">${esc(name)}</span>` : "";
 }
-const ORD = (n) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 // For a roundabout: which exit, or "straight on" when the routing service didn't count them.
 function roundaboutText(t) {
   if (!t.round) return "";
-  const what = t.exitNo ? `${ORD(t.exitNo)} exit` : t.angle != null && Math.abs(t.angle) < 30 ? "straight on" : "";
+  // The exit number is already in the roundabout icon (0.48: no "1st exit" text next to it).
+  const what = t.exitNo ? "" : t.angle != null && Math.abs(t.angle) < 30 ? "straight on" : "";
   return what ? `<span class="turn-how">${what}</span>` : "";
 }
 function nextExit(turnKm) {
   const exits = state.route?.exits;
   const u = state.user;
-  if (!exits?.length || !onMainRoadNow()) return null;
+  const uu = state.user;
+  const onMotorway = uu.at != null && uu.offKm <= ON_ROUTE_KM && (uu.acc == null || uu.acc <= 100) && roadAtIn(turnParts(), uu.km);
+  if (!exits?.length || !onMotorway) return null;
   const x = exits.find(([km, ref]) => km > u.km + 0.03 && ref); // numbered exits only (not knooppunten)
   if (!x || x[0] - u.km > 30) return null;
   if (turnKm != null && Math.abs(turnKm - x[0]) < 1.2) return { ...x, isTurn: true };
@@ -4183,6 +4264,10 @@ function minAtKm(k) {
 // then the real drive from there to the charger. Without that, every charger near one junction
 // would show the same distance: that of the junction, not of the charger.
 function wayTo(s) {
+  if (s.near) {
+    const from = state.user?.lonlat || (state.to && [state.to.lon, state.to.lat]);
+    return { km: from ? haversine(from, [s.lon, s.lat]) : s.nearKm, min: null };
+  }
   const passKm = s.alongKm - state.user.km, passMin = s.alongMin - state.user.min;
   // On the other side of the road you have to turn around to get there: that drive counts too.
   const otherSide = sideOf(s) === "left";
@@ -4209,6 +4294,7 @@ function pointAtKm(k) {
 const SIDE_WITHIN_KM = 0.5;
 const SIDE_V = 2;
 function sideOf(s) {
+  if (s.near) { s._exitSide = null; return null; } // around the destination (0.48): no side of the road
   if (s._sideV === SIDE_V) return s._side; // older saved routes recalculate
   const { coords } = state.route;
   const ref = s.lat, p = xy([s.lon, s.lat], ref);
@@ -4515,16 +4601,105 @@ function onPosition(lonlat, accuracy, heading = null, speed = null) {
   // when it puts you at the end.
   const left = state.route.distanceKm - pr.km;
   if (left > 0.5 && !state.route.wasAway) { state.route.wasAway = true; save(); }
-  const away = state.wasAway || state.route.wasAway || state.route.distanceKm > 0.5;
-  const toDest = state.to && Number.isFinite(state.to.lat) ? haversine([state.to.lon, state.to.lat], lonlat) : Infinity;
-  const near = (pr.d < 0.3 && left < 0.15) || toDest < 0.15;
-  if (!state.arrived && away && (accuracy == null || accuracy < 150) && near) celebrateArrival();
+  checkArrival(pr, lonlat, accuracy);
   if (state.arrived) state.offCount = 0; // parking past the destination isn't leaving the route
   // Right after planning, still near the start: the start was a rough position, not a wrong turn.
   // Plan again from here without the "left the route" message.
   const atStart = Date.now() - (state.plannedAt || 0) < 3 * 60000 && pr.km < 2;
   if (state.offCount >= 3 && !state.rerouting && Date.now() - state.lastRerouteAt > (atStart ? 30000 : 60000)) reroute(atStart);
   render();
+}
+
+// Arrived (0.48; before, anywhere within 150 m of the end, which came while the last turn into the
+// car park was still ahead): within 40 m of the end of the route or of the destination itself, or
+// standing still for 20 s within 150 m of it with no turn left but the arrival (parked a little short).
+const ARRIVE_KM = 0.04, ARRIVE_NEAR_KM = 0.15, ARRIVE_STILL_MS = 20000;
+let arriveTimer = null;
+function checkArrival(pr, lonlat, accuracy) {
+  if (state.arrived || !state.route) return;
+  const left = state.route.distanceKm - pr.km;
+  const away = state.wasAway || state.route.wasAway || state.route.distanceKm > 0.5;
+  if (!away || (accuracy != null && accuracy >= 150)) return;
+  const toDest = state.to && Number.isFinite(state.to.lat) ? haversine([state.to.lon, state.to.lat], lonlat) : Infinity;
+  if ((pr.d < 0.1 && left < ARRIVE_KM) || toDest < ARRIVE_KM) { celebrateArrival(); return; }
+  const near = (pr.d < 0.3 && left < ARRIVE_NEAR_KM) || toDest < ARRIVE_NEAR_KM;
+  if (!near) return;
+  const t = nextTurn();
+  const lastBit = !t || t.type === 10;
+  const stillFor = state.stillSince ? Date.now() - state.stillSince : 0;
+  if (lastBit && stillFor >= ARRIVE_STILL_MS) { celebrateArrival(); return; }
+  // Standing still, the phone may send no new position: look again once the 20 s are up.
+  if (lastBit && state.stillSince && !arriveTimer) {
+    arriveTimer = setTimeout(() => {
+      arriveTimer = null;
+      const f = state.lastFix;
+      if (f && state.route && !state.arrived) checkArrival(project(f.lonlat), f.lonlat, f.acc);
+      render();
+    }, ARRIVE_STILL_MS - stillFor + 300);
+  }
+}
+
+// After arrival (0.48): the chargers around your destination, within 15 km instead of the route's
+// 5 km corridor, nearest to you at the bottom. Each row has Go, which plans a route there from where
+// you are (also in the press-and-hold card: "Plan route here"). They join the list as rows "ahead"
+// (alongKm past the end of the route), so status, names, the day chart and the card work as usual.
+const NEAR_KM = 15;
+let nearRun = 0;
+async function loadNearby() {
+  if (!state.route || !state.arrived || state.nearLoading) return;
+  const center = state.to && Number.isFinite(state.to.lat) ? [state.to.lon, state.to.lat] : state.user?.lonlat;
+  if (!center) return;
+  const run = ++nearRun, route = state.route;
+  state.nearTried = true; state.nearLoading = true; render();
+  try {
+    const r = await api("/nearby", { at: center, km: NEAR_KM, brands: state.planBrands || state.brands });
+    if (run !== nearRun || state.route !== route || !state.arrived) return;
+    const end = route.distanceKm, endMin = route.min[route.min.length - 1];
+    const fresh = [];
+    for (const x of r.stations || []) {
+      let s = state.stations.find((m) => m.id === x.id);
+      if (!s) { s = { ...x, status: null, statusAt: null }; state.stations.push(s); fresh.push(s); }
+      Object.assign(s, { near: true, nearKm: x.distKm, alongKm: Math.round((end + 0.05 + x.distKm) * 100) / 100,
+        alongMin: endMin + x.distKm, detourMin: 0, offRouteKm: x.distKm, _sideV: null });
+    }
+    fillLastKnown(fresh);
+    state.stations.sort((a, b) => a.alongKm - b.alongKm);
+    state.nearAt = Date.now();
+    save();
+  } catch (e) {
+    reportError(`Chargers near your destination: ${e.message}`);
+  } finally {
+    if (run === nearRun) { state.nearLoading = false; render(); refreshWhenSettled(); }
+  }
+}
+// Go: a new route from where you are to this charger (it becomes the destination).
+async function driveTo(ids) {
+  const members = state.stations.filter((m) => ids.includes(m.id));
+  if (!members.length) return;
+  const s = members.find((m) => brandKey(m) === "ionity") || members[0];
+  const label = siteLabel(members);
+  const brand = (BRAND[brandKey(s)] || {}).name || "";
+  const prev = { to: state.to, vias: state.vias, from: state.from, avoid: state.avoid, arrived: state.arrived,
+    arrivalDone: state.arrivalDone, arrivedAt: state.arrivedAt, wasAway: state.wasAway };
+  state.to = { label: brand && !label.includes(brand) ? `${brand} ${label}` : label, lat: s.lat, lon: s.lon };
+  Object.assign(state, { vias: [], from: null, avoid: [], arrived: false, arrivalDone: false, arrivedAt: null, wasAway: false, nearTried: false });
+  ++nearRun; state.nearLoading = false;
+  occOpen = null;
+  playNoSleep(); // from this tap: iOS lets the keep-awake video start
+  showBanner(`Planning a route to ${label}…`, { ok: true });
+  try {
+    const f = state.lastFix;
+    const from = f && Date.now() - f.at < 60000 ? f.lonlat : await currentPosition();
+    await plan(from, state.planBrands || state.brands);
+    rememberPlaces([state.to]);
+    state.editFrom = null; syncBackToRoute();
+    state.stickToBottom = true;
+    startDriving();
+    showBanner(`Route to ${label} planned`, { ok: true, hideAfter: 6000 });
+  } catch (e) {
+    Object.assign(state, prev); save(); render();
+    showBanner(`Couldn’t plan a route: ${e.message}`, { hideAfter: 8000 });
+  }
 }
 
 // A mild celebration on arrival: a short confetti shower and a card. Then the screen may sleep.
@@ -4560,6 +4735,7 @@ function celebrateArrival() {
   };
   card.querySelector("button").addEventListener("click", close);
   setTimeout(close, 8000);
+  loadNearby();
   try { navigator.vibrate?.([60, 80, 60]); } catch (_) {}
   letSleep();
 }
@@ -4860,7 +5036,7 @@ async function fetchDetours(stations) {
   if (detourBusy) { detourAgain = true; return; }
   const now = Date.now();
   // Also chargers beyond an exit whose detour came from an older version without the way there.
-  const needs = (s) => !("detourMin" in s) || (s.toKm === undefined && (s.offRouteKm ?? 0) > SERVICE_AREA_KM);
+  const needs = (s) => !s.near && (!("detourMin" in s) || (s.toKm === undefined && (s.offRouteKm ?? 0) > SERVICE_AREA_KM));
   const todo = stations.filter((s) => needs(s) && !s.detourLoading && !(s.detourTriedAt && now - s.detourTriedAt < DETOUR_RETRY_MS))
     .sort((a, b) => a.alongKm - b.alongKm);
   if (!todo.length) return;
@@ -5289,6 +5465,8 @@ function tapUpdate(members, quiet) {
   refreshOne(due.map((s) => s.id));
 }
 $("list").addEventListener("click", (e) => {
+  const go = e.target.closest("button[data-go]");
+  if (go) { e.stopPropagation(); driveTo(go.dataset.go.split(" ")); return; }
   // The open chart (0.39): a brand button switches the chart; anywhere else updates the row again.
   const panel = e.target.closest(".row.occp[data-occ]");
   if (panel) {
@@ -5421,7 +5599,8 @@ function openNavSheet(ids) {
   $("navSrc").innerHTML = debugOn() ? nameSourceHtml(members, label) + statusDebugHtml(members) : "";
   fetchPlaces(members); // this charger first, if it still needs a name
   const appBtn = (a) => `<button type="button" class="navbtn" data-nav="${a.key}"><span class="ico" style="background:${a.color}">${a.ico}</span>${esc(a.name)}${a.note ? `<small>${esc(a.note)}</small>` : ""}</button>`;
-  $("navList").innerHTML = navOrder().map(appBtn).join("") +
+  $("navList").innerHTML = `<button type="button" class="navbtn" data-nav="route"><span class="ico" style="background:var(--sign-blue)">➜</span>Plan route here<small>EVailability</small></button>` +
+    navOrder().map(appBtn).join("") +
     `<button type="button" class="navbtn" data-nav="copy"><span class="ico" style="background:var(--muted)">⧉</span>Copy coordinates<small>${navTarget.lat}, ${navTarget.lon}</small></button>` +
     (navigator.share ? `<button type="button" class="navbtn" data-nav="share"><span class="ico" style="background:var(--muted)">↗</span>Share…</button>` : "");
   $("navBackdrop").hidden = false;
@@ -5755,6 +5934,7 @@ $("navList").addEventListener("click", async (e) => {
   if (!btn || !navTarget) return;
   const p = navTarget, key = btn.dataset.nav;
   const coords = `${p.lat}, ${p.lon}`;
+  if (key === "route") { closeNavSheet(); driveTo(p.ids); return; }
   if (key === "copy") {
     closeNavSheet();
     toast((await copyText(coords)) ? "Coordinates copied" : "Couldn’t copy");
@@ -6838,11 +7018,15 @@ function stationRow(site, change, after) {
       more ? `<span class="more">+${more} more</span>` : ""}</div>`;
   }
   const title = members.length > 1 ? `${members.map((m) => (BRAND[brandKey(m)] || {}).name).join(", ")}. Tap to update` : "Tap to update this charger";
+  // Around the destination (0.48): Go in place of the detour marks, the distance from you, no time.
+  const near = members.some((m) => m.near);
+  const go = near ? `<button type="button" class="go-btn" data-go="${esc(members.map((m) => m.id).join(" "))}" title="Plan route here" aria-label="Plan route here">Go</button>` : "";
+  const when = near ? `<span class="when"><b>${fmtKm(km)}</b>&nbsp;km</span>` : `<span class="when"><b>${fmtKm(km)}</b>&nbsp;km&ensp;${fmtClock(min)}</span>`;
   return `<div class="row st ${cls}" data-ids="${esc(members.map((m) => m.id).join(" "))}" role="button" title="${esc(title)}">
     ${tlBadge(change, "below")}${tlBadge(after, "above")}
-    <span class="marker dot-${dot}${scanning ? " scanning" : ""}" aria-hidden="true"></span>${side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
+    <span class="marker dot-${dot}${scanning ? " scanning" : ""}" aria-hidden="true"></span>${go ? `<span class="reach">${go}</span>` : side || detour ? `<span class="reach">${side}${detour}</span>` : ""}
     <div><div class="name">${nameLogo}<span class="label">${esc(rowLabel(members))}</span></div>
-      <div class="sub meta"><span class="when"><b>${fmtKm(km)}</b>&nbsp;km&ensp;${fmtClock(min)}</span>${s.road ? "" : country}${kw && cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
+      <div class="sub meta">${when}${s.road ? "" : country}${kw && cls !== "offline" ? `<span class="kw" title="${kw} kW">${BOLT}${kw}</span>` : ""}</div></div>
     ${avail}
   </div>`;
 }
@@ -6945,7 +7129,9 @@ function render() {
       if (el.offsetTop + el.offsetHeight > top + 1) { anchor = { k: el.dataset.k, off: el.offsetTop - top }; break; }
     }
   }
-  setDrawer(checking ? (ahead.length ? "Looking further ahead…" : "Looking for more chargers…") : "");
+  if (state.arrived && !state.nearTried && !state.nearLoading) setTimeout(loadNearby, 0); // e.g. after a reload
+  setDrawer(state.arrived && state.nearLoading ? "Looking for chargers near your destination…"
+    : checking ? (ahead.length ? "Looking further ahead…" : "Looking for more chargers…") : "");
   // In route order, nearest first: the road you're on, then chargers and every main road ahead
   // (also stretches without any charger), up to the destination. Shown reversed (nearest at the bottom).
   const inOrder = [];
@@ -6994,7 +7180,9 @@ function render() {
   while (ri < nextRoads.length) pushRoad();
   pushClosures(Infinity);
   pushMarks(Infinity);
-  if (!ahead.length && !checking) {
+  if (!ahead.length && !checking && state.arrived && !state.nearLoading) {
+    inOrder.push({ key: "empty", html: `<div class="empty">No chargers within 15 km of your destination.</div>` });
+  } else if (!ahead.length && !checking && !state.nearLoading) {
     inOrder.push({ key: "empty", html: hiddenCount
       ? `<div class="empty">No more easy-to-reach chargers. ${hiddenCount} that need a longer detour ${hiddenCount === 1 ? "is" : "are"} hidden.</div>`
       : `<div class="empty">No more chargers within 5 km of your route.</div>` });
@@ -7198,6 +7386,10 @@ $("introNext").addEventListener("click", () => {
 // One entry per feature version (0.x), newest first; the y of 0.x.y is never shown here: fixes made
 // while working on a feature go into its entry. Rebuilt from the git history on 17 Nov 2026 (0.1 = first version). Texts for the person using the app, in English, Dutch and Portuguese (pt-PT).
 const CHANGELOG = [
+  { v: "0.48", date: "2026-11-28", title: { en: "Exits, forks and arriving", nl: "Afritten, splitsingen en aankomen", pt: "Saídas, bifurcações e chegada" },
+    items: { en: ["Exits after a short stretch of motorway now show the exit number and where you're heading, not the motorway itself, also when the map couldn't be loaded when you planned.", "Keep left or keep right on an exit's slip road is now shown.", "An instruction stays until you're past the exit or out of the roundabout; the roundabout's exit is only in the icon.", "\u201cYou've arrived\u201d comes when you're there (or have parked just short of it), not 150 m before.", "After arriving you see the chargers within 15 km of your destination; Go plans a route to one."],
+      nl: ["Afritten na een kort stuk snelweg tonen nu het afritnummer en waar je heen gaat, niet de snelweg zelf, ook als de kaart bij het plannen niet geladen kon worden.", "Links of rechts houden op de afrit wordt nu getoond.", "Een aanwijzing blijft staan tot je de afslag voorbij bent of de rotonde af bent; de afslag van de rotonde staat alleen nog in het icoon.", "\u201cJe bent er\u201d komt als je er bent (of net ervoor geparkeerd staat), niet 150 m ervoor.", "Na aankomst zie je de laders binnen 15 km van je bestemming; met Ga plan je er een route naartoe."],
+      pt: ["As saídas depois de um troço curto de autoestrada mostram agora o número da saída e para onde vai, não a própria autoestrada, também quando o mapa não pôde ser carregado ao planear.", "Manter à esquerda ou à direita no ramal de saída é agora indicado.", "Uma indicação fica até ter passado a saída ou saído da rotunda; a saída da rotunda aparece só no ícone.", "\u201cChegou ao destino\u201d aparece quando lá está (ou estacionou mesmo antes), não 150 m antes.", "Depois de chegar vê os carregadores a menos de 15 km do destino; Ir planeia um percurso até um deles."] } },
   { v: "0.47", date: "2026-11-28", title: { en: "Belgium checks what you tap", nl: "België controleert wat je aantikt", pt: "A Bélgica verifica o que toca" },
     items: { en: ["Tapping a Belgian site now checks it straight away, even while another Belgian site is still being checked; that one carries on later where it stopped. A site that's no longer shown is no longer checked by itself."],
       nl: ["Een Belgische locatie aantikken controleert die nu meteen, ook als er nog een andere Belgische locatie wordt gecontroleerd; die gaat later verder waar hij gebleven was. Een locatie die niet meer getoond wordt, wordt niet meer vanzelf gecontroleerd."],
@@ -7440,7 +7632,8 @@ function helpHtml() {
   <p>Your destination is at the top, you are at the bottom, and the chargers are in between in the order you reach them. Each row shows the distance and driving time to the charger itself (beyond an exit or on the other side of the road, including the drive there and any turn-around) and its maximum power (<span class="kw">${BOLT}</span>).</p>
   <p>The main roads to your destination are on the line too, styled like that country's road signs, each with how far ahead it starts and how long it is (↕). The top shows the road you're on and the next two. Prefer fewer rows? Tap a road row, or in the brands button (top left) set <b>Main roads on the line</b> to <b>Changes only</b>: a road number then only shows where the road changes. Tap a road number on the line to bring the rows back.</p>
   <p>The <b>☰ menu</b> top left holds Change route and Help. Top right is how old the <b>charger status</b> is; tap it to update.</p>
-  <p>Your own row shows the <b>next turn</b>: a big arrow, the distance counting down and the road you turn onto. At a roundabout you see which exit to take. In the last 500 m the row pulses in the direction you turn. On a motorway, the <b>next exit</b> on your side counts down on the right.</p>
+  <p>Your own row shows the <b>next turn</b>: a big arrow, the distance counting down and the road you turn onto. At a roundabout you see which exit to take. In the last 500 m the row pulses in the direction you turn. On a motorway, the <b>next exit</b> on your side counts down on the right. An instruction stays until you're past it.</p>
+  <p>Once you've <b>arrived</b>, the list shows the chargers within 15 km of your destination, the nearest at the bottom. Tap <b>Go</b> (or press and hold a charger and choose Plan route here) to drive to one.</p>
   <p>The bottom line shows a compass, the time of your last location update, and the road you're on with the nearest exit or town (for example A17 Zevenbergen), or on smaller roads the town and street.</p>
 
   <h3>Road closures</h3>
